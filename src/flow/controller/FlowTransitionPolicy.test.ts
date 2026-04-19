@@ -4,19 +4,27 @@ import type { FlowCommand } from './FlowTransitionPolicy';
 
 // Helper factories
 const startGame: FlowCommand = { type: 'StartGameRequested' };
+const introSequenceFinished: FlowCommand = { type: 'IntroSequenceFinished' };
 const roundIntroFinished: FlowCommand = { type: 'RoundIntroFinished' };
 const lifeLostWithLives = (remainingLives: number): FlowCommand => ({
   type: 'LifeLost',
   remainingLives,
 });
 const gameOverConditionMet: FlowCommand = { type: 'GameOverConditionMet' };
-const stageCleared: FlowCommand = { type: 'StageCleared' };
+const stageClearedLast: FlowCommand = { type: 'StageCleared', isLastStage: true };
+const stageClearedNotLast: FlowCommand = { type: 'StageCleared', isLastStage: false };
 const retryRequested: FlowCommand = { type: 'RetryRequested' };
 
 describe('FlowTransitionPolicy — nextState()', () => {
   describe('Title 상태에서 유효 전이', () => {
-    it('Title + StartGameRequested → RoundIntro', () => {
-      expect(nextState('title', startGame)).toBe('roundIntro');
+    it('Title + StartGameRequested → IntroStory (mvp2 §7-2)', () => {
+      expect(nextState('title', startGame)).toBe('introStory');
+    });
+  });
+
+  describe('IntroStory 상태에서 유효 전이', () => {
+    it('IntroStory + IntroSequenceFinished → RoundIntro', () => {
+      expect(nextState('introStory', introSequenceFinished)).toBe('roundIntro');
     });
   });
 
@@ -39,14 +47,24 @@ describe('FlowTransitionPolicy — nextState()', () => {
       expect(nextState('inGame', gameOverConditionMet)).toBe('gameOver');
     });
 
-    it('InGame + StageCleared → Title (MVP1 임시 처리)', () => {
-      expect(nextState('inGame', stageCleared)).toBe('title');
+    it('InGame + StageCleared(isLastStage=true) → GameClear', () => {
+      expect(nextState('inGame', stageClearedLast)).toBe('gameClear');
+    });
+
+    it('InGame + StageCleared(isLastStage=false) → RoundIntro', () => {
+      expect(nextState('inGame', stageClearedNotLast)).toBe('roundIntro');
     });
   });
 
   describe('GameOver 상태에서 유효 전이', () => {
     it('GameOver + RetryRequested → Title', () => {
       expect(nextState('gameOver', retryRequested)).toBe('title');
+    });
+  });
+
+  describe('GameClear 상태에서 유효 전이', () => {
+    it('GameClear + RetryRequested → Title', () => {
+      expect(nextState('gameClear', retryRequested)).toBe('title');
     });
   });
 
@@ -63,6 +81,14 @@ describe('FlowTransitionPolicy — nextState()', () => {
       expect(nextState('title', roundIntroFinished)).toBeNull();
     });
 
+    it('IntroStory + StartGameRequested → null', () => {
+      expect(nextState('introStory', startGame)).toBeNull();
+    });
+
+    it('IntroStory + RoundIntroFinished → null', () => {
+      expect(nextState('introStory', roundIntroFinished)).toBeNull();
+    });
+
     it('RoundIntro + StartGameRequested → null', () => {
       expect(nextState('roundIntro', startGame)).toBeNull();
     });
@@ -73,6 +99,14 @@ describe('FlowTransitionPolicy — nextState()', () => {
 
     it('GameOver + LifeLost → null', () => {
       expect(nextState('gameOver', lifeLostWithLives(2))).toBeNull();
+    });
+
+    it('GameClear + LifeLost → null', () => {
+      expect(nextState('gameClear', lifeLostWithLives(2))).toBeNull();
+    });
+
+    it('GameClear + GameOverConditionMet → null', () => {
+      expect(nextState('gameClear', gameOverConditionMet)).toBeNull();
     });
 
     it('InGame + LifeLost(remainingLives=0) → null (Controller가 GameOverConditionMet으로 변환)', () => {

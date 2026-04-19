@@ -1,3 +1,5 @@
+export type IntroSequenceFinishedEvent = { type: 'IntroSequenceFinished' };
+
 export type RoundIntroFinishedEvent = { type: 'RoundIntroFinished' };
 
 export type LifeLostPresentationFinishedEvent = {
@@ -5,5 +7,6 @@ export type LifeLostPresentationFinishedEvent = {
 };
 
 export type PresentationEvent =
+  | IntroSequenceFinishedEvent
   | RoundIntroFinishedEvent
   | LifeLostPresentationFinishedEvent;

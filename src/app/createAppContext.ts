@@ -126,17 +126,18 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
   const screenDirector = new ScreenDirector(config.roundIntroDurationMs, visualEffectController);
 
   // FlowController: Gameplay 이벤트를 받아 Flow 전이를 처리한다.
+  // totalStageCount: StageDefinitionTable 배열 길이 기준 (mvp2 §11-3)
   const flowController = new GameFlowController((flowEvent: FlowEvent) => {
     onFlowEvent(flowEvent);
-  });
+  }, { totalStageCount: StageDefinitionTable.length });
 
   // Flow 이벤트 핸들러 (forward declaration 패턴)
   function onFlowEvent(event: FlowEvent): void {
     // Audio 라우팅: Flow 이벤트 → AudioCueResolver → AudioPlayer
     // UiConfirm 특수 처리:
-    //   - EnteredRoundIntro(from='title'): 게임 시작 버튼 확인음
-    //   - EnteredTitle(from='gameOver'): 게임오버 화면에서 타이틀 복귀 확인음
-    if (event.type === 'EnteredRoundIntro' && event.from === 'title') {
+    //   - EnteredRoundIntro(from='introStory'): 게임 시작 버튼 확인음 (Title→IntroStory→RoundIntro 흐름)
+    //   - EnteredTitle(from='gameOver' | 'gameClear'): 결과 화면에서 타이틀 복귀 확인음
+    if (event.type === 'EnteredRoundIntro' && event.from === 'introStory') {
       // jingle(round_start) + UiConfirm 모두 재생
       const roundCues = audioCueResolver.resolveCueIds('EnteredRoundIntro');
       for (const cue of roundCues) {
@@ -146,7 +147,10 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
       for (const cue of confirmCues) {
         audioPlayer.play(cue);
       }
-    } else if (event.type === 'EnteredTitle' && event.from === 'gameOver') {
+    } else if (
+      event.type === 'EnteredTitle' &&
+      (event.from === 'gameOver' || event.from === 'gameClear')
+    ) {
       // UiConfirm SFX
       const confirmCues = audioCueResolver.resolveCueIds('UiConfirm');
       for (const cue of confirmCues) {
@@ -166,8 +170,8 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     }
 
     if (event.type === 'EnteredRoundIntro') {
-      if (event.from === 'title') {
-        // 새 게임 시작: Stage 1 완전 초기화, 현재 highScore 유지
+      if (event.from === 'introStory') {
+        // 인트로 종료 후 첫 스테이지 시작: Stage 1 완전 초기화, 현재 highScore 유지
         const currentHighScore = gameplayController.getState().session.highScore;
         const newState = lifecycleHandler.initializeStage(stage1, config, config.initialLives);
         gameplayController.setState({
@@ -184,8 +188,9 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
         );
         gameplayController.setState(resetState);
       }
-    } else if (event.type === 'EnteredGameOver') {
-      // 저장 시점: GameOver 진입 시 highScore 갱신 후 저장 (fire-and-forget)
+      // StageCleared + !isLastStage → RoundIntro: 다음 스테이지 로드는 Phase 3 에서 처리
+    } else if (event.type === 'EnteredGameOver' || event.type === 'EnteredGameClear') {
+      // 저장 시점: GameOver / GameClear 진입 시 highScore 갱신 후 저장 (fire-and-forget)
       const session = gameplayController.getState().session;
       const newHighScore = Math.max(session.highScore, session.score);
       if (newHighScore > session.highScore) {

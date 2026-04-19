@@ -15,13 +15,14 @@ const noInput = { leftDown: false, rightDown: false, spaceJustPressed: false };
 const spaceInput = { leftDown: false, rightDown: false, spaceJustPressed: true };
 
 /**
- * Title → RoundIntro → InGame 으로 진행하는 헬퍼.
- * roundIntroDuration 타이머를 tick 으로 소화 후 inGame 상태를 보장한다.
+ * Title → IntroStory → RoundIntro → InGame 으로 진행하는 헬퍼 (mvp2 §7-2).
  */
 async function enterInGame(): Promise<Awaited<ReturnType<typeof createAppContext>>> {
   const ctx = await createAppContext();
-  // Title → RoundIntro
+  // Title → IntroStory
   ctx.tick(spaceInput, 0.016);
+  // IntroStory → RoundIntro
+  ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' });
   // RoundIntroFinished 를 직접 발행해서 즉시 inGame 진입
   ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
   expect(ctx.getFlowState().kind).toBe('inGame');

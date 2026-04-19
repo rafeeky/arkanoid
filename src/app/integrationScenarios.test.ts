@@ -57,11 +57,12 @@ function tickUntilFlowChanges(
 }
 
 // ---------------------------------------------------------------------------
-// 헬퍼: Title → RoundIntro → InGame 진입
+// 헬퍼: Title → IntroStory → RoundIntro → InGame 진입 (mvp2 §7-2 흐름)
 // ---------------------------------------------------------------------------
 
 function enterInGame(ctx: Awaited<ReturnType<typeof createAppContext>>): void {
-  ctx.tick(spaceInput, 1 / 60); // title → roundIntro
+  ctx.tick(spaceInput, 1 / 60); // title → introStory
+  ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
   ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // roundIntro → inGame
 }
 
@@ -75,16 +76,19 @@ describe('§15-5 시나리오 1: 시작 → 플레이 → 라이프 손실 → �
     expect(ctx.getFlowState().kind).toBe('title');
   });
 
-  it('2. spaceJustPressed tick → roundIntro, Stage 1 블록 65개 로드됨', async () => {
+  it('2. spaceJustPressed tick → introStory, IntroSequenceFinished → roundIntro, Stage 1 블록 65개 로드됨', async () => {
     const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
-    ctx.tick(spaceInput, 1 / 60);
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    expect(ctx.getFlowState().kind).toBe('introStory');
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
     expect(ctx.getFlowState().kind).toBe('roundIntro');
     expect(ctx.getGameplayState().blocks).toHaveLength(65);
   });
 
   it('3. RoundIntroFinished → inGame 전이', async () => {
     const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
-    ctx.tick(spaceInput, 1 / 60);
+    ctx.tick(spaceInput, 1 / 60); // → introStory
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // → roundIntro
     ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
     expect(ctx.getFlowState().kind).toBe('inGame');
   });
@@ -351,7 +355,8 @@ describe('§15-5 edge case: GameplayController flowState 비활성 시 tick 무�
 
   it('flowState가 roundIntro이면 gameplay tick 비활성 — bar.x 변화 없음', async () => {
     const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
-    ctx.tick(spaceInput, 1 / 60); // → roundIntro
+    ctx.tick(spaceInput, 1 / 60); // → introStory
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // → roundIntro
     expect(ctx.getFlowState().kind).toBe('roundIntro');
     const barXBefore = ctx.getGameplayState().bar.x;
     ctx.tick({ leftDown: true, rightDown: false, spaceJustPressed: false }, 1 / 60);
@@ -383,7 +388,8 @@ describe('§15-5 edge case: GameplayController flowState 비활성 시 tick 무�
 describe('§15-5 edge case: StageRuntimeFactory — stage1.json 65개 블록 생성 통합 검증', () => {
   it('새 게임 시작 시 블록 65개, 파괴된 블록 없음', async () => {
     const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
-    ctx.tick(spaceInput, 1 / 60); // → roundIntro (initializeStage 호출)
+    ctx.tick(spaceInput, 1 / 60); // → introStory
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // → roundIntro (initializeStage 호출)
 
     const blocks = ctx.getGameplayState().blocks;
     expect(blocks).toHaveLength(65);
@@ -411,7 +417,8 @@ describe('§15-5 edge case: StageRuntimeFactory — stage1.json 65개 블록 생
     expect(ctx.getFlowState().kind).toBe('gameOver');
     ctx.tick(spaceInput, 1 / 60); // → title
 
-    ctx.tick(spaceInput, 1 / 60); // → roundIntro (새 게임 initializeStage)
+    ctx.tick(spaceInput, 1 / 60); // → introStory
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // → roundIntro (새 게임 initializeStage)
     const newBlocks = ctx.getGameplayState().blocks;
     expect(newBlocks).toHaveLength(65);
     expect(newBlocks.every((b) => !b.isDestroyed)).toBe(true);

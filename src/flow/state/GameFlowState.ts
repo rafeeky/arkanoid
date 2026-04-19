@@ -1,4 +1,4 @@
-export type FlowStateKind = 'title' | 'roundIntro' | 'inGame' | 'gameOver';
+export type FlowStateKind = 'title' | 'introStory' | 'roundIntro' | 'inGame' | 'gameOver' | 'gameClear';
 
 export type GameFlowState = {
   kind: FlowStateKind;

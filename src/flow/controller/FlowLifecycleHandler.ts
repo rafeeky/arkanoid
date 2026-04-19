@@ -11,11 +11,15 @@ export function onEnter(newState: FlowStateKind, from: FlowStateKind): FlowEvent
   switch (newState) {
     case 'title':
       return { type: 'EnteredTitle', from };
+    case 'introStory':
+      return { type: 'EnteredIntroStory', from };
     case 'roundIntro':
       return { type: 'EnteredRoundIntro', from };
     case 'inGame':
       return { type: 'EnteredInGame', from };
     case 'gameOver':
       return { type: 'EnteredGameOver', from };
+    case 'gameClear':
+      return { type: 'EnteredGameClear', from };
   }
 }

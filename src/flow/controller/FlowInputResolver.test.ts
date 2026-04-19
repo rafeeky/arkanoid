@@ -49,7 +49,23 @@ describe('FlowInputResolver — resolveFlowCommand()', () => {
     });
   });
 
-  describe('RoundIntro / InGame 상태 — 항상 null', () => {
+  describe('GameClear 상태', () => {
+    it('spaceJustPressed=true → RetryRequested', () => {
+      expect(resolveFlowCommand('gameClear', snapSpace)).toEqual({
+        type: 'RetryRequested',
+      });
+    });
+
+    it('spaceJustPressed=false → null', () => {
+      expect(resolveFlowCommand('gameClear', snapNoSpace)).toBeNull();
+    });
+  });
+
+  describe('IntroStory / RoundIntro / InGame 상태 — 항상 null', () => {
+    it('IntroStory + space → null (Presentation이 진행 담당)', () => {
+      expect(resolveFlowCommand('introStory', snapSpace)).toBeNull();
+    });
+
     it('RoundIntro + space → null (InGame 입력은 다른 계층 담당)', () => {
       expect(resolveFlowCommand('roundIntro', snapSpace)).toBeNull();
     });
