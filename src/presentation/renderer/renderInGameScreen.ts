@@ -36,6 +36,9 @@ export type InGameObjects = {
   blockMap: Map<string, Phaser.GameObjects.Rectangle>;
   // 아이템 드랍: itemId → Rectangle
   itemMap: Map<string, Phaser.GameObjects.Rectangle>;
+  // 레이저 발사체 풀: shotId → Rectangle
+  // 매 프레임 laserShots 배열과 id 기준으로 add/remove 동기화
+  laserMap: Map<string, Phaser.GameObjects.Rectangle>;
   // HUD
   hudScore: Phaser.GameObjects.Text;
   hudLives: Phaser.GameObjects.Text;
@@ -120,6 +123,7 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
     ball,
     blockMap: new Map(),
     itemMap: new Map(),
+    laserMap: new Map(),
     hudScore,
     hudLives,
     hudRound,
@@ -266,6 +270,32 @@ export function renderInGameScreen(
     }
   }
 
+  // 레이저 발사체 렌더링
+  // laserShots 배열과 laserMap을 id 기준으로 add/remove 동기화.
+  // 각 shot은 2×16px 세로 선분(Rectangle)으로 표현. 중심 기준 위치.
+  // Unity 포팅 시: LaserShotView MonoBehaviour + ObjectPool 형태로 대응.
+  const LASER_WIDTH = 2;
+  const LASER_HEIGHT = 16;
+  const LASER_COLOR = 0xff4444; // 빨강
+  const activeShotIds = new Set<string>();
+  for (const shot of gameplayState.laserShots) {
+    activeShotIds.add(shot.id);
+    let rect = objects.laserMap.get(shot.id);
+    if (!rect) {
+      // 최초 등장 시 1회 생성
+      rect = scene.add.rectangle(shot.x, shot.y, LASER_WIDTH, LASER_HEIGHT, LASER_COLOR);
+      objects.laserMap.set(shot.id, rect);
+    }
+    rect.setPosition(shot.x, shot.y).setVisible(true);
+  }
+
+  // 소멸된 레이저 발사체 숨기기
+  for (const [id, rect] of objects.laserMap) {
+    if (!activeShotIds.has(id)) {
+      rect.setVisible(false);
+    }
+  }
+
   // 바 효과 타이머 HUD
   // magnet 활성: "MAGNET X.Xs" 형태로 표시. laser는 Phase 5에서 추가 예정.
   if (hudViewModel.activeEffect === 'magnet' && hudViewModel.magnetRemainingMs > 0) {
@@ -305,6 +335,9 @@ export function hideInGameScreen(objects: InGameObjects): void {
     rect.setVisible(false);
   }
   for (const rect of objects.itemMap.values()) {
+    rect.setVisible(false);
+  }
+  for (const rect of objects.laserMap.values()) {
     rect.setVisible(false);
   }
 }
