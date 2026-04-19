@@ -4,6 +4,7 @@ import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { GameplayRuntimeState } from '../state/GameplayRuntimeState';
 import type { BlockState } from '../state/BlockState';
 import type { SpinnerRuntimeState } from '../state/SpinnerRuntimeState';
+import { CIRCLE_RADIUS } from './SpinnerSystem';
 
 const BLOCK_WIDTH = 64;
 const BLOCK_HEIGHT = 24;
@@ -77,14 +78,26 @@ function buildSpinnerStates(def: StageDefinition): readonly SpinnerRuntimeState[
   if (!def.spinners || def.spinners.length === 0) {
     return [];
   }
-  return def.spinners.map((placement, index) => ({
-    id: `spinner_${index}`,
-    definitionId: placement.definitionId,
-    x: placement.x,
-    y: 0,
-    angleRad: placement.initialAngleRad ?? 0,
-    phase: 'spawning' as const,
-    targetY: placement.y,
-    spawnProgress: 0,
-  }));
+  return def.spinners.map((placement, index) => {
+    const spawnX = placement.x;
+    const descentEndY = placement.y;
+    const circleCenterX = spawnX;
+    const circleCenterY = descentEndY + CIRCLE_RADIUS;
+
+    return {
+      id: `spinner_${index}`,
+      definitionId: placement.definitionId,
+      x: spawnX,
+      y: 0,
+      angleRad: placement.initialAngleRad ?? 0,
+      phase: 'spawning' as const,
+      spawnElapsedMs: 0,
+      descentEndY,
+      circleCenterX,
+      circleCenterY,
+      circleRadius: CIRCLE_RADIUS,
+      circleAngleRad: 0,
+      spawnX,
+    };
+  });
 }

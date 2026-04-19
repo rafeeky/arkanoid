@@ -124,8 +124,8 @@ describe('createGameplayRuntimeFromStageDefinition — MVP3 새 필드 초기값
       3,
     );
     expect(state.spinnerStates[0]!.x).toBe(150);
-    expect(state.spinnerStates[0]!.y).toBe(0);       // 입구 위치
-    expect(state.spinnerStates[0]!.targetY).toBe(250); // placement.y → targetY
+    expect(state.spinnerStates[0]!.y).toBe(0);           // 입구 위치
+    expect(state.spinnerStates[0]!.descentEndY).toBe(250); // placement.y → descentEndY
   });
 
   it('initialAngleRad 없으면 angleRad = 0', () => {
@@ -209,26 +209,26 @@ describe('createGameplayRuntimeFromStageDefinition — spinner spawn 초기화',
     expect(state.spinnerStates[1]!.y).toBe(0);
   });
 
-  it('각 spinnerState의 targetY는 placement.y와 일치한다', () => {
+  it('각 spinnerState의 descentEndY는 placement.y와 일치한다', () => {
     const state = createGameplayRuntimeFromStageDefinition(
       stageWithSpinners,
       config,
       BlockDefinitionTable,
       3,
     );
-    expect(state.spinnerStates[0]!.targetY).toBe(400);
-    expect(state.spinnerStates[1]!.targetY).toBe(350);
+    expect(state.spinnerStates[0]!.descentEndY).toBe(400);
+    expect(state.spinnerStates[1]!.descentEndY).toBe(350);
   });
 
-  it('각 spinnerState의 spawnProgress=0으로 초기화된다', () => {
+  it('각 spinnerState의 spawnElapsedMs=0으로 초기화된다', () => {
     const state = createGameplayRuntimeFromStageDefinition(
       stageWithSpinners,
       config,
       BlockDefinitionTable,
       3,
     );
-    expect(state.spinnerStates[0]!.spawnProgress).toBe(0);
-    expect(state.spinnerStates[1]!.spawnProgress).toBe(0);
+    expect(state.spinnerStates[0]!.spawnElapsedMs).toBe(0);
+    expect(state.spinnerStates[1]!.spawnElapsedMs).toBe(0);
   });
 
   it('x 좌표는 placement.x와 일치한다 (x는 변경 없음)', () => {
@@ -240,5 +240,71 @@ describe('createGameplayRuntimeFromStageDefinition — spinner spawn 초기화',
     );
     expect(state.spinnerStates[0]!.x).toBe(200);
     expect(state.spinnerStates[1]!.x).toBe(520);
+  });
+
+  it('spawnX는 placement.x와 일치한다', () => {
+    const state = createGameplayRuntimeFromStageDefinition(
+      stageWithSpinners,
+      config,
+      BlockDefinitionTable,
+      3,
+    );
+    expect(state.spinnerStates[0]!.spawnX).toBe(200);
+    expect(state.spinnerStates[1]!.spawnX).toBe(520);
+  });
+
+  it('descentEndY는 placement.y와 일치한다', () => {
+    const state = createGameplayRuntimeFromStageDefinition(
+      stageWithSpinners,
+      config,
+      BlockDefinitionTable,
+      3,
+    );
+    expect(state.spinnerStates[0]!.descentEndY).toBe(400);
+    expect(state.spinnerStates[1]!.descentEndY).toBe(350);
+  });
+
+  it('circleCenterX는 spawnX(placement.x)와 일치한다', () => {
+    const state = createGameplayRuntimeFromStageDefinition(
+      stageWithSpinners,
+      config,
+      BlockDefinitionTable,
+      3,
+    );
+    expect(state.spinnerStates[0]!.circleCenterX).toBe(200);
+    expect(state.spinnerStates[1]!.circleCenterX).toBe(520);
+  });
+
+  it('circleCenterY는 descentEndY + circleRadius(150)이다', () => {
+    const state = createGameplayRuntimeFromStageDefinition(
+      stageWithSpinners,
+      config,
+      BlockDefinitionTable,
+      3,
+    );
+    expect(state.spinnerStates[0]!.circleCenterY).toBe(400 + 150);
+    expect(state.spinnerStates[1]!.circleCenterY).toBe(350 + 150);
+  });
+
+  it('circleRadius는 150이다', () => {
+    const state = createGameplayRuntimeFromStageDefinition(
+      stageWithSpinners,
+      config,
+      BlockDefinitionTable,
+      3,
+    );
+    expect(state.spinnerStates[0]!.circleRadius).toBe(150);
+    expect(state.spinnerStates[1]!.circleRadius).toBe(150);
+  });
+
+  it('circleAngleRad는 0으로 초기화된다', () => {
+    const state = createGameplayRuntimeFromStageDefinition(
+      stageWithSpinners,
+      config,
+      BlockDefinitionTable,
+      3,
+    );
+    expect(state.spinnerStates[0]!.circleAngleRad).toBe(0);
+    expect(state.spinnerStates[1]!.circleAngleRad).toBe(0);
   });
 });

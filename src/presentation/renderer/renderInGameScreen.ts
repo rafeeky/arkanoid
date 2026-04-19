@@ -4,6 +4,7 @@ import type { HudViewModel } from '../view-models/HudViewModel';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { SpinnerDefinition } from '../../definitions/types/SpinnerDefinition';
 import type { ScreenState } from '../state/ScreenState';
+import { SPAWN_DURATION_MS } from '../../gameplay/systems/SpinnerSystem';
 
 // 블록 시각 ID → 기본 색상 매핑
 // Phaser API 없이 순수 값 매핑. Unity 포팅 시 Material/Sprite 참조로 교체된다.
@@ -344,10 +345,15 @@ export function renderInGameScreen(
     const def = spinnerDefinitions[spinner.definitionId];
     if (def === undefined) continue;
 
+    // spawning phase: spawnElapsedMs → 0~1 progress로 변환
+    const spawnProgress = spinner.phase === 'spawning'
+      ? Math.min(1, spinner.spawnElapsedMs / SPAWN_DURATION_MS)
+      : 1.0;
+
     // spawning phase: fade-in alpha 계산
     const spinnerAlpha =
       spinner.phase === 'spawning'
-        ? 0.3 + 0.7 * spinner.spawnProgress
+        ? 0.3 + 0.7 * spawnProgress
         : 1.0;
 
     if (def.kind === 'cube') {
@@ -410,15 +416,15 @@ export function renderInGameScreen(
     //     right door 의 center x = spinner.x + doorWidth / 2.
     if (spinner.phase === 'spawning') {
       let openRatio: number;
-      if (spinner.spawnProgress < GATE_OPEN_END) {
+      if (spawnProgress < GATE_OPEN_END) {
         // 열리는 구간: 0 → 1
-        openRatio = spinner.spawnProgress / GATE_OPEN_END;
-      } else if (spinner.spawnProgress < GATE_CLOSE_START) {
+        openRatio = spawnProgress / GATE_OPEN_END;
+      } else if (spawnProgress < GATE_CLOSE_START) {
         // 완전 열림 구간
         openRatio = 1.0;
       } else {
         // 닫히는 구간: 1 → 0
-        openRatio = 1.0 - (spinner.spawnProgress - GATE_CLOSE_START) / (1.0 - GATE_CLOSE_START);
+        openRatio = 1.0 - (spawnProgress - GATE_CLOSE_START) / (1.0 - GATE_CLOSE_START);
       }
 
       const halfSize = def.size / 2;
