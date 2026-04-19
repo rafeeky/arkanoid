@@ -42,12 +42,22 @@ export type StageMetadata = {
   ballInitialAngleDeg: number;
 };
 
-// ─── 에디터 상태 ─────────────────────────────────────────────────────────────
+// ─── 스테이지 슬롯 (탭 단위 편집 데이터) ────────────────────────────────────
 
-export type EditorState = {
+export type StageSlotState = {
   metadata: StageMetadata;
   blocks: EditorBlockPlacement[];
   spinners: EditorSpinnerPlacement[];
+};
+
+// ─── 에디터 상태 ─────────────────────────────────────────────────────────────
+
+export type EditorState = {
+  // 멀티 스테이지 탭
+  stages: [StageSlotState, StageSlotState, StageSlotState];
+  activeStageIndex: 0 | 1 | 2;
+
+  // 팔레트 / 인터랙션 (활성 스테이지와 독립)
   selectedBlockType: BlockTypeId;
   selectedSpinnerType: SpinnerTypeId | null;
   isSpinnerPlacementMode: boolean;
@@ -56,6 +66,10 @@ export type EditorState = {
   dragOffsetX: number;
   dragOffsetY: number;
 };
+
+// ─── Bulk JSON 포맷 ──────────────────────────────────────────────────────────
+
+export type AllStagesJson = StageJson[];
 
 // ─── 그리드 레이아웃 상수 ────────────────────────────────────────────────────
 

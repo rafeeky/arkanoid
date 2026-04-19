@@ -51,31 +51,68 @@ function bootstrap(): void {
   const canvas = new EditorCanvas(canvasContainer);
 
   const ui = new EditorUI(sidePanel, {
+    onSetActiveStage: (idx) => {
+      app.setActiveStageIndex(idx);
+    },
     onSelectBlockType: (type) => {
       app.selectBlockType(type);
     },
     onSelectSpinnerType: (type) => {
       app.enterSpinnerPlacementMode(type);
     },
-    onExport: () => {
-      const json = app.exportJson();
-      ui.setJsonOutput(json);
+
+    // 현재 스테이지 export
+    onExportCurrent: () => {
+      const json = app.exportCurrentJson();
+      ui.setCurrentJsonOutput(json);
     },
-    onImport: (text) => {
-      const result = app.importJson(text);
+
+    // 현재 스테이지 import
+    onImportCurrent: (text) => {
+      const result = app.importCurrentJson(text);
       if (result.ok) {
-        ui.clearError();
-        ui.clearImportTextarea();
-        ui.setJsonOutput('');
+        ui.clearCurrentError();
+        ui.clearCurrentImportTextarea();
+        ui.setCurrentJsonOutput('');
       } else {
-        ui.showError(result.error);
+        ui.showCurrentError(result.error);
       }
     },
-    onClear: () => {
-      app.clearAll();
-      ui.setJsonOutput('');
-      ui.clearError();
+
+    // 전체 스테이지 export
+    onExportAll: () => {
+      const json = app.exportAllJson();
+      ui.setAllJsonOutput(json);
     },
+
+    // 전체 스테이지 import
+    onImportAll: (text) => {
+      const result = app.importAllJson(text);
+      if (result.ok) {
+        ui.clearAllError();
+        ui.clearAllImportTextarea();
+        ui.setAllJsonOutput('');
+      } else {
+        ui.showAllError(result.error);
+      }
+    },
+
+    // 현재 스테이지 초기화
+    onClearCurrent: () => {
+      app.clearCurrentStage();
+      ui.setCurrentJsonOutput('');
+      ui.clearCurrentError();
+    },
+
+    // 전체 스테이지 초기화
+    onClearAll: () => {
+      app.clearAllStages();
+      ui.setCurrentJsonOutput('');
+      ui.setAllJsonOutput('');
+      ui.clearCurrentError();
+      ui.clearAllError();
+    },
+
     onMetadataChange: (patch) => {
       app.updateMetadata(patch);
     },

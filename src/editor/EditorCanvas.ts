@@ -94,17 +94,32 @@ export class EditorCanvas {
 
   render(state: Readonly<EditorState>): void {
     const { ctx } = this;
+    const slot = state.stages[state.activeStageIndex];
 
     // 배경 클리어
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    this.drawGrid(state);
-    this.drawSpinners(state);
+    this.drawStageLabel(state);
+    this.drawGrid(slot.blocks);
+    this.drawSpinners(slot.spinners, state.selectedSpinnerId);
     this.drawCursor(state);
   }
 
-  private drawGrid(state: Readonly<EditorState>): void {
+  private drawStageLabel(state: Readonly<EditorState>): void {
+    const { ctx } = this;
+    const idx = state.activeStageIndex;
+    const label = `STAGE ${idx + 1}`;
+    ctx.save();
+    ctx.fillStyle = '#444';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(label, CANVAS_W - 8, 4);
+    ctx.restore();
+  }
+
+  private drawGrid(blocks: Readonly<EditorState['stages'][0]['blocks']>): void {
     const { ctx } = this;
 
     for (let row = 0; row < GRID_ROWS; row++) {
@@ -118,7 +133,7 @@ export class EditorCanvas {
         ctx.strokeRect(x + 0.5, y + 0.5, BLOCK_W - 1, BLOCK_H - 1);
 
         // 배치된 블록
-        const placement = state.blocks.find(
+        const placement = blocks.find(
           (b) => b.row === row && b.col === col,
         );
         if (placement === undefined) continue;
@@ -166,12 +181,15 @@ export class EditorCanvas {
     );
   }
 
-  private drawSpinners(state: Readonly<EditorState>): void {
+  private drawSpinners(
+    spinners: Readonly<EditorState['stages'][0]['spinners']>,
+    selectedSpinnerId: string | null,
+  ): void {
     const { ctx } = this;
 
-    for (const spinner of state.spinners) {
+    for (const spinner of spinners) {
       const color = SPINNER_COLORS[spinner.definitionId] ?? '#00ffaa';
-      const isSelected = spinner.id === state.selectedSpinnerId;
+      const isSelected = spinner.id === selectedSpinnerId;
 
       ctx.save();
       ctx.translate(spinner.x, spinner.y);

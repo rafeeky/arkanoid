@@ -9,9 +9,13 @@ import { BLOCK_COLORS, BLOCK_LABELS, SPINNER_COLORS } from './editorTypes';
 export type EditorUICallbacks = {
   onSelectBlockType: (type: BlockTypeId) => void;
   onSelectSpinnerType: (type: SpinnerTypeId) => void;
-  onExport: () => void;
-  onImport: (text: string) => void;
-  onClear: () => void;
+  onSetActiveStage: (idx: 0 | 1 | 2) => void;
+  onExportCurrent: () => void;
+  onImportCurrent: (text: string) => void;
+  onExportAll: () => void;
+  onImportAll: (text: string) => void;
+  onClearCurrent: () => void;
+  onClearAll: () => void;
   onMetadataChange: (patch: Partial<StageMetadata>) => void;
 };
 
@@ -30,6 +34,9 @@ export class EditorUI {
   private readonly root: HTMLElement;
   private readonly callbacks: EditorUICallbacks;
 
+  // 탭 버튼
+  private tabBtns: [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement] | null = null;
+
   // 팔레트 버튼 참조
   private blockBtns: Map<BlockTypeId, HTMLButtonElement> = new Map();
   private spinnerBtns: Map<SpinnerTypeId, HTMLButtonElement> = new Map();
@@ -38,9 +45,12 @@ export class EditorUI {
   private metaInputs: Partial<Record<keyof StageMetadata, HTMLInputElement>> = {};
 
   // 텍스트 영역
-  private jsonTextarea!: HTMLTextAreaElement;
-  private importTextarea!: HTMLTextAreaElement;
-  private errorDiv!: HTMLDivElement;
+  private exportCurrentTextarea!: HTMLTextAreaElement;
+  private importCurrentTextarea!: HTMLTextAreaElement;
+  private exportAllTextarea!: HTMLTextAreaElement;
+  private importAllTextarea!: HTMLTextAreaElement;
+  private errorCurrentDiv!: HTMLDivElement;
+  private errorAllDiv!: HTMLDivElement;
 
   constructor(container: HTMLElement, callbacks: EditorUICallbacks) {
     this.callbacks = callbacks;
@@ -68,12 +78,15 @@ export class EditorUI {
 
   private build(): void {
     this.root.appendChild(this.buildTitle());
+    this.root.appendChild(this.buildStageTabs());
     this.root.appendChild(this.buildBlockPalette());
     this.root.appendChild(this.buildSpinnerPanel());
     this.root.appendChild(this.buildMetadataPanel());
-    this.root.appendChild(this.buildExportPanel());
-    this.root.appendChild(this.buildImportPanel());
-    this.root.appendChild(this.buildClearButton());
+    this.root.appendChild(this.buildExportCurrentPanel());
+    this.root.appendChild(this.buildImportCurrentPanel());
+    this.root.appendChild(this.buildExportAllPanel());
+    this.root.appendChild(this.buildImportAllPanel());
+    this.root.appendChild(this.buildClearButtons());
   }
 
   private buildTitle(): HTMLElement {
@@ -81,6 +94,39 @@ export class EditorUI {
     el.style.cssText = 'font-size:14px;font-weight:bold;color:#fff;border-bottom:1px solid #444;padding-bottom:8px';
     el.textContent = 'Arkanoid Stage Editor';
     return el;
+  }
+
+  // ─── 스테이지 탭 ─────────────────────────────────────────────────────────
+
+  private buildStageTabs(): HTMLElement {
+    const section = this.buildSection('Stage');
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:4px';
+
+    const tabs = ([0, 1, 2] as const).map((idx) => {
+      const btn = document.createElement('button');
+      btn.textContent = `STAGE ${idx + 1}`;
+      btn.style.cssText = [
+        'flex:1',
+        'padding:6px 4px',
+        'border:1px solid #444',
+        'background:#333',
+        'color:#aaa',
+        'cursor:pointer',
+        'font-family:monospace',
+        'font-size:11px',
+        'border-radius:3px',
+        'font-weight:normal',
+      ].join(';');
+      btn.addEventListener('click', () => this.callbacks.onSetActiveStage(idx));
+      row.appendChild(btn);
+      return btn;
+    }) as [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement];
+
+    this.tabBtns = tabs;
+    section.appendChild(row);
+    return section;
   }
 
   private buildSection(title: string): HTMLElement {
@@ -221,13 +267,15 @@ export class EditorUI {
     return section;
   }
 
-  private buildExportPanel(): HTMLElement {
-    const section = this.buildSection('Export JSON');
+  // ─── Export Current ────────────────────────────────────────────────────────
 
-    this.jsonTextarea = document.createElement('textarea');
-    this.jsonTextarea.style.cssText = [
+  private buildExportCurrentPanel(): HTMLElement {
+    const section = this.buildSection('Export Current Stage');
+
+    this.exportCurrentTextarea = document.createElement('textarea');
+    this.exportCurrentTextarea.style.cssText = [
       'width:100%',
-      'height:120px',
+      'height:100px',
       'background:#111',
       'border:1px solid #444',
       'color:#8f8',
@@ -237,50 +285,36 @@ export class EditorUI {
       'resize:vertical',
       'box-sizing:border-box',
     ].join(';');
-    this.jsonTextarea.readOnly = true;
-    this.jsonTextarea.placeholder = 'JSON output will appear here';
+    this.exportCurrentTextarea.readOnly = true;
+    this.exportCurrentTextarea.placeholder = 'Current stage JSON...';
 
     const btnRow = document.createElement('div');
     btnRow.style.cssText = 'display:flex;gap:6px';
 
-    const exportBtn = this.makeButton('Export', '#1a7a1a', () => {
-      this.callbacks.onExport();
+    const exportBtn = this.makeButton('Export Current', '#1a7a1a', () => {
+      this.callbacks.onExportCurrent();
     });
 
     const copyBtn = this.makeButton('Copy', '#1a4a7a', () => {
-      if (this.jsonTextarea.value) {
-        navigator.clipboard.writeText(this.jsonTextarea.value).catch(() => {
-          this.jsonTextarea.select();
-          document.execCommand('copy');
-        });
+      if (this.exportCurrentTextarea.value) {
+        this.copyToClipboard(this.exportCurrentTextarea);
       }
-    });
-
-    const downloadBtn = this.makeButton('Download', '#4a3a7a', () => {
-      if (!this.jsonTextarea.value) return;
-      const blob = new Blob([this.jsonTextarea.value], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'stage.json';
-      a.click();
-      URL.revokeObjectURL(url);
     });
 
     btnRow.appendChild(exportBtn);
     btnRow.appendChild(copyBtn);
-    btnRow.appendChild(downloadBtn);
-
-    section.appendChild(this.jsonTextarea);
+    section.appendChild(this.exportCurrentTextarea);
     section.appendChild(btnRow);
     return section;
   }
 
-  private buildImportPanel(): HTMLElement {
-    const section = this.buildSection('Import JSON');
+  // ─── Import Current ───────────────────────────────────────────────────────
 
-    this.importTextarea = document.createElement('textarea');
-    this.importTextarea.style.cssText = [
+  private buildImportCurrentPanel(): HTMLElement {
+    const section = this.buildSection('Import Current Stage');
+
+    this.importCurrentTextarea = document.createElement('textarea');
+    this.importCurrentTextarea.style.cssText = [
       'width:100%',
       'height:80px',
       'background:#111',
@@ -292,29 +326,134 @@ export class EditorUI {
       'resize:vertical',
       'box-sizing:border-box',
     ].join(';');
-    this.importTextarea.placeholder = 'Paste stage JSON here...';
+    this.importCurrentTextarea.placeholder = 'Paste single stage JSON here...';
 
-    this.errorDiv = document.createElement('div');
-    this.errorDiv.style.cssText = 'font-size:10px;color:#f66;min-height:14px';
+    this.errorCurrentDiv = document.createElement('div');
+    this.errorCurrentDiv.style.cssText = 'font-size:10px;color:#f66;min-height:14px';
 
-    const importBtn = this.makeButton('Import', '#7a3a1a', () => {
-      this.callbacks.onImport(this.importTextarea.value);
+    const importBtn = this.makeButton('Import Current', '#7a3a1a', () => {
+      this.callbacks.onImportCurrent(this.importCurrentTextarea.value);
     });
 
-    section.appendChild(this.importTextarea);
-    section.appendChild(this.errorDiv);
+    section.appendChild(this.importCurrentTextarea);
+    section.appendChild(this.errorCurrentDiv);
     section.appendChild(importBtn);
     return section;
   }
 
-  private buildClearButton(): HTMLElement {
-    const btn = this.makeButton('Clear All', '#5a1a1a', () => {
-      if (confirm('전체를 초기화합니다. 계속하시겠습니까?')) {
-        this.callbacks.onClear();
+  // ─── Export All ───────────────────────────────────────────────────────────
+
+  private buildExportAllPanel(): HTMLElement {
+    const section = this.buildSection('Export All Stages');
+
+    this.exportAllTextarea = document.createElement('textarea');
+    this.exportAllTextarea.style.cssText = [
+      'width:100%',
+      'height:100px',
+      'background:#111',
+      'border:1px solid #2a4a2a',
+      'color:#afa',
+      'font-family:monospace',
+      'font-size:10px',
+      'padding:5px',
+      'resize:vertical',
+      'box-sizing:border-box',
+    ].join(';');
+    this.exportAllTextarea.readOnly = true;
+    this.exportAllTextarea.placeholder = 'All stages JSON array...';
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px';
+
+    const exportAllBtn = this.makeButton('Export All', '#2a5a2a', () => {
+      this.callbacks.onExportAll();
+    });
+
+    const copyAllBtn = this.makeButton('Copy', '#1a4a7a', () => {
+      if (this.exportAllTextarea.value) {
+        this.copyToClipboard(this.exportAllTextarea);
       }
     });
-    btn.style.marginTop = '4px';
-    return btn;
+
+    const downloadAllBtn = this.makeButton('Download', '#4a3a7a', () => {
+      if (!this.exportAllTextarea.value) return;
+      const blob = new Blob([this.exportAllTextarea.value], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'all_stages.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    btnRow.appendChild(exportAllBtn);
+    btnRow.appendChild(copyAllBtn);
+    btnRow.appendChild(downloadAllBtn);
+
+    section.appendChild(this.exportAllTextarea);
+    section.appendChild(btnRow);
+    return section;
+  }
+
+  // ─── Import All ───────────────────────────────────────────────────────────
+
+  private buildImportAllPanel(): HTMLElement {
+    const section = this.buildSection('Import All Stages');
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:10px;color:#666';
+    hint.textContent = '[ {...stage1}, {...stage2}, {...stage3} ] 배열 형식';
+    section.appendChild(hint);
+
+    this.importAllTextarea = document.createElement('textarea');
+    this.importAllTextarea.style.cssText = [
+      'width:100%',
+      'height:80px',
+      'background:#111',
+      'border:1px solid #2a4a2a',
+      'color:#cfc',
+      'font-family:monospace',
+      'font-size:10px',
+      'padding:5px',
+      'resize:vertical',
+      'box-sizing:border-box',
+    ].join(';');
+    this.importAllTextarea.placeholder = 'Paste all-stages JSON array here...';
+
+    this.errorAllDiv = document.createElement('div');
+    this.errorAllDiv.style.cssText = 'font-size:10px;color:#f66;min-height:14px';
+
+    const importAllBtn = this.makeButton('Import All', '#2a5a2a', () => {
+      this.callbacks.onImportAll(this.importAllTextarea.value);
+    });
+
+    section.appendChild(this.importAllTextarea);
+    section.appendChild(this.errorAllDiv);
+    section.appendChild(importAllBtn);
+    return section;
+  }
+
+  // ─── Clear buttons ────────────────────────────────────────────────────────
+
+  private buildClearButtons(): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-top:4px;border-top:1px solid #333;padding-top:8px';
+
+    const clearCurrentBtn = this.makeButton('Clear Current Stage', '#5a3a1a', () => {
+      if (confirm('현재 스테이지를 초기화합니다. 계속하시겠습니까?')) {
+        this.callbacks.onClearCurrent();
+      }
+    });
+
+    const clearAllBtn = this.makeButton('Clear All Stages', '#5a1a1a', () => {
+      if (confirm('3개 스테이지를 모두 초기화합니다. 계속하시겠습니까?')) {
+        this.callbacks.onClearAll();
+      }
+    });
+
+    wrapper.appendChild(clearCurrentBtn);
+    wrapper.appendChild(clearAllBtn);
+    return wrapper;
   }
 
   private makeButton(
@@ -339,9 +478,29 @@ export class EditorUI {
     return btn;
   }
 
+  private copyToClipboard(textarea: HTMLTextAreaElement): void {
+    navigator.clipboard.writeText(textarea.value).catch(() => {
+      textarea.select();
+      document.execCommand('copy');
+    });
+  }
+
   // ─── 상태 동기화 ─────────────────────────────────────────────────────────
 
   syncState(state: Readonly<EditorState>): void {
+    // 탭 하이라이트
+    if (this.tabBtns !== null) {
+      const tabs = this.tabBtns;
+      ([0, 1, 2] as const).forEach((i) => {
+        const btn = tabs[i];
+        const isActive = state.activeStageIndex === i;
+        btn.style.borderColor = isActive ? '#ffcc00' : '#444';
+        btn.style.background = isActive ? '#443300' : '#333';
+        btn.style.color = isActive ? '#ffcc00' : '#aaa';
+        btn.style.fontWeight = isActive ? 'bold' : 'normal';
+      });
+    }
+
     // 블록 팔레트 하이라이트
     for (const [type, btn] of this.blockBtns) {
       const isActive = !state.isSpinnerPlacementMode && state.selectedBlockType === type;
@@ -356,8 +515,8 @@ export class EditorUI {
       btn.style.background = isActive ? '#443300' : '#333';
     }
 
-    // 메타데이터 입력 동기화 (포커스 중인 필드는 건드리지 않음)
-    const meta = state.metadata;
+    // 활성 스테이지의 메타데이터로 입력 필드 동기화
+    const meta = state.stages[state.activeStageIndex].metadata;
     for (const [key, input] of Object.entries(this.metaInputs)) {
       if (input === undefined) continue;
       if (document.activeElement === input) continue;
@@ -368,19 +527,35 @@ export class EditorUI {
 
   // ─── JSON 출력 갱신 ──────────────────────────────────────────────────────
 
-  setJsonOutput(json: string): void {
-    this.jsonTextarea.value = json;
+  setCurrentJsonOutput(json: string): void {
+    this.exportCurrentTextarea.value = json;
   }
 
-  showError(msg: string): void {
-    this.errorDiv.textContent = msg;
+  setAllJsonOutput(json: string): void {
+    this.exportAllTextarea.value = json;
   }
 
-  clearError(): void {
-    this.errorDiv.textContent = '';
+  showCurrentError(msg: string): void {
+    this.errorCurrentDiv.textContent = msg;
   }
 
-  clearImportTextarea(): void {
-    this.importTextarea.value = '';
+  clearCurrentError(): void {
+    this.errorCurrentDiv.textContent = '';
+  }
+
+  clearCurrentImportTextarea(): void {
+    this.importCurrentTextarea.value = '';
+  }
+
+  showAllError(msg: string): void {
+    this.errorAllDiv.textContent = msg;
+  }
+
+  clearAllError(): void {
+    this.errorAllDiv.textContent = '';
+  }
+
+  clearAllImportTextarea(): void {
+    this.importAllTextarea.value = '';
   }
 }
