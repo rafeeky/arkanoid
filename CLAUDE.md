@@ -34,3 +34,24 @@ TypeScript로 2D 알카노이드 프로토타입을 빠르게 만들고, 이후 
 ## Current status
 
 프로젝트 초기 상태. 아직 package.json 없음.
+
+## Commit convention
+
+모든 커밋 메시지는 Conventional Commits(영문) + **한글 작업 요약 trailer**를 포함한다.
+
+포맷:
+```
+<type>(<scope>): <summary>
+
+- English bullet points of changes
+
+Agent: <에이전트 이름>
+작업: <한 줄 한글 요약>
+세부: <3~5줄 한글 세부 설명. 변경 파일 요지, 수정 의도>
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+```
+
+- `<에이전트 이름>`은 실제 작업한 sub-agent (`core-logic-engineer`, `view-engineer`, `tester`, `arkanoid-lead` 중 하나). 여러 에이전트가 참여한 경우 `core-logic-engineer + view-engineer`처럼 병기.
+- 한글 trailer는 필수. 영문 섹션만 있는 커밋은 만들지 않는다.
+- 커밋 메시지는 HEREDOC으로 작성해 포맷 유지.

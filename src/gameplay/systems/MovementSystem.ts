@@ -88,8 +88,16 @@ function circleOverlapsBlock(cx: number, cy: number, block: BlockState): boolean
 // ---------------------------------------------------------------------------
 
 /**
- * Returns the first non-destroyed block that overlaps the ball's circle,
- * skipping any blocks whose IDs are in skipIds.
+ * Returns the BEST overlapping non-destroyed block for the ball, or null.
+ *
+ * "Best" = the block whose body centre is closest to the ball centre.
+ * This matters at the 4px inter-block gap, where the ball (radius 8) can
+ * overlap two or more adjacent blocks simultaneously.  Iterating in array
+ * order and returning the first match destroyed whichever block happened
+ * to appear first in stage data — almost never the block the player saw
+ * the ball land on.  Choosing by centre-distance picks the block the ball
+ * is most deeply inside, which matches user perception and keeps the
+ * subsequent entry-side / push-out logic pointed at the correct face.
  */
 function findOverlappingBlock(
   cx: number,
@@ -97,14 +105,24 @@ function findOverlappingBlock(
   blocks: readonly BlockState[],
   skipIds: ReadonlySet<string>,
 ): BlockState | null {
+  let best: BlockState | null = null;
+  let bestDistSq = Infinity;
   for (const block of blocks) {
     if (block.isDestroyed) continue;
     if (skipIds.has(block.id)) continue;
-    if (circleOverlapsBlock(cx, cy, block)) {
-      return block;
+    if (!circleOverlapsBlock(cx, cy, block)) continue;
+
+    const bcx = block.x + BLOCK_WIDTH / 2;
+    const bcy = block.y + BLOCK_HEIGHT / 2;
+    const dx = cx - bcx;
+    const dy = cy - bcy;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < bestDistSq) {
+      bestDistSq = distSq;
+      best = block;
     }
   }
-  return null;
+  return best;
 }
 
 // ---------------------------------------------------------------------------
