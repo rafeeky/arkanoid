@@ -17,7 +17,6 @@
 
 import { describe, it, expect } from 'vitest';
 import { moveBallWithCollisions } from './MovementSystem';
-import { sweepBallVsBlocks } from './CollisionService';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
 
@@ -338,97 +337,3 @@ describe('스트레스 테스트 — 극단적 조건', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Test Suite 4: sweepBallVsBlocks corner cases — 직접 함수 레벨 테스트
-// ---------------------------------------------------------------------------
-
-describe('sweepBallVsBlocks — 모서리·경계 케이스', () => {
-  const BLOCK_W = BLOCK_WIDTH;
-  const BLOCK_H = BLOCK_HEIGHT;
-
-  function makeBlock(id: string, x: number, y: number): BlockState {
-    return { id, x, y, remainingHits: 1, isDestroyed: false, definitionId: 'basic' };
-  }
-
-  it('vx=0 (순수 수직 이동) 시 블록 상단 충돌을 감지한다', () => {
-    // Block at (200, 200). Expanded top = 200 - 8 = 192.
-    // Ball at (232, 170) moving down at vy=600. dt=1/30 → dy=20.
-    // Should detect hit (ball reaches y=192 within dt=1/30: t=(192-170)/20=1.1 → within dt=1/30? 20px/dt=600*0.033=20. t=(192-170)/(600*0.033)=22/20=1.1 > 1, so use longer dt)
-    const block = makeBlock('b0', 200, 200);
-    const dt = 0.05; // 50ms
-    const hit = sweepBallVsBlocks(232, 170, 0, 600, dt, [block]);
-    expect(hit).not.toBeNull();
-    if (hit) {
-      expect(hit.side).toBe('top');
-    }
-  });
-
-  it('vy=0 (순수 수평 이동) 시 블록 좌측 충돌을 감지한다', () => {
-    // Block at (300, 100). Expanded left = 300 - 8 = 292.
-    // Ball at (270, 112) moving right at vx=600, dt=0.05 → dx=30. Reaches 292 at t=(292-270)/30=0.733.
-    const block = makeBlock('b0', 300, 100);
-    const hit = sweepBallVsBlocks(270, 112, 600, 0, 0.05, [block]);
-    expect(hit).not.toBeNull();
-    if (hit) {
-      expect(hit.side).toBe('left');
-    }
-  });
-
-  it('공이 이미 expanded AABB 내부(tEntry<0)일 때 t=0을 반환하고 반사 후 탈출한다', () => {
-    // Ball center exactly on expanded top boundary or just inside
-    const block = makeBlock('b0', 200, 200);
-    // expanded top = 200 - 8 = 192. Place ball at y=190 (inside expanded AABB).
-    // With vy < 0 (moving up), ball would exit top — but sweep sees tEntry<0, tExit>0.
-    // The system should still return a hit (t=0) so push-out is applied.
-    const hit = sweepBallVsBlocks(232, 190, 0, -300, 1 / 60, [block]);
-    // When ball is already inside and moving away, the slab method:
-    // tyEntry = (192-190)/(-300*dt) < 0 (ball moving away from top)
-    // tyExit  = (200+24+8-190)/(-300*dt) < 0 as well since vy<0 means it moves away from bottom
-    // Actually: t1y=(192-190)/(vy*dt), t2y=(232-190)/(vy*dt). vy<0 so these are negative.
-    // This means the y slab is NOT entered from above, so we may get null — that's correct,
-    // ball is moving AWAY from the block (upward), no collision expected.
-    // Just verify the function doesn't crash:
-    expect(hit === null || hit.t >= 0).toBe(true);
-  });
-
-  it('두 인접 블록에 거의 동시에 닿을 때 가장 이른 t를 반환한다', () => {
-    // Two blocks side-by-side (gap=4). Ball approaches from below center between them.
-    // block0: x=40, y=80. block1: x=108, y=80 (col=1, gap=4)
-    const block0 = makeBlock('b0', 40, 80);
-    const block1 = makeBlock('b1', 108, 80);
-    // Ball at x=106 (gap between blocks), y=150, moving up at vy=-600.
-    // Expanded bottom of block0: y=80+24+8=112. Expanded bottom of block1: 112.
-    // Ball reaches y=112 at t=(150-112)/(600*dt_as_1) ... using dt=1
-    const hit = sweepBallVsBlocks(106, 150, 0, -600, 0.1, [block0, block1]);
-    // Ball is in the gap (x=106 is NOT between expanded AABB of block0: right=40+64+8=112 ✓
-    //   and NOT between expanded AABB of block1: left=108-8=100. x=106 > 100 → inside block1 x-slab.
-    // So ball should hit block1 bottom face.
-    if (hit !== null) {
-      expect(hit.t).toBeGreaterThanOrEqual(0);
-      expect(hit.t).toBeLessThanOrEqual(1);
-    }
-    // No assertion on null/non-null since geometry may be ambiguous; just no crash.
-    expect(true).toBe(true);
-  });
-
-  it('txEntry === tyEntry (정확한 모서리 진입) 시 side 결정이 결정적이다', () => {
-    // Perfect 45° approach to block top-right corner.
-    // Block at (200, 200). Expanded top = 192, expanded right = 200+64+8 = 272.
-    // For txEntry === tyEntry we need (expandedRight - x0)/vx == (expandedTop - y0)/vy
-    // With vx=1, vy=-1 (45° up-right), block expanded right = 272, expanded top = 192.
-    // Set x0 such that 272-x0 = 192-y0 with y0=100.
-    // 272-x0 = 192-100=92 → x0 = 180.
-    // Verify: txEntry=(272-180)/vx_total, tyEntry=(192-100)/vy_total, with vx=vy in magnitude.
-    const block = makeBlock('b0', 200, 200);
-    const speed = 300;
-    // Moving diagonally up-right at 45°
-    const hit = sweepBallVsBlocks(180, 100, speed, -speed, 1.0, [block]);
-    // Must return a hit or null, never throw, and side must be valid
-    if (hit !== null) {
-      expect(['left', 'right', 'top', 'bottom']).toContain(hit.side);
-      expect(hit.t).toBeGreaterThanOrEqual(0);
-      expect(hit.t).toBeLessThanOrEqual(1);
-    }
-    expect(true).toBe(true);
-  });
-});

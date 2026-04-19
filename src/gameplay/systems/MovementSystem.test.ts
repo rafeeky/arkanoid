@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { moveBar, moveBall, moveItemDrop, moveAttachedBallToBar, moveBallSubSteps } from './MovementSystem';
+import { moveBar, moveBall, moveItemDrop, moveAttachedBallToBar, moveBallWithCollisions } from './MovementSystem';
 import type { BarState } from '../state/BarState';
 import type { BallState } from '../state/BallState';
 import type { ItemDropState } from '../state/ItemDropState';
@@ -130,78 +130,76 @@ describe('moveAttachedBallToBar', () => {
 });
 
 // ============================================================
-// Bug A 재현 테스트: 고속 공 터널링 (sub-step 없으면 블록 통과)
+// moveBallWithCollisions — 블록 충돌 통합 테스트
+// (sub-step AABB 방식으로 재작성됨)
 // ============================================================
 
-describe('Bug A regression: moveBallSubSteps — 고속 공 터널링 방지', () => {
-  /**
-   * moveBallSubSteps는 내보내기 함수로, 충돌 콜백을 받아
-   * 각 서브 스텝마다 호출한다.
-   * 이동 거리가 maxStepDistance(12px)를 초과하면 스텝을 분할해야 한다.
-   */
-  it('이동 거리가 maxStepDistance 이하면 sub-step이 1번만 호출된다', () => {
-    // speed=420, dt=1/60 → distance ≈ 7px, maxStepDistance=12px → steps=1
-    const ball: BallState = { ...baseBall, vx: 420, vy: 0 };
+describe('moveBallWithCollisions — 블록 충돌 기본 동작', () => {
+  it('블록이 없으면 dt*v 만큼 이동한다', () => {
     const dt = 1 / 60;
-    let callCount = 0;
-    const stepped = moveBallSubSteps(ball, dt, () => {
-      callCount++;
-      return null; // no collision intercept
-    });
-    expect(callCount).toBe(1);
-    expect(stepped.x).toBeCloseTo(ball.x + ball.vx * dt, 2);
+    const result = moveBallWithCollisions(baseBall, dt, []);
+    expect(result.ball.x).toBeCloseTo(baseBall.x + baseBall.vx * dt, 2);
+    expect(result.ball.y).toBeCloseTo(baseBall.y + baseBall.vy * dt, 2);
+    expect(result.blockFacts.length).toBe(0);
   });
 
-  it('이동 거리가 maxStepDistance 초과하면 여러 sub-step으로 분할된다', () => {
-    // speed=1200, dt=0.033 → distance ≈ 40px → steps=ceil(40/12)=4
-    const ball: BallState = { ...baseBall, vx: 1200, vy: 0 };
-    const dt = 0.033;
-    let callCount = 0;
-    moveBallSubSteps(ball, dt, () => {
-      callCount++;
-      return null;
-    });
-    expect(callCount).toBeGreaterThanOrEqual(3); // 최소 3번 분할
-  });
-
-  it('sub-step 콜백에서 충돌 반환 시 해당 스텝에서 이동을 멈춘다', () => {
-    // 공이 고속으로 이동하다 블록 위치(x=500)에서 충돌 감지
-    const ball: BallState = { ...baseBall, x: 400, y: 300, vx: 1200, vy: 0 };
-    const dt = 0.1; // 큰 dt → 120px 이동
-    let stopX = -1;
-    const stepped = moveBallSubSteps(ball, dt, (b) => {
-      if (b.x >= 500) {
-        stopX = b.x;
-        return { vx: -b.vx, vy: b.vy }; // 반사
-      }
-      return null;
-    });
-    // 충돌 후 반사가 발생했으므로 최종 x는 500 근처에서 반사됨
-    expect(stopX).toBeGreaterThanOrEqual(500);
-    // 충돌 후 vx는 음수 (반사됨)
-    expect(stepped.vx).toBeLessThan(0);
-  });
-
-  it('최대 sub-step 횟수(8)를 초과하지 않는다', () => {
-    // 극단적 속도: speed=5000, dt=0.1 → 500px 이동 → steps=ceil(500/12)=42, capped at 8
-    const ball: BallState = { ...baseBall, vx: 5000, vy: 0 };
-    const dt = 0.1;
-    let callCount = 0;
-    moveBallSubSteps(ball, dt, () => {
-      callCount++;
-      return null;
-    });
-    expect(callCount).toBeLessThanOrEqual(8);
-  });
-
-  it('비활성 공은 sub-step을 실행하지 않는다', () => {
+  it('비활성 공은 그대로 반환된다', () => {
     const inactiveBall: BallState = { ...baseBall, isActive: false };
-    let callCount = 0;
-    const result = moveBallSubSteps(inactiveBall, 1 / 60, () => {
-      callCount++;
-      return null;
-    });
-    expect(callCount).toBe(0);
-    expect(result.x).toBe(inactiveBall.x);
+    const result = moveBallWithCollisions(inactiveBall, 1 / 60, []);
+    expect(result.ball).toBe(inactiveBall);
+    expect(result.blockFacts.length).toBe(0);
+  });
+
+  it('블록 상단에 충돌 시 vy가 반전된다', () => {
+    const block = {
+      id: 'b',
+      x: 448,
+      y: 300,
+      remainingHits: 1,
+      isDestroyed: false,
+      definitionId: 'basic',
+    };
+    // 공이 블록 expanded top(300-8=292) 바로 아래에서 빠르게 위로 이동
+    // 1/30 dt = 0.033s, vy=-400 → 13.3px 이동 → y=373-13.3=359.7. 여전히 먼 경우
+    // 블록 바로 위에서 시작해서 한 틱에 닿도록 설정
+    const ball: BallState = { ...baseBall, x: 480, y: 310, vx: 0, vy: -400 };
+    // dt=1/30 → dy=13.3px, y=310-13.3=296.7 → expanded top=292 통과
+    const result = moveBallWithCollisions(ball, 1 / 30, [block]);
+    expect(result.blockFacts.length).toBeGreaterThanOrEqual(1);
+    expect(result.ball.vy).toBeGreaterThan(0); // 반사 후 아래 방향
+  });
+
+  it('파괴된 블록은 충돌 판정에서 제외된다', () => {
+    const destroyedBlock = {
+      id: 'b',
+      x: 448,
+      y: 300,
+      remainingHits: 0,
+      isDestroyed: true,
+      definitionId: 'basic',
+    };
+    const ball: BallState = { ...baseBall, x: 480, y: 380, vx: 0, vy: -400 };
+    const result = moveBallWithCollisions(ball, 1 / 60, [destroyedBlock]);
+    expect(result.blockFacts.length).toBe(0);
+  });
+
+  it('고속 공 (1200px/s) 도 블록을 통과하지 않는다', () => {
+    const block = {
+      id: 'fast_block',
+      x: 448,
+      y: 300,
+      remainingHits: 2,
+      isDestroyed: false,
+      definitionId: 'basic',
+    };
+    const ball: BallState = { ...baseBall, x: 480, y: 500, vx: 0, vy: -1200 };
+    const result = moveBallWithCollisions(ball, 1 / 60, [block]);
+    // 공이 블록 내부에 없어야 함
+    const inside =
+      result.ball.x > block.x &&
+      result.ball.x < block.x + 64 &&
+      result.ball.y > block.y &&
+      result.ball.y < block.y + 24;
+    expect(inside).toBe(false);
   });
 });
