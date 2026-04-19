@@ -18,4 +18,8 @@ export const UITextTable: UITextEntry[] = [
   { textId: 'txt_gameclear_final_score', value: 'FINAL SCORE {0}' },
   { textId: 'txt_gameclear_retry',   value: 'PRESS SPACE TO RETRY' },
   { textId: 'txt_gameover_final_score', value: 'FINAL SCORE {0}' },
+  { textId: 'txt_item_magnet_name',     value: 'MAGNET' },
+  { textId: 'txt_item_magnet_desc',     value: 'BALL STICKS TO BAR' },
+  { textId: 'txt_item_laser_name',      value: 'LASER' },
+  { textId: 'txt_item_laser_desc',      value: 'SPACE FIRES 2 SHOTS' },
 ];

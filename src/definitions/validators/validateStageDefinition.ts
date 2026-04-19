@@ -1,5 +1,6 @@
 import type { StageDefinition } from '../types/StageDefinition';
 import type { BlockDefinition } from '../types/BlockDefinition';
+import type { SpinnerDefinition } from '../types/SpinnerDefinition';
 import type { ValidationResult } from './ValidationResult';
 
 const MAX_GRID_ROWS = 8;
@@ -7,7 +8,8 @@ const GRID_COLS = 13;
 
 export function validateStageDefinition(
   stage: StageDefinition,
-  blockTable: Record<string, BlockDefinition>
+  blockTable: Record<string, BlockDefinition>,
+  spinnerTable?: Record<string, SpinnerDefinition>
 ): ValidationResult {
   const errors: string[] = [];
   const seenCoords = new Set<string>();
@@ -39,6 +41,16 @@ export function validateStageDefinition(
       errors.push(
         `[${stage.stageId}] block at (row=${row}, col=${col}) references unknown definitionId: ${definitionId}`
       );
+    }
+  }
+
+  if (stage.spinners !== undefined && spinnerTable !== undefined) {
+    for (const placement of stage.spinners) {
+      if (!(placement.definitionId in spinnerTable)) {
+        errors.push(
+          `[${stage.stageId}] spinner placement references unknown definitionId: ${placement.definitionId}`
+        );
+      }
     }
   }
 

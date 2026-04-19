@@ -206,6 +206,21 @@ const sounds = [
       { freq: 1047, durationMs: 400 }, // C6 (길게 마무리)
     ], 0.5),
   },
+  {
+    filename: 'sfx_ball_attached.wav',
+    description: '자석 공 부착 SFX (낮은 흡착음, 짧은 하강 beep)',
+    generate: () => generateBeepWav(330, 100, 0.45, 'decay'),
+  },
+  {
+    filename: 'sfx_balls_released.wav',
+    description: '자석 공 해제 SFX (중간 높이, 짧고 밝은 beep)',
+    generate: () => generateDoubleBeepWav(440, 660, 80, 100, 0.45),
+  },
+  {
+    filename: 'sfx_laser_fired.wav',
+    description: '레이저 발사 SFX (높고 짧은 beep)',
+    generate: () => generateBeepWav(1200, 60, 0.4, 'decay'),
+  },
 ];
 
 let generated = 0;

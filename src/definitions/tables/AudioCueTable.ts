@@ -55,4 +55,22 @@ export const AudioCueTable: AudioCueEntry[] = [
     resourceId:   'jingle_gameclear',
     playbackType: 'jingle',
   },
+  {
+    cueId:        'cue_ball_attached',
+    eventType:    'BallAttached',
+    resourceId:   'sfx_ball_attached',
+    playbackType: 'sfx',
+  },
+  {
+    cueId:        'cue_balls_released',
+    eventType:    'BallsReleased',
+    resourceId:   'sfx_balls_released',
+    playbackType: 'sfx',
+  },
+  {
+    cueId:        'cue_laser_fired',
+    eventType:    'LaserFired',
+    resourceId:   'sfx_laser_fired',
+    playbackType: 'sfx',
+  },
 ];

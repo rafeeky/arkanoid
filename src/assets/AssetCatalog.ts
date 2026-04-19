@@ -23,4 +23,7 @@ export const AssetCatalog: Readonly<Record<string, string>> = {
   sfx_item_collected: 'assets/sfx/sfx_item_collected.wav',
   sfx_life_lost: 'assets/sfx/sfx_life_lost.wav',
   sfx_ui_confirm: 'assets/sfx/sfx_ui_confirm.wav',
+  sfx_ball_attached: 'assets/sfx/sfx_ball_attached.wav',
+  sfx_balls_released: 'assets/sfx/sfx_balls_released.wav',
+  sfx_laser_fired: 'assets/sfx/sfx_laser_fired.wav',
 } as const;

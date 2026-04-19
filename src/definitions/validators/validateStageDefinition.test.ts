@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { validateStageDefinition } from './validateStageDefinition';
 import { STAGE_DEFINITIONS, StageDefinitionTable } from '../tables/StageDefinitionTable';
 import { BlockDefinitionTable } from '../tables/BlockDefinitionTable';
+import { SpinnerDefinitionTable } from '../tables/SpinnerDefinitionTable';
 
 describe('validateStageDefinition', () => {
   it('passes for stage1 with the full BlockDefinitionTable', () => {
@@ -131,5 +132,51 @@ describe('validateStageDefinition', () => {
     const result = validateStageDefinition(corrupted, BlockDefinitionTable);
     expect(result.isValid).toBe(false);
     expect(result.errors.some((e) => e.includes('col'))).toBe(true);
+  });
+
+  // spinners 검증 케이스
+  it('passes when spinners field is undefined (no spinner table needed)', () => {
+    const stage1 = StageDefinitionTable[0]!;
+    const result = validateStageDefinition(stage1, BlockDefinitionTable);
+    expect(result.isValid).toBe(true);
+  });
+
+  it('passes when stage has valid spinner placements', () => {
+    const stage1 = StageDefinitionTable[0]!;
+    const withSpinners = {
+      ...stage1,
+      spinners: [
+        { definitionId: 'spinner_cube', x: 200, y: 300 },
+        { definitionId: 'spinner_triangle', x: 400, y: 300, initialAngleRad: 0 },
+      ],
+    };
+    const result = validateStageDefinition(withSpinners, BlockDefinitionTable, SpinnerDefinitionTable);
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('fails when a spinner placement references an unknown definitionId', () => {
+    const stage1 = StageDefinitionTable[0]!;
+    const withBadSpinner = {
+      ...stage1,
+      spinners: [
+        { definitionId: 'unknown_spinner', x: 200, y: 300 },
+      ],
+    };
+    const result = validateStageDefinition(withBadSpinner, BlockDefinitionTable, SpinnerDefinitionTable);
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('unknown_spinner'))).toBe(true);
+  });
+
+  it('skips spinner validation when spinnerTable is not provided', () => {
+    const stage1 = StageDefinitionTable[0]!;
+    const withSpinners = {
+      ...stage1,
+      spinners: [
+        { definitionId: 'any_spinner_id', x: 200, y: 300 },
+      ],
+    };
+    const result = validateStageDefinition(withSpinners, BlockDefinitionTable);
+    expect(result.isValid).toBe(true);
   });
 });

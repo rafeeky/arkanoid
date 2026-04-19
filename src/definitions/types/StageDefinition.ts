@@ -1,4 +1,5 @@
 import type { StageBlockPlacement } from './StageBlockPlacement';
+import type { StageSpinnerPlacement } from './StageSpinnerPlacement';
 
 export type StageDefinition = {
   stageId: string;
@@ -11,4 +12,5 @@ export type StageDefinition = {
   ballInitialSpeed: number;
   ballInitialAngleDeg: number;
   blocks: StageBlockPlacement[];
+  spinners?: StageSpinnerPlacement[];
 };

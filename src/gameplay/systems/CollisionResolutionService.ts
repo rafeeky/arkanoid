@@ -288,7 +288,8 @@ function resolveItemPickedUp(
 
   const replacedEffect = state.bar.activeEffect;
   const itemDef = tables.itemDefinitions[item.itemType];
-  const expandMultiplier = itemDef ? itemDef.expandMultiplier : tables.config.expandMultiplier;
+  const expandMultiplier =
+    (itemDef?.expandMultiplier) ?? tables.config.expandMultiplier;
 
   const newBar: BarState = {
     ...state.bar,
