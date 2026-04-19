@@ -402,12 +402,141 @@ function sweepBallVsBlock(
     side = dy > 0 ? 'top' : 'bottom';
   }
 
+  // ---------------------------------------------------------------------------
+  // Minkowski rounded-corner correction.
+  //
+  // The expanded AABB has SHARP corners, but the real Minkowski sum of a circle
+  // and an AABB has ROUNDED corners (quarter-circle arcs at the four body corners).
+  // The four corner regions of the expanded AABB that lie outside the rounded arcs:
+  //
+  //   top-left    corner region:  contact x < block.x               AND contact y < block.y
+  //   top-right   corner region:  contact x > block.x + BLOCK_WIDTH  AND contact y < block.y
+  //   bottom-left  corner region: contact x < block.x               AND contact y > block.y + BLOCK_HEIGHT
+  //   bottom-right corner region: contact x > block.x + BLOCK_WIDTH  AND contact y > block.y + BLOCK_HEIGHT
+  //
+  // In these regions the expanded AABB over-approximates.  We solve the exact
+  // circle-vs-corner intersection (quadratic) to find the real t.  If there is
+  // no real intersection within [0,1] this hit is a false positive and we
+  // return null.
+  // ---------------------------------------------------------------------------
+  const contactX = x0 + vx * dt * t;
+  const contactY = y0 + vy * dt * t;
+
+  const inLeftCornerX  = contactX < block.x;
+  const inRightCornerX = contactX > block.x + BLOCK_WIDTH;
+  const inTopCornerY    = contactY < block.y;
+  const inBottomCornerY = contactY > block.y + BLOCK_HEIGHT;
+
+  if ((inLeftCornerX || inRightCornerX) && (inTopCornerY || inBottomCornerY)) {
+    // Ball is in a corner region of the expanded AABB.
+    // Find the nearest block body corner and solve for real circle-corner t.
+    const cornerBodyX = inLeftCornerX  ? block.x               : block.x + BLOCK_WIDTH;
+    const cornerBodyY = inTopCornerY   ? block.y               : block.y + BLOCK_HEIGHT;
+
+    const ex = x0 - cornerBodyX;
+    const ey = y0 - cornerBodyY;
+    const ddx = vx * dt;
+    const ddy = vy * dt;
+
+    // (ex + ddx*t)^2 + (ey + ddy*t)^2 = BALL_RADIUS^2
+    const a = ddx * ddx + ddy * ddy;
+    const b = 2 * (ex * ddx + ey * ddy);
+    const c = ex * ex + ey * ey - BALL_RADIUS * BALL_RADIUS;
+
+    if (a === 0) {
+      // No movement — check if already touching the corner
+      if (c > 0) return null; // ball centre is more than BALL_RADIUS away
+      // Already touching; treat as alreadyInside (t stays at 0)
+      return { t, block, side, alreadyInside, expandedBounds, isCorner };
+    }
+
+    const discriminant = b * b - 4 * a * c;
+    if (discriminant < 0) {
+      // Ball trajectory misses the body corner entirely — false positive
+      return null;
+    }
+
+    const sqrtDisc = Math.sqrt(discriminant);
+    const tCorner1 = (-b - sqrtDisc) / (2 * a);
+    const tCorner2 = (-b + sqrtDisc) / (2 * a);
+
+    // Choose the smallest t in [0, 1]
+    let tCorner: number | null = null;
+    for (const tc of [tCorner1, tCorner2]) {
+      if (tc >= -1e-9 && tc <= 1 + 1e-9) {
+        const tcClamped = Math.max(0, tc);
+        if (tCorner === null || tcClamped < tCorner) {
+          tCorner = tcClamped;
+        }
+      }
+    }
+
+    if (tCorner === null) {
+      // Intersection is outside [0,1] — no hit this sweep step
+      return null;
+    }
+
+    // Compute the real contact position at tCorner.
+    const realContactX = x0 + vx * dt * tCorner;
+    const realContactY = y0 + vy * dt * tCorner;
+
+    // Determine the dominant axis at the contact point.
+    // The contact normal points from the block body corner outward toward the ball centre.
+    // We choose the axis where the ball centre is furthest from the corner body point —
+    // that axis determines which face the ball effectively bounced off.
+    //
+    // This ensures the push-out direction and velocity reflection are applied on the
+    // correct single axis, avoiding the double-axis push that could teleport the ball
+    // through the adjacent face.
+    const distToCornerX = Math.abs(realContactX - cornerBodyX);
+    const distToCornerY = Math.abs(realContactY - cornerBodyY);
+
+    let cornerSide: 'left' | 'right' | 'top' | 'bottom';
+    if (distToCornerX >= distToCornerY) {
+      // Dominant contact on x-axis
+      cornerSide = inRightCornerX ? 'right' : 'left';
+    } else {
+      // Dominant contact on y-axis
+      cornerSide = inBottomCornerY ? 'bottom' : 'top';
+    }
+
+    const realAlreadyInside = tCorner <= 0 || alreadyInside;
+    const realT = Math.max(0, tCorner);
+
+    return {
+      t: realT,
+      block,
+      side: cornerSide,
+      alreadyInside: realAlreadyInside,
+      expandedBounds,
+      // isCorner=false: use single-axis reflection (dominant face).
+      // Double-axis push would teleport the ball through the adjacent face.
+      isCorner: false,
+    };
+  }
+
   return { t, block, side, alreadyInside, expandedBounds, isCorner };
+}
+
+/**
+ * Computes the squared distance from a point to a block's body centre.
+ * Used for tie-breaking when multiple blocks share the same earliest hit time.
+ */
+function distSqToCentre(px: number, py: number, block: BlockState): number {
+  const cx = block.x + BLOCK_WIDTH  / 2;
+  const cy = block.y + BLOCK_HEIGHT / 2;
+  return (px - cx) ** 2 + (py - cy) ** 2;
 }
 
 /**
  * Tests the ball sweep against all active blocks and returns the earliest hit,
  * or null if none.
+ *
+ * When multiple blocks share the same earliest t (which happens in the
+ * expanded-AABB overlap zone between adjacent blocks), the block whose body
+ * centre is closest to the ball start position wins.  This prevents the
+ * iteration-order tie-break from selecting an adjacent block that is
+ * geometrically farther from the actual impact point.
  */
 export function sweepBallVsBlocks(
   x0: number,
@@ -418,13 +547,28 @@ export function sweepBallVsBlocks(
   blocks: BlockState[],
 ): SweptBlockHit | null {
   let earliest: SweptBlockHit | null = null;
+  let earliestDistSq = Infinity;
 
   for (const block of blocks) {
     if (block.isDestroyed) continue;
     const hit = sweepBallVsBlock(x0, y0, vx, vy, dt, block);
     if (hit === null) continue;
-    if (earliest === null || hit.t < earliest.t) {
+
+    const dSq = distSqToCentre(x0, y0, block);
+
+    if (earliest === null) {
       earliest = hit;
+      earliestDistSq = dSq;
+    } else if (hit.t < earliest.t - 1e-9) {
+      // Strictly earlier — always prefer
+      earliest = hit;
+      earliestDistSq = dSq;
+    } else if (hit.t <= earliest.t + 1e-9) {
+      // Same t (within floating-point tolerance) — prefer body-closer block
+      if (dSq < earliestDistSq) {
+        earliest = hit;
+        earliestDistSq = dSq;
+      }
     }
   }
 
