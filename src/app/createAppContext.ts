@@ -47,6 +47,8 @@ export type AppContext = {
   getScreenState(): Readonly<ScreenState>;
   handlePresentationEvent(event: PresentationEvent): void;
   getVisualEffectController(): import('../presentation/controller/VisualEffectController').VisualEffectController;
+  /** 테스트 전용: GameplayController 상태를 직접 교체한다. 프로덕션 코드에서 호출 금지. */
+  _setGameplayState(state: GameplayRuntimeState): void;
 };
 
 export function createAppContext(): AppContext {
@@ -150,6 +152,10 @@ export function createAppContext(): AppContext {
     return visualEffectController;
   }
 
+  function _setGameplayState(state: GameplayRuntimeState): void {
+    gameplayController.setState(state);
+  }
+
   return {
     tick,
     getFlowState,
@@ -157,5 +163,6 @@ export function createAppContext(): AppContext {
     getScreenState,
     handlePresentationEvent,
     getVisualEffectController,
+    _setGameplayState,
   };
 }

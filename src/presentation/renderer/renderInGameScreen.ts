@@ -23,6 +23,10 @@ const BLOCK_FLASH_COLOR_DEFAULT = 0xffffff;
 // 아이템 색상
 const ITEM_COLOR = 0xffdd00;
 
+// 바 색상 — activeEffect 별
+const BAR_COLOR_NORMAL = 0xffffff;
+const BAR_COLOR_EXPAND = 0xffee99; // 연한 노랑 틴트: 확장 효과 중임을 표시
+
 export type InGameObjects = {
   bar: Phaser.GameObjects.Rectangle;
   ball: Phaser.GameObjects.Arc;
@@ -139,6 +143,8 @@ export function renderInGameScreen(
 
   // 바 — 파괴 연출: progress(1.0→0.0) 기반으로 alpha/scaleX 선형 감소
   const bar = gameplayState.bar;
+  // activeEffect に応じた色を選択: expand 中は連黄色, 通常は白
+  const barColor = bar.activeEffect === 'expand' ? BAR_COLOR_EXPAND : BAR_COLOR_NORMAL;
   if (screenState.isBarBreaking) {
     // barBreakProgress: 1.0 = 연출 시작, 0.0 = 연출 종료
     const alpha = barBreakProgress;                      // 1.0 → 0.0
@@ -146,12 +152,14 @@ export function renderInGameScreen(
     objects.bar
       .setPosition(bar.x, bar.y)
       .setSize(bar.width * scaleX, BAR_HEIGHT)
+      .setFillStyle(barColor)
       .setAlpha(alpha)
       .setVisible(true);
   } else {
     objects.bar
       .setPosition(bar.x, bar.y)
       .setSize(bar.width, BAR_HEIGHT)
+      .setFillStyle(barColor)
       .setAlpha(1)
       .setVisible(true);
   }

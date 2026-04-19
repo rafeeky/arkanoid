@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createAppContext } from './createAppContext';
 import type { InputSnapshot } from '../input/InputSnapshot';
+import type { GameplayRuntimeState } from '../gameplay/state/GameplayRuntimeState';
 
 const noInput: InputSnapshot = {
   leftDown: false,
@@ -268,5 +269,290 @@ describe('AppContext — LifeLost → isBarBreaking 연출 흐름', () => {
       }
       expect(ctx.getScreenState().isBarBreaking).toBe(false);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 7 통합 시나리오: 드랍 블록 → ItemSpawned → 아이템 낙하 → 획득 → expand → resetForRetry
+// ---------------------------------------------------------------------------
+
+/**
+ * ctx 를 InGame 상태로 이동시키는 헬퍼.
+ * Title → (space) → RoundIntro → (RoundIntroFinished) → InGame
+ */
+function enterInGame(ctx: ReturnType<typeof createAppContext>): void {
+  ctx.tick(spaceInput, 1 / 60); // → roundIntro
+  ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
+}
+
+/**
+ * basic_drop 블록(row=1, col=6, center=(480,120))을 직접 파괴하는 상태를 주입한다.
+ * 현재 gameplayState를 기반으로 공을 블록 바로 아래에 위로 향하게 배치하고
+ * itemDrops 를 비워서 spawn 조건을 보장한다.
+ */
+function injectBallAboutToHitDropBlock(ctx: ReturnType<typeof createAppContext>): void {
+  const state = ctx.getGameplayState() as GameplayRuntimeState;
+  // drop 블록(row=1, col=6) 의 계산된 좌표: x=448, y=108, center=(480, 120)
+  // 공을 블록 바로 아래에서 위로 향하게 배치
+  const BLOCK_DROP_CENTER_X = 480;
+  const BLOCK_DROP_BOTTOM_Y = 108 + 24; // y + BLOCK_HEIGHT
+
+  const newBalls = state.balls.map((b, i) =>
+    i === 0
+      ? {
+          ...b,
+          isActive: true,
+          x: BLOCK_DROP_CENTER_X,
+          y: BLOCK_DROP_BOTTOM_Y + 10, // 블록 바로 아래
+          vx: 0,
+          vy: -300, // 위로 이동
+        }
+      : b,
+  );
+
+  ctx._setGameplayState({
+    ...state,
+    balls: newBalls,
+    itemDrops: [], // 화면에 아이템 없어야 spawn 됨
+  });
+}
+
+describe('Phase 7 통합 — 드랍 블록 파괴 → ItemSpawned → 낙하 → 획득 → expand', () => {
+  it('드랍 블록 파괴 시 itemDrops 에 아이템이 추가된다 (ItemSpawned)', () => {
+    const ctx = createAppContext();
+    enterInGame(ctx);
+    injectBallAboutToHitDropBlock(ctx);
+
+    const dt = 1 / 60;
+    // 몇 틱 안에 블록 충돌 → ItemSpawned
+    let itemAppeared = false;
+    for (let i = 0; i < 30; i++) {
+      ctx.tick(noInput, dt);
+      if (ctx.getGameplayState().itemDrops.length > 0) {
+        itemAppeared = true;
+        break;
+      }
+    }
+    expect(itemAppeared).toBe(true);
+  });
+
+  it('아이템 획득 후 bar.width === baseBarWidth * 1.5 (= 180)', () => {
+    const ctx = createAppContext();
+    enterInGame(ctx);
+    injectBallAboutToHitDropBlock(ctx);
+
+    const dt = 1 / 60;
+    // 아이템이 생성될 때까지 틱
+    let spawned = false;
+    for (let i = 0; i < 30; i++) {
+      ctx.tick(noInput, dt);
+      if (ctx.getGameplayState().itemDrops.length > 0) {
+        spawned = true;
+        break;
+      }
+    }
+    expect(spawned).toBe(true);
+
+    // 아이템을 바 위치에 강제 이동시켜 획득하도록 상태 주입
+    const stateAfterSpawn = ctx.getGameplayState() as GameplayRuntimeState;
+    const item = stateAfterSpawn.itemDrops[0];
+    expect(item).toBeDefined();
+    if (!item) return;
+
+    // 바 위치로 아이템을 이동시킨다 (bar.y 부근으로)
+    ctx._setGameplayState({
+      ...stateAfterSpawn,
+      itemDrops: [
+        {
+          ...item,
+          x: stateAfterSpawn.bar.x,
+          y: stateAfterSpawn.bar.y,
+        },
+      ],
+    });
+
+    // 1 틱으로 충돌 감지 → ItemCollected 처리
+    ctx.tick(noInput, dt);
+
+    const barAfter = ctx.getGameplayState().bar;
+    // baseBarWidth=120, expandMultiplier=1.5 → 180
+    expect(barAfter.width).toBe(180);
+    expect(barAfter.activeEffect).toBe('expand');
+  });
+
+  it('아이템 획득 후 bar.activeEffect === "expand"', () => {
+    const ctx = createAppContext();
+    enterInGame(ctx);
+    injectBallAboutToHitDropBlock(ctx);
+
+    const dt = 1 / 60;
+    for (let i = 0; i < 30; i++) {
+      ctx.tick(noInput, dt);
+      if (ctx.getGameplayState().itemDrops.length > 0) break;
+    }
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    const item = state.itemDrops[0];
+    if (!item) return;
+
+    ctx._setGameplayState({
+      ...state,
+      itemDrops: [{ ...item, x: state.bar.x, y: state.bar.y }],
+    });
+    ctx.tick(noInput, dt);
+
+    expect(ctx.getGameplayState().bar.activeEffect).toBe('expand');
+  });
+
+  it('LifeLost 후 resetForRetry → bar.width === 120 (baseBarWidth) 복구', () => {
+    const ctx = createAppContext();
+    enterInGame(ctx);
+    injectBallAboutToHitDropBlock(ctx);
+
+    const dt = 1 / 60;
+    // 아이템 spawn 후 획득
+    for (let i = 0; i < 30; i++) {
+      ctx.tick(noInput, dt);
+      if (ctx.getGameplayState().itemDrops.length > 0) break;
+    }
+    const stateAfterSpawn = ctx.getGameplayState() as GameplayRuntimeState;
+    const item = stateAfterSpawn.itemDrops[0];
+    if (!item) return;
+    ctx._setGameplayState({
+      ...stateAfterSpawn,
+      itemDrops: [{ ...item, x: stateAfterSpawn.bar.x, y: stateAfterSpawn.bar.y }],
+    });
+    ctx.tick(noInput, dt);
+
+    // 획득 후 expand 상태 확인
+    expect(ctx.getGameplayState().bar.activeEffect).toBe('expand');
+    expect(ctx.getGameplayState().bar.width).toBe(180);
+
+    // 공을 바닥으로 보내 LifeLost 유발
+    const expandState = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({
+      ...expandState,
+      balls: expandState.balls.map((b, i) =>
+        i === 0
+          ? { ...b, isActive: true, x: 480, y: 700, vx: 0, vy: 300 }
+          : b,
+      ),
+    });
+    tickUntilFlowChanges(ctx, 'inGame');
+
+    if (ctx.getFlowState().kind === 'roundIntro') {
+      // resetForRetry 가 실행됐어야 함
+      expect(ctx.getGameplayState().bar.width).toBe(120);
+      expect(ctx.getGameplayState().bar.activeEffect).toBe('none');
+    }
+  });
+
+  it('아이템 낙하 중(itemDrops.length>0)이면 같은 드랍 블록 파괴 시 아이템 spawn 안 됨 — 1개 제약', () => {
+    // 이 테스트는 "itemDrops.length > 0 이면 spawn 차단" 정책을 검증한다.
+    const ctx = createAppContext();
+    enterInGame(ctx);
+    injectBallAboutToHitDropBlock(ctx);
+
+    const dt = 1 / 60;
+    // 아이템 spawn 대기
+    for (let i = 0; i < 30; i++) {
+      ctx.tick(noInput, dt);
+      if (ctx.getGameplayState().itemDrops.length > 0) break;
+    }
+    const itemCountAfterFirstSpawn = ctx.getGameplayState().itemDrops.length;
+    expect(itemCountAfterFirstSpawn).toBe(1);
+
+    // 이미 낙하 중인 상태에서 두 번째 드랍 블록(row=0, col=2, center=(208, 92))을
+    // 공이 파괴하도록 상태 주입
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    // 두 번째 drop 블록: row=0, col=2 → x=176, y=80, center=(208,92)
+    const SECOND_DROP_CENTER_X = 208;
+    const SECOND_DROP_BOTTOM_Y = 80 + 24;
+
+    ctx._setGameplayState({
+      ...state,
+      balls: state.balls.map((b, i) =>
+        i === 0
+          ? {
+              ...b,
+              isActive: true,
+              x: SECOND_DROP_CENTER_X,
+              y: SECOND_DROP_BOTTOM_Y + 10,
+              vx: 0,
+              vy: -300,
+            }
+          : b,
+      ),
+    });
+
+    // 몇 틱 실행
+    for (let i = 0; i < 10; i++) {
+      ctx.tick(noInput, dt);
+    }
+
+    // 여전히 itemDrops.length === 1 이어야 함 (새 spawn 차단됨)
+    // 단, 기존 아이템이 낙하하면서 바 위치에 도달해 수집될 수 있으므로 0도 허용
+    const itemCountAfter = ctx.getGameplayState().itemDrops.length;
+    expect(itemCountAfter).toBeLessThanOrEqual(1);
+  });
+
+  it('아이템 획득(effectActive) 후 새 드랍 블록 파괴 시 새 아이템 spawn 가능 — 효과 중 차단 아님', () => {
+    // "아이템 1개 제약"은 itemDrops.length === 0 조건이므로:
+    // 이미 효과가 active(expand)이지만 화면에 아이템이 없으면 → spawn 허용
+    const ctx = createAppContext();
+    enterInGame(ctx);
+    injectBallAboutToHitDropBlock(ctx);
+
+    const dt = 1 / 60;
+    // 아이템 spawn
+    for (let i = 0; i < 30; i++) {
+      ctx.tick(noInput, dt);
+      if (ctx.getGameplayState().itemDrops.length > 0) break;
+    }
+    const stateAfterSpawn = ctx.getGameplayState() as GameplayRuntimeState;
+    const item = stateAfterSpawn.itemDrops[0];
+    if (!item) return;
+
+    // 아이템 획득 처리 (바 위치로 이동)
+    ctx._setGameplayState({
+      ...stateAfterSpawn,
+      itemDrops: [{ ...item, x: stateAfterSpawn.bar.x, y: stateAfterSpawn.bar.y }],
+    });
+    ctx.tick(noInput, dt);
+
+    // 획득 확인: itemDrops 비었어야 함, activeEffect='expand'
+    expect(ctx.getGameplayState().itemDrops.length).toBe(0);
+    expect(ctx.getGameplayState().bar.activeEffect).toBe('expand');
+
+    // 두 번째 드랍 블록을 파괴
+    const stateExpand = ctx.getGameplayState() as GameplayRuntimeState;
+    const SECOND_DROP_CENTER_X = 208;
+    const SECOND_DROP_BOTTOM_Y = 80 + 24;
+
+    ctx._setGameplayState({
+      ...stateExpand,
+      balls: stateExpand.balls.map((b, i) =>
+        i === 0
+          ? {
+              ...b,
+              isActive: true,
+              x: SECOND_DROP_CENTER_X,
+              y: SECOND_DROP_BOTTOM_Y + 10,
+              vx: 0,
+              vy: -300,
+            }
+          : b,
+      ),
+    });
+
+    let newItemSpawned = false;
+    for (let i = 0; i < 20; i++) {
+      ctx.tick(noInput, dt);
+      if (ctx.getGameplayState().itemDrops.length > 0) {
+        newItemSpawned = true;
+        break;
+      }
+    }
+    // 효과 중이지만 화면에 아이템이 없으므로 spawn 허용
+    expect(newItemSpawned).toBe(true);
   });
 });
