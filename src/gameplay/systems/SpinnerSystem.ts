@@ -60,7 +60,7 @@ export const SPAWN_DURATION_MS = 400;
 export const DESCENT_SPEED_PX_PER_SEC = 80;
 
 /** circling phase 원 반지름 (px). */
-export const CIRCLE_RADIUS = 150;
+export const CIRCLE_RADIUS = 100;
 
 /** circling phase 원 궤도 회전 속도 (rad/s). */
 export const CIRCLE_SPEED_RAD_PER_SEC = 1.5;

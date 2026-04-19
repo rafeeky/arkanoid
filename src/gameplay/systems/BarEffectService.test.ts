@@ -280,12 +280,13 @@ describe('BarEffectService.tickMagnet', () => {
 describe('BarEffectService.releaseManually', () => {
   const svc = new BarEffectService(itemDefinitions);
 
-  it('자석 상태 + 부착 공 있음 → activeEffect=none, BallsReleased(space)', () => {
+  it('자석 상태 + 부착 공 있음 → activeEffect=magnet 유지, BallsReleased(space)', () => {
     const bar = makeBar({ activeEffect: 'magnet' });
     const attachedBalls = ['ball_0', 'ball_1'];
     const result = svc.releaseManually(bar, attachedBalls);
 
-    expect(result.nextBar.activeEffect).toBe('none');
+    // 지속형 자석: activeEffect는 magnet 유지
+    expect(result.nextBar.activeEffect).toBe('magnet');
     expect(result.releasedBallIds).toEqual(attachedBalls);
     expect(result.events).toHaveLength(1);
     const evt = result.events[0];
@@ -296,10 +297,11 @@ describe('BarEffectService.releaseManually', () => {
     }
   });
 
-  it('부착 공 없으면 BallsReleased 발행 안 함', () => {
+  it('부착 공 없으면 BallsReleased 발행 안 함, activeEffect 유지', () => {
     const bar = makeBar({ activeEffect: 'magnet' });
     const result = svc.releaseManually(bar, []);
-    expect(result.nextBar.activeEffect).toBe('none');
+    // 지속형 자석: 공 없어도 activeEffect=magnet 유지
+    expect(result.nextBar.activeEffect).toBe('magnet');
     expect(result.events).toHaveLength(0);
     expect(result.releasedBallIds).toHaveLength(0);
   });
@@ -311,5 +313,24 @@ describe('BarEffectService.releaseManually', () => {
     expect(bar.activeEffect).toBe('magnet');
     // 새 객체가 반환됨
     expect(result.nextBar).not.toBe(bar);
+  });
+
+  it('releasedBallIds가 비워진다 (attachedBallIds 비워짐 시뮬레이션)', () => {
+    const bar = makeBar({ activeEffect: 'magnet' });
+    const attachedBalls = ['ball_0'];
+    const result = svc.releaseManually(bar, attachedBalls);
+    // 반환된 releasedBallIds로 호출 측이 attachedBallIds를 초기화해야 함
+    expect(result.releasedBallIds).toEqual(attachedBalls);
+    // activeEffect는 magnet 유지 (타이머 별도 유지)
+    expect(result.nextBar.activeEffect).toBe('magnet');
+  });
+
+  it('magnetRemainingTime이 남아 있는 상태에서 releaseManually 후 다시 재부착 가능 조건 (activeEffect=magnet 확인)', () => {
+    // 타이머 8000ms 남은 자석 상태에서 수동 해제 후 activeEffect가 magnet이어야
+    // CollisionResolutionService의 재부착 조건을 만족한다
+    const bar = makeBar({ activeEffect: 'magnet' });
+    const result = svc.releaseManually(bar, ['ball_0']);
+    expect(result.nextBar.activeEffect).toBe('magnet');
+    // 이후 tickMagnet이 계속 타이머를 감소시키며, 0이 되면 none으로 전환된다
   });
 });

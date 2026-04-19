@@ -228,17 +228,24 @@ export class BarEffectService {
   // -------------------------------------------------------------------------
 
   /**
-   * 스페이스 입력 등 수동 트리거로 자석 해제한다.
-   * activeEffect를 'none'으로 전환하고 BallsReleased 이벤트를 발행한다.
+   * 스페이스 입력 등 수동 트리거로 현재 부착 공만 해제한다.
+   * activeEffect와 magnetRemainingTime은 변경하지 않는다.
+   * 타이머가 살아 있는 동안 다음 공이 바에 닿으면 다시 부착할 수 있다.
    *
-   * @param currentBar       현재 바 상태
+   * 효과 종료 경로는 다음으로만 이루어진다.
+   * - tickMagnet: magnetRemainingTime <= 0 → activeEffect='none'
+   * - applyEffect: 새 아이템 획득 → activeEffect 교체
+   * - resetForRetry / loadNextStage: 외부에서 activeEffect='none' 직접 처리
+   *
+   * @param currentBar       현재 바 상태 (activeEffect 유지)
    * @param attachedBallIds  현재 부착 공 ID 목록
    */
   releaseManually(
     currentBar: BarState,
     attachedBallIds: readonly string[],
   ): BarEffectReleaseResult {
-    const nextBar: BarState = { ...currentBar, activeEffect: 'none' };
+    // activeEffect는 변경하지 않는다 — 타이머가 남아 있으면 magnet 유지
+    const nextBar: BarState = { ...currentBar };
     const releasedBallIds = [...attachedBallIds];
     const events: GameplayEvent[] = [];
 

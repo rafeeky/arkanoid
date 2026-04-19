@@ -275,26 +275,28 @@ describe('createGameplayRuntimeFromStageDefinition — spinner spawn 초기화',
     expect(state.spinnerStates[1]!.circleCenterX).toBe(520);
   });
 
-  it('circleCenterY는 descentEndY + circleRadius(150)이다', () => {
+  it('circleCenterY는 descentEndY를 원 중심으로 사용한다 (clamp 범위 내)', () => {
+    // descentEndY=400, clamp 범위 [170, 540] → 400은 그대로 유지
+    // descentEndY=350, clamp 범위 [170, 540] → 350은 그대로 유지
     const state = createGameplayRuntimeFromStageDefinition(
       stageWithSpinners,
       config,
       BlockDefinitionTable,
       3,
     );
-    expect(state.spinnerStates[0]!.circleCenterY).toBe(400 + 150);
-    expect(state.spinnerStates[1]!.circleCenterY).toBe(350 + 150);
+    expect(state.spinnerStates[0]!.circleCenterY).toBe(400);
+    expect(state.spinnerStates[1]!.circleCenterY).toBe(350);
   });
 
-  it('circleRadius는 150이다', () => {
+  it('circleRadius는 100이다', () => {
     const state = createGameplayRuntimeFromStageDefinition(
       stageWithSpinners,
       config,
       BlockDefinitionTable,
       3,
     );
-    expect(state.spinnerStates[0]!.circleRadius).toBe(150);
-    expect(state.spinnerStates[1]!.circleRadius).toBe(150);
+    expect(state.spinnerStates[0]!.circleRadius).toBe(100);
+    expect(state.spinnerStates[1]!.circleRadius).toBe(100);
   });
 
   it('circleAngleRad는 0으로 초기화된다', () => {
@@ -306,5 +308,87 @@ describe('createGameplayRuntimeFromStageDefinition — spinner spawn 초기화',
     );
     expect(state.spinnerStates[0]!.circleAngleRad).toBe(0);
     expect(state.spinnerStates[1]!.circleAngleRad).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// StageRuntimeFactory — circleCenterX/Y clamp 테스트
+// (canvas 720x720, CIRCLE_RADIUS=100, CIRCLE_CLAMP_MARGIN=10,
+//  HUD_HEIGHT=60, BAR_CLEARANCE=80)
+// circleCenterX ∈ [110, 610]
+// circleCenterY ∈ [170, 540]
+// ---------------------------------------------------------------------------
+
+describe('createGameplayRuntimeFromStageDefinition — spinner clamp', () => {
+  it('spawnX=50 → circleCenterX clamped to 110', () => {
+    const stage: StageDefinition = {
+      ...stage1,
+      spinners: [{ definitionId: 'spinner_cube', x: 50, y: 300 }],
+    };
+    const state = createGameplayRuntimeFromStageDefinition(stage, config, BlockDefinitionTable, 3);
+    expect(state.spinnerStates[0]!.circleCenterX).toBe(110);
+  });
+
+  it('spawnX=700 → circleCenterX clamped to 610', () => {
+    const stage: StageDefinition = {
+      ...stage1,
+      spinners: [{ definitionId: 'spinner_cube', x: 700, y: 300 }],
+    };
+    const state = createGameplayRuntimeFromStageDefinition(stage, config, BlockDefinitionTable, 3);
+    expect(state.spinnerStates[0]!.circleCenterX).toBe(610);
+  });
+
+  it('spawnX=360 (정중앙) → circleCenterX 그대로 360', () => {
+    const stage: StageDefinition = {
+      ...stage1,
+      spinners: [{ definitionId: 'spinner_cube', x: 360, y: 300 }],
+    };
+    const state = createGameplayRuntimeFromStageDefinition(stage, config, BlockDefinitionTable, 3);
+    expect(state.spinnerStates[0]!.circleCenterX).toBe(360);
+  });
+
+  it('descentEndY=600 → circleCenterY clamped to 540', () => {
+    const stage: StageDefinition = {
+      ...stage1,
+      spinners: [{ definitionId: 'spinner_cube', x: 360, y: 600 }],
+    };
+    const state = createGameplayRuntimeFromStageDefinition(stage, config, BlockDefinitionTable, 3);
+    expect(state.spinnerStates[0]!.circleCenterY).toBe(540);
+  });
+
+  it('descentEndY=50 → circleCenterY clamped to 170', () => {
+    const stage: StageDefinition = {
+      ...stage1,
+      spinners: [{ definitionId: 'spinner_cube', x: 360, y: 50 }],
+    };
+    const state = createGameplayRuntimeFromStageDefinition(stage, config, BlockDefinitionTable, 3);
+    expect(state.spinnerStates[0]!.circleCenterY).toBe(170);
+  });
+
+  it('descentEndY=300 → circleCenterY 그대로 300 (clamp 범위 내)', () => {
+    const stage: StageDefinition = {
+      ...stage1,
+      spinners: [{ definitionId: 'spinner_cube', x: 360, y: 300 }],
+    };
+    const state = createGameplayRuntimeFromStageDefinition(stage, config, BlockDefinitionTable, 3);
+    expect(state.spinnerStates[0]!.circleCenterY).toBe(300);
+  });
+
+  it('clamp 경계 값: spawnX=110 → circleCenterX=110', () => {
+    const stage: StageDefinition = {
+      ...stage1,
+      spinners: [{ definitionId: 'spinner_cube', x: 110, y: 300 }],
+    };
+    const state = createGameplayRuntimeFromStageDefinition(stage, config, BlockDefinitionTable, 3);
+    expect(state.spinnerStates[0]!.circleCenterX).toBe(110);
+  });
+
+  it('clamp 경계 값: spawnX=610 → circleCenterX=610', () => {
+    const stage: StageDefinition = {
+      ...stage1,
+      spinners: [{ definitionId: 'spinner_cube', x: 610, y: 300 }],
+    };
+    const state = createGameplayRuntimeFromStageDefinition(stage, config, BlockDefinitionTable, 3);
+    expect(state.spinnerStates[0]!.circleCenterX).toBe(610);
   });
 });

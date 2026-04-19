@@ -96,7 +96,8 @@ export class GameplayController {
           bar: releaseResult.nextBar,
           balls: updatedBalls,
           attachedBallIds: [],
-          magnetRemainingTime: 0,
+          // magnetRemainingTime은 유지한다: 지속형 자석이므로
+          // 타이머는 tickMagnet이 감소시키고, 0이 되면 activeEffect='none'으로 전환한다
         };
         for (const e of releaseResult.events) {
           allEvents.push(e);

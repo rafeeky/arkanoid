@@ -13,6 +13,20 @@ const BLOCK_GRID_LEFT_MARGIN = 56;
 const BLOCK_GAP = 4;
 const BAR_HEIGHT = 16;
 
+// ---------------------------------------------------------------------------
+// 회전체 원 궤도 clamp 상수
+// canvas 720x720, HUD 상단 60px, 바 하단 여유 80px
+// circleCenterX ∈ [CIRCLE_RADIUS + CIRCLE_CLAMP_MARGIN, CANVAS_WIDTH - CIRCLE_RADIUS - CIRCLE_CLAMP_MARGIN]
+//              = [110, 610]
+// circleCenterY ∈ [HUD_HEIGHT + CIRCLE_RADIUS + CIRCLE_CLAMP_MARGIN, CANVAS_HEIGHT - CIRCLE_RADIUS - BAR_CLEARANCE]
+//              = [170, 540]
+// ---------------------------------------------------------------------------
+const CANVAS_WIDTH = 720;
+const CANVAS_HEIGHT = 720;
+const HUD_HEIGHT = 60;
+const BAR_CLEARANCE = 80;
+const CIRCLE_CLAMP_MARGIN = 10;
+
 /**
  * Creates the initial GameplayRuntimeState from a StageDefinition.
  * Does not read external state. Requires definitions to look up block maxHits.
@@ -74,6 +88,13 @@ export function createGameplayRuntimeFromStageDefinition(
   };
 }
 
+/**
+ * clamp 헬퍼: min 이상 max 이하로 값을 제한한다.
+ */
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
 function buildSpinnerStates(def: StageDefinition): readonly SpinnerRuntimeState[] {
   if (!def.spinners || def.spinners.length === 0) {
     return [];
@@ -81,8 +102,21 @@ function buildSpinnerStates(def: StageDefinition): readonly SpinnerRuntimeState[
   return def.spinners.map((placement, index) => {
     const spawnX = placement.x;
     const descentEndY = placement.y;
-    const circleCenterX = spawnX;
-    const circleCenterY = descentEndY + CIRCLE_RADIUS;
+
+    // circleCenterX: 원이 좌우 캔버스 경계를 벗어나지 않도록 clamp
+    const circleCenterX = clamp(
+      spawnX,
+      CIRCLE_RADIUS + CIRCLE_CLAMP_MARGIN,
+      CANVAS_WIDTH - CIRCLE_RADIUS - CIRCLE_CLAMP_MARGIN,
+    );
+
+    // circleCenterY: descentEndY 자체를 원 중심으로 사용.
+    // HUD 위쪽 및 바 근처로 침범하지 않도록 clamp.
+    const circleCenterY = clamp(
+      descentEndY,
+      HUD_HEIGHT + CIRCLE_RADIUS + CIRCLE_CLAMP_MARGIN,
+      CANVAS_HEIGHT - CIRCLE_RADIUS - BAR_CLEARANCE,
+    );
 
     return {
       id: `spinner_${index}`,

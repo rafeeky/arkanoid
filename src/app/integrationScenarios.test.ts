@@ -1117,8 +1117,10 @@ describe('MVP3 Phase4 — 자석 효과 E2E', () => {
     expect(after.attachedBallIds).toHaveLength(0);
     const ball = after.balls.find((b) => b.id === ballId);
     expect(ball?.isActive).toBe(true);
-    // bar.activeEffect가 space 해제로 none이 됨
-    expect(after.bar.activeEffect).toBe('none');
+    // 지속형 자석: space 해제 후에도 activeEffect=magnet 유지 (타이머 그대로)
+    expect(after.bar.activeEffect).toBe('magnet');
+    // magnetRemainingTime은 유지됨 (0으로 초기화하지 않음)
+    expect(after.magnetRemainingTime).toBeGreaterThan(0);
   });
 
   it('F-5. 자석 타임아웃(8s) → 자동 해제, activeEffect=none', async () => {
@@ -1149,6 +1151,42 @@ describe('MVP3 Phase4 — 자석 효과 E2E', () => {
     const after = ctx.getGameplayState();
     expect(after.bar.activeEffect).toBe('none');
     expect(after.magnetRemainingTime).toBe(0);
+    expect(after.attachedBallIds).toHaveLength(0);
+    const ball = after.balls.find((b) => b.id === ballId);
+    expect(ball?.isActive).toBe(true);
+  });
+
+  it('F-6. 자석 지속형: space 해제 후 activeEffect=magnet 유지, magnetRemainingTime 유지', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    const ballId = state.balls[0]?.id ?? 'ball_0';
+    const barX = state.bar.x;
+    const barY = state.bar.y;
+
+    // 자석 상태 + 공 부착 주입
+    ctx._setGameplayState({
+      ...state,
+      bar: { ...state.bar, activeEffect: 'magnet' },
+      magnetRemainingTime: 6000,
+      attachedBallIds: [ballId],
+      balls: state.balls.map((b) =>
+        b.id === ballId
+          ? { ...b, isActive: false, x: barX, y: barY - 16, attachedOffsetX: 0 }
+          : b,
+      ),
+    });
+
+    // space 입력으로 수동 해제
+    ctx.tick(spaceInput, 1 / 60);
+
+    const after = ctx.getGameplayState();
+    // 지속형 자석: activeEffect는 magnet 유지
+    expect(after.bar.activeEffect).toBe('magnet');
+    // magnetRemainingTime은 0보다 큼 (타이머 계속 진행)
+    expect(after.magnetRemainingTime).toBeGreaterThan(0);
+    // 공은 해제되어 isActive=true
     expect(after.attachedBallIds).toHaveLength(0);
     const ball = after.balls.find((b) => b.id === ballId);
     expect(ball?.isActive).toBe(true);
