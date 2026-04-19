@@ -17,7 +17,7 @@ import { NoopAudioPlayer } from '../audio/NoopAudioPlayer';
 import { AudioCueResolver } from '../audio/AudioCueResolver';
 import { AudioCueTable } from '../definitions/tables/AudioCueTable';
 
-import { StageDefinitionTable } from '../definitions/tables/StageDefinitionTable';
+import { STAGE_DEFINITIONS, StageDefinitionTable } from '../definitions/tables/StageDefinitionTable';
 import { BlockDefinitionTable } from '../definitions/tables/BlockDefinitionTable';
 import { ItemDefinitionTable } from '../definitions/tables/ItemDefinitionTable';
 import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
@@ -96,7 +96,6 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
   let audioPlayer: IAudioPlayer = options?.audioPlayer ?? new NoopAudioPlayer();
 
   const config = GameplayConfigTable;
-  const stage1 = StageDefinitionTable[0]!;
 
   const lifecycleHandler = new GameplayLifecycleHandler(BlockDefinitionTable);
 
@@ -106,8 +105,8 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
 
   // GameplayController 는 초기 상태가 필요하다.
   // Title 진입 시점에는 아직 게임이 시작되지 않았으므로,
-  // 빈 placeholder 상태로 초기화하고 EnteredRoundIntro(from='title') 때 교체한다.
-  const baseState = lifecycleHandler.initializeStage(stage1, config, config.initialLives);
+  // 빈 placeholder 상태로 초기화하고 EnteredRoundIntro(from='introStory') 때 교체한다.
+  const baseState = lifecycleHandler.initializeStage(STAGE_DEFINITIONS[0]!, config, config.initialLives);
   const placeholderState: GameplayRuntimeState = {
     ...baseState,
     session: { ...baseState.session, highScore: initialHighScore },
@@ -171,24 +170,44 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
 
     if (event.type === 'EnteredRoundIntro') {
       if (event.from === 'introStory') {
-        // 인트로 종료 후 첫 스테이지 시작: Stage 1 완전 초기화, 현재 highScore 유지
+        // 인트로 종료 후 첫 스테이지 시작: Stage 0(index) 완전 초기화, 현재 highScore 유지
         const currentHighScore = gameplayController.getState().session.highScore;
-        const newState = lifecycleHandler.initializeStage(stage1, config, config.initialLives);
+        const stage0 = STAGE_DEFINITIONS[0]!;
+        const newState = lifecycleHandler.initializeStage(stage0, config, config.initialLives);
         gameplayController.setState({
           ...newState,
-          session: { ...newState.session, highScore: currentHighScore },
+          session: { ...newState.session, highScore: currentHighScore, currentStageIndex: 0 },
         });
       } else if (event.from === 'inGame') {
-        // 라이프 손실 후 재시도: 블록/점수/라이프 유지, 위치만 리셋
-        const currentState = gameplayController.getState();
-        const resetState = lifecycleHandler.resetForRetry(
-          currentState as GameplayRuntimeState,
-          stage1,
-          config,
-        );
-        gameplayController.setState(resetState);
+        // inGame → RoundIntro: StageCleared(다음 스테이지) vs LifeLost(재시도) 구분
+        // Flow 가 이미 currentStageIndex 를 증가시킨 상태이므로 비교 가능
+        const currentGameplayState = gameplayController.getState() as GameplayRuntimeState;
+        const flowStageIndex = flowController.getState().currentStageIndex;
+        const gameplayStageIndex = currentGameplayState.session.currentStageIndex;
+
+        if (flowStageIndex !== gameplayStageIndex) {
+          // StageCleared 경로: 다음 스테이지 로드 (score/lives 유지, 블록 재구성)
+          const nextStage = STAGE_DEFINITIONS[flowStageIndex];
+          if (nextStage === undefined) {
+            // 스테이지 정의 없음 — 방어적 처리 (GameClear 가 이미 처리했어야 하는 케이스)
+            return;
+          }
+          const nextState = lifecycleHandler.loadNextStage(currentGameplayState, nextStage, config);
+          gameplayController.setState({
+            ...nextState,
+            session: { ...nextState.session, currentStageIndex: flowStageIndex },
+          });
+        } else {
+          // LifeLost 경로: 같은 스테이지 재시도 (블록/점수/라이프 유지, 위치만 리셋)
+          const currentStage = STAGE_DEFINITIONS[gameplayStageIndex] ?? STAGE_DEFINITIONS[0]!;
+          const resetState = lifecycleHandler.resetForRetry(
+            currentGameplayState,
+            currentStage,
+            config,
+          );
+          gameplayController.setState(resetState);
+        }
       }
-      // StageCleared + !isLastStage → RoundIntro: 다음 스테이지 로드는 Phase 3 에서 처리
     } else if (event.type === 'EnteredGameOver' || event.type === 'EnteredGameClear') {
       // 저장 시점: GameOver / GameClear 진입 시 highScore 갱신 후 저장 (fire-and-forget)
       const session = gameplayController.getState().session;

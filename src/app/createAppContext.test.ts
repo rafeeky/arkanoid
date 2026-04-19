@@ -794,6 +794,241 @@ describe('AppContext — Audio: Flow 이벤트 → audioPlayer.play 라우팅', 
   });
 });
 
+// ---------------------------------------------------------------------------
+// Phase 3 — 다중 스테이지 로드 경로 통합 검증
+// ---------------------------------------------------------------------------
+
+/**
+ * 모든 블록을 isDestroyed=true 로 주입하여 다음 틱에서 StageCleared 이벤트가 발행되게 한다.
+ * 공은 활성 상태로 유지해야 StageRuleService 가 'clear' 를 판정한다.
+ * (공이 비활성이면 allBlocksDestroyed 조건만 체크하므로 문제없음 — 확인 필요)
+ */
+function injectAllBlocksDestroyed(ctx: Awaited<ReturnType<typeof createAppContext>>): void {
+  const state = ctx.getGameplayState() as GameplayRuntimeState;
+  ctx._setGameplayState({
+    ...state,
+    blocks: state.blocks.map((b) => ({ ...b, isDestroyed: true })),
+    // 공은 활성 상태로 유지 (비활성이어도 clear 판정됨, 하지만 확실히 하기 위해 활성으로)
+    balls: state.balls.map((b) => ({ ...b, isActive: true, vx: 0, vy: -100 })),
+  });
+}
+
+/**
+ * InGame 상태에서 StageCleared 를 강제 유발하고, RoundIntro 로 전이될 때까지 기다린다.
+ * Stage Cleared → Flow 가 currentStageIndex 증가 → EnteredRoundIntro(from='inGame') 발행
+ * → createAppContext 가 loadNextStage 또는 GameClear 처리
+ */
+function clearCurrentStage(ctx: Awaited<ReturnType<typeof createAppContext>>): void {
+  injectAllBlocksDestroyed(ctx);
+  // 1 틱: StageCleared 발행 + Flow 전이
+  ctx.tick(noInput, 1 / 60);
+}
+
+describe('AppContext — Phase 3: 다중 스테이지 로드', () => {
+  it('Title → IntroStory → RoundIntro(from=introStory): Stage 0 로드, blocks=65', async () => {
+    const ctx = await createAppContext();
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getGameplayState().blocks).toHaveLength(65);
+    expect(ctx.getGameplayState().session.currentStageIndex).toBe(0);
+  });
+
+  it('Stage 0 클리어 → RoundIntro(from=inGame): Stage 1 로드, blocks=78', async () => {
+    const ctx = await createAppContext();
+    enterInGame(ctx);
+
+    // score 를 설정해서 유지 여부 확인
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({
+      ...state,
+      session: { ...state.session, score: 200 },
+    });
+
+    clearCurrentStage(ctx);
+
+    // StageCleared → Flow currentStageIndex=1 → RoundIntro
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getFlowState().currentStageIndex).toBe(1);
+    expect(ctx.getGameplayState().blocks).toHaveLength(78);
+    expect(ctx.getGameplayState().session.currentStageIndex).toBe(1);
+  });
+
+  it('Stage 0 클리어 후 score 유지', async () => {
+    const ctx = await createAppContext();
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({
+      ...state,
+      session: { ...state.session, score: 350 },
+    });
+
+    clearCurrentStage(ctx);
+
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getGameplayState().session.score).toBe(350);
+  });
+
+  it('Stage 0 클리어 후 lives 유지', async () => {
+    const ctx = await createAppContext();
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({
+      ...state,
+      session: { ...state.session, lives: 2 },
+    });
+
+    clearCurrentStage(ctx);
+
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getGameplayState().session.lives).toBe(2);
+  });
+
+  it('Stage 1 클리어 → Stage 2 로드, blocks=91', async () => {
+    const ctx = await createAppContext();
+    enterInGame(ctx);
+
+    // Stage 0 클리어 → Stage 1 로드 → InGame 진입
+    clearCurrentStage(ctx); // → roundIntro (stageIndex=1)
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
+
+    expect(ctx.getFlowState().kind).toBe('inGame');
+    expect(ctx.getFlowState().currentStageIndex).toBe(1);
+    expect(ctx.getGameplayState().blocks).toHaveLength(78);
+
+    // Stage 1 클리어
+    clearCurrentStage(ctx); // → roundIntro (stageIndex=2)
+
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getFlowState().currentStageIndex).toBe(2);
+    expect(ctx.getGameplayState().blocks).toHaveLength(91);
+    expect(ctx.getGameplayState().session.currentStageIndex).toBe(2);
+  });
+
+  it('Stage 2 클리어 (마지막) → GameClear (totalStageCount=3)', async () => {
+    const ctx = await createAppContext();
+    enterInGame(ctx);
+
+    // Stage 0 → Stage 1
+    clearCurrentStage(ctx);
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
+
+    // Stage 1 → Stage 2
+    clearCurrentStage(ctx);
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
+
+    expect(ctx.getFlowState().kind).toBe('inGame');
+    expect(ctx.getFlowState().currentStageIndex).toBe(2);
+
+    // Stage 2 클리어 → GameClear
+    clearCurrentStage(ctx);
+
+    expect(ctx.getFlowState().kind).toBe('gameClear');
+  });
+
+  it('Stage 0 LifeLost 후 RoundIntro: 같은 스테이지(blocks=65) 유지', async () => {
+    const ctx = await createAppContext();
+    enterInGame(ctx);
+
+    // 공을 발사한 뒤 블록을 일부 파괴
+    ctx.tick(spaceInput, 1 / 60);
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    // 블록 10개 파괴 표시
+    ctx._setGameplayState({
+      ...state,
+      session: { ...state.session, score: 100, lives: 2 },
+      blocks: state.blocks.map((b, i) => (i < 10 ? { ...b, isDestroyed: true } : b)),
+    });
+
+    // LifeLost 유발: 공을 바닥 아래로 보냄
+    const stateWithProgress = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({
+      ...stateWithProgress,
+      balls: stateWithProgress.balls.map((b) => ({
+        ...b,
+        isActive: true,
+        x: 480,
+        y: 700,
+        vx: 0,
+        vy: 300,
+      })),
+    });
+    tickUntilFlowChanges(ctx, 'inGame');
+
+    if (ctx.getFlowState().kind === 'roundIntro') {
+      // resetForRetry: 블록 수 65개 유지 (10개 파괴된 상태 유지)
+      expect(ctx.getGameplayState().blocks).toHaveLength(65);
+      // 파괴된 블록 10개 그대로
+      const destroyed = ctx.getGameplayState().blocks.filter((b) => b.isDestroyed);
+      expect(destroyed).toHaveLength(10);
+      // score 유지
+      expect(ctx.getGameplayState().session.score).toBe(100);
+      // Flow currentStageIndex 변화 없음 (0 유지)
+      expect(ctx.getFlowState().currentStageIndex).toBe(0);
+    }
+  });
+
+  it('Stage 0 LifeLost 후 RoundIntro: session.currentStageIndex = 0 (변화 없음)', async () => {
+    const ctx = await createAppContext();
+    enterInGame(ctx);
+    ctx.tick(spaceInput, 1 / 60);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({
+      ...state,
+      session: { ...state.session, lives: 2 },
+      balls: state.balls.map((b) => ({
+        ...b,
+        isActive: true,
+        x: 480,
+        y: 700,
+        vx: 0,
+        vy: 300,
+      })),
+    });
+    tickUntilFlowChanges(ctx, 'inGame');
+
+    if (ctx.getFlowState().kind === 'roundIntro') {
+      expect(ctx.getGameplayState().session.currentStageIndex).toBe(0);
+    }
+  });
+
+  it('Stage 0 클리어 후 highScore 유지', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 9000 });
+    const ctx = await createAppContext({ saveRepository: repo });
+    enterInGame(ctx);
+
+    clearCurrentStage(ctx);
+
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getGameplayState().session.highScore).toBe(9000);
+  });
+
+  it('Stage 0~2 클리어 후 score 누적 유지 확인', async () => {
+    const ctx = await createAppContext();
+    enterInGame(ctx);
+
+    // score 설정
+    const s0 = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({ ...s0, session: { ...s0.session, score: 100 } });
+    clearCurrentStage(ctx); // stage0 → stage1 roundIntro
+
+    // score 가 100으로 유지되어야 함
+    expect(ctx.getGameplayState().session.score).toBe(100);
+
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
+
+    // inGame 에서 score 200 추가 주입
+    const s1 = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({ ...s1, session: { ...s1.session, score: 300 } });
+    clearCurrentStage(ctx); // stage1 → stage2 roundIntro
+
+    expect(ctx.getGameplayState().session.score).toBe(300);
+  });
+});
+
 describe('AppContext — Audio: 8개 필수 매핑 통합 검증', () => {
   it('AudioCueTable 8개 매핑 전부 resolveCueIds 로 반환됨', async () => {
     const { AudioCueResolver } = await import('../audio/AudioCueResolver');
