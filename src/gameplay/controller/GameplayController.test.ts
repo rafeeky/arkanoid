@@ -372,7 +372,7 @@ describe('터널링 회귀 테스트 — swept AABB 충돌', () => {
    * 공이 연속된 두 블록을 한 틱에 통과하지 않는다.
    * 두 블록이 x 방향으로 나란히 배치. 공이 첫 번째 블록에 맞으면 반사돼야 한다.
    */
-  it('연속된 블록 배치에서 첫 번째 블록에서 반사된다', () => {
+  it('두 블록이 x 방향으로 나란히 배치에서 첫 번째 블록에서 반사된다', () => {
     const modState: GameplayRuntimeState = {
       session: { currentStageIndex: 0, score: 0, lives: 3, highScore: 0 },
       bar: { x: 480, y: 660, width: 120, moveSpeed: 420, activeEffect: 'none' },
@@ -411,5 +411,69 @@ describe('터널링 회귀 테스트 — swept AABB 충돌', () => {
     // Ball should have reversed vx
     const ball = getBall(ctrl.getState());
     expect(ball.vx).toBeLessThan(0);
+  });
+});
+
+// ============================================================
+// MVP3 Phase 3: 신규 커맨드 no-op 라우팅 테스트
+// ============================================================
+
+describe('GameplayController - ReleaseAttachedBalls no-op (Phase 4 전)', () => {
+  it('ReleaseAttachedBalls 커맨드 수신 시 상태 변화 없음', () => {
+    const initialState = createGameplayRuntimeFromStageDefinition(
+      simpleStage,
+      config,
+      blockDefinitions,
+      3,
+    );
+    // magnet 상태 + 부착 공 설정
+    const magnetState: GameplayRuntimeState = {
+      ...initialState,
+      bar: { ...initialState.bar, activeEffect: 'magnet' },
+      attachedBallIds: ['ball_0'],
+    };
+    const ctrl = new GameplayController(magnetState, deps);
+    const stateBefore = ctrl.getState();
+
+    // spaceJustPressed → ReleaseAttachedBalls 커맨드 생성됨
+    const events = ctrl.tick(spaceInput, 1 / 60);
+
+    // no-op: attachedBallIds는 아직 변하지 않아야 한다 (Phase 4에서 구현)
+    expect(ctrl.getState().attachedBallIds).toEqual(stateBefore.attachedBallIds);
+    // 현재 이벤트에는 BallLaunched 또는 스테이지 관련 이벤트만 있어야 한다
+    // (ReleaseAttachedBalls 전용 이벤트는 Phase 4에서 추가 예정)
+    const nonMovementEvents = events.filter(
+      (e) => e.type !== 'LifeLost' && e.type !== 'StageCleared' && e.type !== 'GameOverConditionMet',
+    );
+    expect(nonMovementEvents.some((e) => e.type === 'BallLaunched')).toBe(false);
+  });
+});
+
+describe('GameplayController - FireLaser no-op (Phase 5 전)', () => {
+  it('FireLaser 커맨드 수신 시 상태 변화 없음', () => {
+    const initialState = createGameplayRuntimeFromStageDefinition(
+      simpleStage,
+      config,
+      blockDefinitions,
+      3,
+    );
+    // laser 상태 + cooldown=0 설정
+    const laserState: GameplayRuntimeState = {
+      ...initialState,
+      bar: { ...initialState.bar, activeEffect: 'laser' },
+      laserCooldownRemaining: 0,
+      balls: initialState.balls.map((b) => ({ ...b, isActive: true })),
+    };
+    const ctrl = new GameplayController(laserState, deps);
+    const shotsBefore = ctrl.getState().laserShots.length;
+
+    // spaceJustPressed → FireLaser 커맨드 생성됨
+    const events = ctrl.tick(spaceInput, 1 / 60);
+
+    // no-op: laserShots는 아직 변하지 않아야 한다 (Phase 5에서 구현)
+    expect(ctrl.getState().laserShots.length).toBe(shotsBefore);
+    // 현재 이벤트에는 LaserFired 전용 이벤트가 없어야 한다 (Phase 5에서 추가 예정)
+    // BallLaunched도 없어야 한다 (공이 isActive=true이므로 LaunchBall 커맨드 생성 안 됨)
+    expect(events.some((e) => e.type === 'BallLaunched')).toBe(false);
   });
 });

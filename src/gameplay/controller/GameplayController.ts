@@ -69,6 +69,10 @@ export class GameplayController {
         allEvents.push(launchEvent);
       } else if (cmd.type === 'MoveBar') {
         moveDirection = cmd.direction;
+      } else if (cmd.type === 'ReleaseAttachedBalls') {
+        // TODO(mvp3 phase 4): ReleaseAttachedBalls 구현 예정
+      } else if (cmd.type === 'FireLaser') {
+        // TODO(mvp3 phase 5): FireLaser 구현 예정
       }
     }
 
