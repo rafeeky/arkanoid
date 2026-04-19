@@ -490,31 +490,159 @@ describe('GameplayController - ReleaseAttachedBalls (Phase 4)', () => {
   });
 });
 
-describe('GameplayController - FireLaser no-op (Phase 5 전)', () => {
-  it('FireLaser 커맨드 수신 시 상태 변화 없음', () => {
+describe('GameplayController - FireLaser (Phase 5)', () => {
+  function makeLaserDeps() {
+    const laserItemDef: ItemDefinition = {
+      itemType: 'laser',
+      displayNameTextId: '',
+      descriptionTextId: '',
+      iconId: '',
+      fallSpeed: 160,
+      effectType: 'laser',
+      laserCooldownMs: 400,
+      laserShotCount: 2,
+    };
+    return {
+      blockDefinitions,
+      itemDefinitions: { ...itemDefinitions, laser: laserItemDef },
+      config,
+    };
+  }
+
+  function makeLaserState(base: GameplayRuntimeState): GameplayRuntimeState {
+    return {
+      ...base,
+      bar: { ...base.bar, activeEffect: 'laser' },
+      laserCooldownRemaining: 0,
+      balls: base.balls.map((b) => ({ ...b, isActive: true })),
+    };
+  }
+
+  it('FireLaser 커맨드 수신 시 laserShots가 2개 생성된다', () => {
     const initialState = createGameplayRuntimeFromStageDefinition(
       simpleStage,
       config,
       blockDefinitions,
       3,
     );
-    // laser 상태 + cooldown=0 설정
-    const laserState: GameplayRuntimeState = {
-      ...initialState,
-      bar: { ...initialState.bar, activeEffect: 'laser' },
-      laserCooldownRemaining: 0,
-      balls: initialState.balls.map((b) => ({ ...b, isActive: true })),
-    };
-    const ctrl = new GameplayController(laserState, deps);
-    const shotsBefore = ctrl.getState().laserShots.length;
+    const laserDeps = makeLaserDeps();
+    const laserState = makeLaserState(initialState);
+    const ctrl = new GameplayController(laserState, laserDeps);
 
-    // spaceJustPressed → FireLaser 커맨드 생성됨
+    ctrl.tick(spaceInput, 1 / 60);
+
+    expect(ctrl.getState().laserShots.length).toBe(2);
+  });
+
+  it('FireLaser 커맨드 수신 시 LaserFired 이벤트가 발행된다', () => {
+    const initialState = createGameplayRuntimeFromStageDefinition(
+      simpleStage,
+      config,
+      blockDefinitions,
+      3,
+    );
+    const laserDeps = makeLaserDeps();
+    const laserState = makeLaserState(initialState);
+    const ctrl = new GameplayController(laserState, laserDeps);
+
     const events = ctrl.tick(spaceInput, 1 / 60);
 
-    // no-op: laserShots는 아직 변하지 않아야 한다 (Phase 5에서 구현)
+    expect(events.some((e) => e.type === 'LaserFired')).toBe(true);
+  });
+
+  it('FireLaser 이후 laserCooldownRemaining이 400으로 설정된다', () => {
+    const initialState = createGameplayRuntimeFromStageDefinition(
+      simpleStage,
+      config,
+      blockDefinitions,
+      3,
+    );
+    const laserDeps = makeLaserDeps();
+    const laserState = makeLaserState(initialState);
+    const ctrl = new GameplayController(laserState, laserDeps);
+
+    ctrl.tick(spaceInput, 1 / 60);
+
+    // 쿨다운은 400ms에서 한 틱(~16.7ms) 감소한 값
+    expect(ctrl.getState().laserCooldownRemaining).toBeGreaterThan(0);
+    expect(ctrl.getState().laserCooldownRemaining).toBeLessThanOrEqual(400);
+  });
+
+  it('쿨다운 중에는 FireLaser 커맨드가 InputCommandResolver에서 생성되지 않는다', () => {
+    const initialState = createGameplayRuntimeFromStageDefinition(
+      simpleStage,
+      config,
+      blockDefinitions,
+      3,
+    );
+    const laserDeps = makeLaserDeps();
+    const cooldownState: GameplayRuntimeState = {
+      ...initialState,
+      bar: { ...initialState.bar, activeEffect: 'laser' },
+      laserCooldownRemaining: 400, // 쿨다운 중
+      balls: initialState.balls.map((b) => ({ ...b, isActive: true })),
+    };
+    const ctrl = new GameplayController(cooldownState, laserDeps);
+    const shotsBefore = ctrl.getState().laserShots.length;
+
+    const events = ctrl.tick(spaceInput, 1 / 60);
+
+    // 쿨다운 중이므로 shots 추가 없음
     expect(ctrl.getState().laserShots.length).toBe(shotsBefore);
-    // 현재 이벤트에는 LaserFired 전용 이벤트가 없어야 한다 (Phase 5에서 추가 예정)
-    // BallLaunched도 없어야 한다 (공이 isActive=true이므로 LaunchBall 커맨드 생성 안 됨)
-    expect(events.some((e) => e.type === 'BallLaunched')).toBe(false);
+    expect(events.some((e) => e.type === 'LaserFired')).toBe(false);
+  });
+
+  it('shots가 이동하여 블록에 도달하면 BlockDestroyed 이벤트가 발행된다', () => {
+    const initialState = createGameplayRuntimeFromStageDefinition(
+      simpleStage,
+      config,
+      blockDefinitions,
+      3,
+    );
+    const laserDeps = makeLaserDeps();
+
+    // shot을 블록 바로 위에 배치 (다음 틱에 블록과 충돌)
+    const firstBlock = getBlock(initialState);
+    const shotX = firstBlock.x + 32; // 블록 중심 x
+    const shotY = firstBlock.y + 12; // 블록 내부 y
+
+    const stateWithShot: GameplayRuntimeState = {
+      ...initialState,
+      bar: { ...initialState.bar, activeEffect: 'laser' },
+      laserCooldownRemaining: 400,
+      laserShots: [{ id: 'laser_0', x: shotX, y: shotY, vy: -1200 }],
+      balls: initialState.balls.map((b) => ({ ...b, isActive: true })),
+    };
+    const ctrl = new GameplayController(stateWithShot, laserDeps);
+
+    const events = ctrl.tick(noInput, 1 / 60);
+
+    // shot이 블록 내부에 있으므로 tick 후 충돌 처리
+    expect(events.some((e) => e.type === 'BlockDestroyed')).toBe(true);
+  });
+
+  it('레이저로 블록 파괴 시 점수가 올라간다', () => {
+    const initialState = createGameplayRuntimeFromStageDefinition(
+      simpleStage,
+      config,
+      blockDefinitions,
+      3,
+    );
+    const laserDeps = makeLaserDeps();
+    const firstBlock = getBlock(initialState);
+
+    const stateWithShot: GameplayRuntimeState = {
+      ...initialState,
+      bar: { ...initialState.bar, activeEffect: 'laser' },
+      laserCooldownRemaining: 400,
+      laserShots: [{ id: 'laser_0', x: firstBlock.x + 32, y: firstBlock.y + 12, vy: -1200 }],
+      balls: initialState.balls.map((b) => ({ ...b, isActive: true })),
+    };
+    const ctrl = new GameplayController(stateWithShot, laserDeps);
+    const scoreBefore = ctrl.getState().session.score;
+
+    ctrl.tick(noInput, 1 / 60);
+
+    expect(ctrl.getState().session.score).toBeGreaterThan(scoreBefore);
   });
 });

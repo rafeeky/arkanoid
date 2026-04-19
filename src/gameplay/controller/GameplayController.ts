@@ -12,6 +12,7 @@ import type { BallHitBlockFact, BallHitWallFact } from '../systems/CollisionServ
 import { applyCollisions } from '../systems/CollisionResolutionService';
 import { judgeStageOutcome } from '../systems/StageRuleService';
 import { BarEffectService } from '../systems/BarEffectService';
+import { LaserSystem } from '../systems/LaserSystem';
 
 type Dependencies = {
   blockDefinitions: Record<string, BlockDefinition>;
@@ -23,11 +24,14 @@ export class GameplayController {
   private state: GameplayRuntimeState;
   private readonly deps: Dependencies;
   private readonly barEffectService: BarEffectService;
+  private readonly laserSystem: LaserSystem;
+  private laserShotCounter = 0;
 
   constructor(initialState: GameplayRuntimeState, deps: Dependencies) {
     this.state = initialState;
     this.deps = deps;
     this.barEffectService = new BarEffectService(deps.itemDefinitions);
+    this.laserSystem = new LaserSystem(() => `laser_${this.laserShotCounter++}`);
   }
 
   getState(): Readonly<GameplayRuntimeState> {
@@ -93,7 +97,20 @@ export class GameplayController {
           allEvents.push(e);
         }
       } else if (cmd.type === 'FireLaser') {
-        // TODO(mvp3 phase 5): FireLaser 구현 예정
+        const laserItemDef = this.deps.itemDefinitions['laser'];
+        const fireResult = this.laserSystem.fireLaser(
+          this.state.bar,
+          this.state.laserShots,
+          laserItemDef?.laserCooldownMs,
+        );
+        this.state = {
+          ...this.state,
+          laserShots: fireResult.newShots,
+          laserCooldownRemaining: fireResult.nextCooldownMs,
+        };
+        for (const e of fireResult.events) {
+          allEvents.push(e);
+        }
       }
     }
 
@@ -213,6 +230,43 @@ export class GameplayController {
     }
     for (const e of magnetTick.events) {
       allEvents.push(e);
+    }
+
+    // 6.6. Laser ↔ Block 충돌 처리 (이동 전 현재 위치 기준)
+    if (this.state.laserShots.length > 0) {
+      const laserCollision = this.laserSystem.handleBlockCollisions(
+        this.state.laserShots,
+        this.state.blocks,
+        this.deps.blockDefinitions,
+      );
+      if (laserCollision.events.length > 0 || laserCollision.nextShots.length !== this.state.laserShots.length) {
+        this.state = {
+          ...this.state,
+          laserShots: laserCollision.nextShots,
+          blocks: [...laserCollision.nextBlocks],
+          session: {
+            ...this.state.session,
+            score: this.state.session.score + laserCollision.scoreDelta,
+          },
+        };
+        for (const e of laserCollision.events) {
+          allEvents.push(e);
+        }
+      }
+    }
+
+    // 6.7. Laser tick: shots 이동 + 쿨다운 감소
+    if (this.state.laserShots.length > 0 || this.state.laserCooldownRemaining > 0) {
+      const laserTick = this.laserSystem.tick(
+        this.state.laserShots,
+        this.state.laserCooldownRemaining,
+        dt,
+      );
+      this.state = {
+        ...this.state,
+        laserShots: laserTick.nextShots,
+        laserCooldownRemaining: laserTick.nextCooldownMs,
+      };
     }
 
     // 7. Judge stage outcome

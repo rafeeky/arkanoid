@@ -41,6 +41,11 @@ export type ItemCollectedEvent = {
   newEffect: BarEffectKind;
 };
 
+export type LaserFiredEvent = {
+  type: 'LaserFired';
+  shotCount: number;
+};
+
 export type LifeLostEvent = {
   type: 'LifeLost';
   remainingLives: number;
@@ -54,6 +59,7 @@ export type GameplayEvent =
   | BallLaunchedEvent
   | BallAttachedEvent
   | BallsReleasedEvent
+  | LaserFiredEvent
   | BlockHitEvent
   | BlockDestroyedEvent
   | ItemSpawnedEvent
