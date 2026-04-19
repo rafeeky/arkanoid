@@ -1254,3 +1254,105 @@ describe('MVP3 Phase6 — 효과 교체 정책 통합 (6조합)', () => {
     expect(after.bar.width).toBeCloseTo(120 * 1.5); // expand 적용
   });
 });
+
+// ---------------------------------------------------------------------------
+// MVP3 Phase 7 시나리오: 회전체 기믹 E2E
+// ---------------------------------------------------------------------------
+
+describe('MVP3 Phase7 — 회전체 기믹 E2E', () => {
+  it('H-1. spinner가 있는 스테이지에서 공이 spinner 위치로 이동하면 반사된다', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+
+    // spinner를 공 경로에 주입 (중앙, y=300)
+    // spinner_cube: size=48, 반지름=24. ball 반지름=8. 결합=32.
+    const spinnerX = 360;
+    const spinnerY = 300;
+
+    ctx._setGameplayState({
+      ...state,
+      spinnerStates: [
+        { id: 'spinner_0', definitionId: 'spinner_cube', x: spinnerX, y: spinnerY, angleRad: 0 },
+      ],
+      balls: state.balls.map((b) => ({
+        ...b,
+        isActive: true,
+        x: spinnerX,
+        y: spinnerY - 20, // spinner 위 20px (결합 반지름 32 내부)
+        vx: 0,
+        vy: 200, // 아래로 이동 중
+      })),
+    });
+
+    // tick 실행 — SpinnerSystem.handleBallCollisions에서 반사 처리
+    ctx.tick(noInput, 1 / 60);
+
+    const after = ctx.getGameplayState();
+    const ball = after.balls[0];
+    // 반사 후 vy < 0 (위쪽으로 방향 전환)
+    expect(ball?.vy).toBeLessThan(0);
+  });
+
+  it('H-2. spinner tick으로 angleRad가 매 틱 증가한다', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+
+    ctx._setGameplayState({
+      ...state,
+      spinnerStates: [
+        { id: 'spinner_0', definitionId: 'spinner_cube', x: 360, y: 300, angleRad: 0 },
+      ],
+    });
+
+    ctx.tick(noInput, 1 / 60);
+
+    const after = ctx.getGameplayState();
+    // spinner_cube rotationSpeedRadPerSec=1.5. dt=1/60≈0.0167s → 0.025 rad
+    const expected = 1.5 * (1 / 60);
+    expect(after.spinnerStates[0]?.angleRad).toBeCloseTo(expected, 3);
+  });
+
+  it('H-3. spinner phase 활성 시 인접 블록이 피격된다', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+
+    const spinnerX = 360;
+    const spinnerY = 300;
+
+    // 블록을 spinner와 겹치도록 배치 (중심이 spinner 반지름 이내)
+    // 블록 좌상단: (spinnerX - 32, spinnerY - 12) → 중심: (spinnerX, spinnerY)
+    const blockX = spinnerX - 32;
+    const blockY = spinnerY - 12;
+
+    ctx._setGameplayState({
+      ...state,
+      spinnerStates: [
+        { id: 'spinner_0', definitionId: 'spinner_cube', x: spinnerX, y: spinnerY, angleRad: 0 },
+      ],
+      blocks: [
+        {
+          id: 'block_test',
+          x: blockX,
+          y: blockY,
+          remainingHits: 2,
+          isDestroyed: false,
+          definitionId: 'basic',
+        },
+      ],
+      balls: state.balls.map((b) => ({ ...b, isActive: false })), // 공 비활성 (ball 충돌 무관)
+    });
+
+    ctx.tick(noInput, 1 / 60);
+
+    const after = ctx.getGameplayState();
+    const block = after.blocks.find((b) => b.id === 'block_test');
+    // phase=0 활성 → 블록 피격 → remainingHits 감소
+    expect(block?.remainingHits).toBeLessThan(2);
+  });
+});

@@ -22,6 +22,7 @@ import { BlockDefinitionTable } from '../definitions/tables/BlockDefinitionTable
 import { ItemDefinitionTable } from '../definitions/tables/ItemDefinitionTable';
 import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
 import { IntroSequenceTable } from '../definitions/tables/IntroSequenceTable';
+import { SpinnerDefinitionTable } from '../definitions/tables/SpinnerDefinitionTable';
 import type { DevContext } from './dev/DevContext';
 import { FlowEventRouter } from './FlowEventRouter';
 
@@ -115,6 +116,7 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     blockDefinitions: BlockDefinitionTable,
     itemDefinitions: ItemDefinitionTable,
     config,
+    spinnerDefinitions: SpinnerDefinitionTable,
   });
 
   // VisualEffectController: Gameplay 이벤트를 받아 시각 연출 타이머 관리

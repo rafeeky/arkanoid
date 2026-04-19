@@ -3,6 +3,7 @@ import type { GameplayRuntimeState } from '../state/GameplayRuntimeState';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { ItemDefinition } from '../../definitions/types/ItemDefinition';
 import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
+import type { SpinnerDefinition } from '../../definitions/types/SpinnerDefinition';
 import type { GameplayEvent } from '../events/gameplayEvents';
 
 import { resolveGameplayCommands } from './InputCommandResolver';
@@ -13,11 +14,13 @@ import { applyCollisions } from '../systems/CollisionResolutionService';
 import { judgeStageOutcome } from '../systems/StageRuleService';
 import { BarEffectService } from '../systems/BarEffectService';
 import { LaserSystem } from '../systems/LaserSystem';
+import { SpinnerSystem } from '../systems/SpinnerSystem';
 
 type Dependencies = {
   blockDefinitions: Record<string, BlockDefinition>;
   itemDefinitions: Record<string, ItemDefinition>;
   config: GameplayConfig;
+  spinnerDefinitions?: Record<string, SpinnerDefinition>;
 };
 
 export class GameplayController {
@@ -25,6 +28,7 @@ export class GameplayController {
   private readonly deps: Dependencies;
   private readonly barEffectService: BarEffectService;
   private readonly laserSystem: LaserSystem;
+  private readonly spinnerSystem: SpinnerSystem;
   private laserShotCounter = 0;
 
   constructor(initialState: GameplayRuntimeState, deps: Dependencies) {
@@ -32,6 +36,7 @@ export class GameplayController {
     this.deps = deps;
     this.barEffectService = new BarEffectService(deps.itemDefinitions);
     this.laserSystem = new LaserSystem(() => `laser_${this.laserShotCounter++}`);
+    this.spinnerSystem = new SpinnerSystem(deps.spinnerDefinitions ?? {});
   }
 
   getState(): Readonly<GameplayRuntimeState> {
@@ -218,6 +223,12 @@ export class GameplayController {
       allEvents.push(e);
     }
 
+    // 6.4. Spinner tick — angleRad 업데이트 (정적 배치, 회전만)
+    if (this.state.spinnerStates.length > 0) {
+      const nextSpinnerStates = this.spinnerSystem.tick(this.state.spinnerStates, dt);
+      this.state = { ...this.state, spinnerStates: nextSpinnerStates };
+    }
+
     // 6.5. Magnet timer tick (dt를 ms로 변환)
     const magnetTick = this.barEffectService.tickMagnet(
       this.state.magnetRemainingTime,
@@ -247,6 +258,15 @@ export class GameplayController {
     }
     for (const e of magnetTick.events) {
       allEvents.push(e);
+    }
+
+    // 6.55. Spinner ↔ Ball 충돌 처리
+    if (this.state.spinnerStates.length > 0) {
+      const updatedBalls = this.state.balls.map((ball) => {
+        const result = this.spinnerSystem.handleBallCollisions(ball, this.state.spinnerStates);
+        return result.nextBall;
+      });
+      this.state = { ...this.state, balls: updatedBalls };
     }
 
     // 6.6. Laser ↔ Block 충돌 처리 (이동 전 현재 위치 기준)
@@ -284,6 +304,28 @@ export class GameplayController {
         laserShots: laserTick.nextShots,
         laserCooldownRemaining: laserTick.nextCooldownMs,
       };
+    }
+
+    // 6.8. Spinner ↔ Block 충돌 처리 (phase-gate)
+    if (this.state.spinnerStates.length > 0) {
+      const spinnerBlockResult = this.spinnerSystem.handleBlockCollisions(
+        this.state.spinnerStates,
+        this.state.blocks,
+        this.deps.blockDefinitions,
+      );
+      if (spinnerBlockResult.events.length > 0) {
+        this.state = {
+          ...this.state,
+          blocks: [...spinnerBlockResult.nextBlocks],
+          session: {
+            ...this.state.session,
+            score: this.state.session.score + spinnerBlockResult.scoreDelta,
+          },
+        };
+        for (const e of spinnerBlockResult.events) {
+          allEvents.push(e);
+        }
+      }
     }
 
     // 7. Judge stage outcome
