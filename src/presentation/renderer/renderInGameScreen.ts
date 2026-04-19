@@ -25,8 +25,16 @@ const BLOCK_FLASH_COLOR_DEFAULT = 0xffffff;
 // 아이템 색상
 const ITEM_COLOR = 0xffdd00;
 
-// 회전체 색상
-const SPINNER_COLOR = 0xaa88ff; // 보라 계열 임시 색상
+// 회전체 pseudo-3D 색상
+// cube: Y축 회전 시 3면(front/top/side)을 shade 차이로 구분
+const CUBE_FRONT = 0xaa88ff; // 정면 — 중간 보라
+const CUBE_TOP   = 0xccaaff; // 윗면 — 밝은 보라
+const CUBE_SIDE  = 0x8866dd; // 옆면 — 어두운 보라
+
+// tetrahedron: 3면을 shade 차이로 구분
+const TRI_FACE0 = 0xff99cc; // 정면
+const TRI_FACE1 = 0xffbbdd; // 옆면 1 (밝음)
+const TRI_FACE2 = 0xcc6699; // 옆면 2 (어두움)
 
 // Gate 연출 파라미터
 // Gate: 천장 근처에서 좌/우 두 문이 수평으로 열리는 입구 연출.
@@ -53,10 +61,10 @@ export type InGameObjects = {
   // 레이저 발사체 풀: shotId → Rectangle
   // 매 프레임 laserShots 배열과 id 기준으로 add/remove 동기화
   laserMap: Map<string, Phaser.GameObjects.Rectangle>;
-  // 회전체 풀: spinnerId → Rectangle(cube) | Graphics(triangle)
-  // 매 프레임 spinnerStates 배열과 id 기준으로 add/remove 동기화
+  // 회전체 풀: spinnerId → Graphics
+  // cube/triangle 모두 Graphics로 통일. 매 프레임 clear() 후 pseudo-3D 재그림.
   // Unity 포팅 시: SpinnerView MonoBehaviour + ObjectPool 형태로 대응.
-  spinnerMap: Map<string, Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics>;
+  spinnerMap: Map<string, Phaser.GameObjects.Graphics>;
   // Gate 풀: spinnerId → [leftDoor, rightDoor]
   // spawning phase 동안만 표시. active 전환 후 숨김.
   // Unity 포팅 시: SpawnGateView MonoBehaviour 형태로 대응.
@@ -360,56 +368,170 @@ export function renderInGameScreen(
         ? 0.3 + 0.7 * spawnProgress
         : 1.0;
 
+    // Graphics 오브젝트 취득 또는 신규 생성 (cube/triangle 모두 Graphics)
+    let gfx = objects.spinnerMap.get(spinner.id);
+    if (gfx === undefined) {
+      gfx = scene.add.graphics();
+      objects.spinnerMap.set(spinner.id, gfx);
+    }
+    gfx.clear().setAlpha(spinnerAlpha).setVisible(true);
+
     if (def.kind === 'cube') {
-      // cube: Rectangle. setRotation(angleRad)으로 회전 반영.
-      // kind는 런타임에 변경되지 않으므로 동일 id에 항상 Rectangle이 들어온다.
-      const existingCube = objects.spinnerMap.get(spinner.id);
-      let rect: Phaser.GameObjects.Rectangle;
-      if (existingCube === undefined) {
-        rect = scene.add.rectangle(
-          spinner.x,
-          spinner.y,
-          def.size,
-          def.size,
-          SPINNER_COLOR,
-        );
-        objects.spinnerMap.set(spinner.id, rect);
-      } else {
-        rect = existingCube as Phaser.GameObjects.Rectangle;
+      // ---- pseudo-3D 큐브 (Y축 회전) ----
+      // angleRad를 Y축 회전각으로 해석.
+      // 로컬 8 vertex: half-size = s
+      // 직교투영(orthographic): x→2D_x, y→2D_y (z는 depth 판정용)
+      // Y축 회전 행렬:
+      //   x' = x*cos(a) - z*sin(a)
+      //   z' = x*sin(a) + z*cos(a)
+      //   y' = y (불변)
+      // 6면 정의 (vertex index 순서: CCW from camera):
+      //   front [4,5,6,7], back [0,1,2,3]
+      //   top [0,1,5,4], bottom [3,2,6,7]
+      //   right [1,2,6,5], left [0,3,7,4]
+      // 가시 판정: 각 면의 법선 Z 성분(nz)이 카메라 방향(nz>0)이면 표시.
+      // painter's algorithm: 각 가시 면의 평균 z 기준 오름차순 정렬 후 그리기.
+      const s = def.size / 2;
+      const cosA = Math.cos(spinner.angleRad);
+      const sinA = Math.sin(spinner.angleRad);
+
+      // 3D→회전→투영 헬퍼. 반환 [x2d, y2d, z_depth]
+      const project = (lx: number, ly: number, lz: number): [number, number, number] => {
+        const rx = lx * cosA - lz * sinA;
+        const rz = lx * sinA + lz * cosA;
+        return [spinner.x + rx, spinner.y + ly, rz];
+      };
+
+      // 8 vertex 투영 (tuple 타입으로 명시 → undefined 제거)
+      type Vtx = [number, number, number];
+      const V: [Vtx, Vtx, Vtx, Vtx, Vtx, Vtx, Vtx, Vtx] = [
+        project(-s, -s, -s), // 0 back-top-left
+        project( s, -s, -s), // 1 back-top-right
+        project( s,  s, -s), // 2 back-bot-right
+        project(-s,  s, -s), // 3 back-bot-left
+        project(-s, -s,  s), // 4 front-top-left
+        project( s, -s,  s), // 5 front-top-right
+        project( s,  s,  s), // 6 front-bot-right
+        project(-s,  s,  s), // 7 front-bot-left
+      ];
+
+      // 면 정의: [vi0, vi1, vi2, vi3, colorHex]
+      type Face = { idx: [number, number, number, number]; color: number };
+      const faces: Face[] = [
+        { idx: [4, 5, 6, 7], color: CUBE_FRONT },  // front
+        { idx: [0, 1, 2, 3], color: CUBE_FRONT },  // back
+        { idx: [0, 1, 5, 4], color: CUBE_TOP   },  // top
+        { idx: [3, 2, 6, 7], color: CUBE_TOP   },  // bottom
+        { idx: [1, 2, 6, 5], color: CUBE_SIDE  },  // right
+        { idx: [0, 3, 7, 4], color: CUBE_SIDE  },  // left
+      ];
+
+      // 가시 판정 & depth 정렬
+      type VisibleFace = { color: number; pts: { x: number; y: number }[]; avgZ: number };
+      const visibleFaces: VisibleFace[] = [];
+
+      for (const face of faces) {
+        const [i0, i1, i2, i3] = face.idx;
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const v0 = V[i0]!; const v1 = V[i1]!;
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const v2 = V[i2]!; const v3 = V[i3]!;
+
+        // 면 법선 Z 성분 (2D 외적): (v1-v0) × (v3-v0) Z
+        const ex1 = v1[0] - v0[0]; const ey1 = v1[1] - v0[1];
+        const ex2 = v3[0] - v0[0]; const ey2 = v3[1] - v0[1];
+        const nz = ex1 * ey2 - ey1 * ex2; // nz > 0 → 카메라쪽 (CW 정렬이면 부호 반전)
+
+        if (nz >= 0) {
+          // 평균 depth = 4 vertex의 z 평균
+          const avgZ = (v0[2] + v1[2] + v2[2] + v3[2]) / 4;
+          visibleFaces.push({
+            color: face.color,
+            pts: [
+              { x: v0[0], y: v0[1] },
+              { x: v1[0], y: v1[1] },
+              { x: v2[0], y: v2[1] },
+              { x: v3[0], y: v3[1] },
+            ],
+            avgZ,
+          });
+        }
       }
-      rect
-        .setPosition(spinner.x, spinner.y)
-        .setRotation(spinner.angleRad)
-        .setAlpha(spinnerAlpha)
-        .setVisible(true);
+
+      // painter's algorithm: avgZ 오름차순(먼 것 먼저)
+      visibleFaces.sort((a, b) => a.avgZ - b.avgZ);
+
+      for (const vf of visibleFaces) {
+        gfx.fillStyle(vf.color, 1).fillPoints(vf.pts, true);
+      }
+
     } else {
-      // triangle: Graphics. 매 틱 재그림.
-      // 정삼각형: 한 변 = size. 외접원 반지름 R = size / sqrt(3).
-      // vertex i = (x + R * cos(angleRad + i * 2π/3), y + R * sin(angleRad + i * 2π/3))
-      // kind는 런타임에 변경되지 않으므로 동일 id에 항상 Graphics가 들어온다.
-      const existingTriangle = objects.spinnerMap.get(spinner.id);
-      let gfx: Phaser.GameObjects.Graphics;
-      if (existingTriangle === undefined) {
-        gfx = scene.add.graphics();
-        objects.spinnerMap.set(spinner.id, gfx);
-      } else {
-        gfx = existingTriangle as Phaser.GameObjects.Graphics;
+      // ---- pseudo-3D 정사면체(tetrahedron) (Y축 회전) ----
+      // 4 vertex 정의:
+      //   T0 = ( 0,   -h,          0       )  — top
+      //   T1 = ( s,    h/3, -s/sqrt(3)     )  — base 1
+      //   T2 = (-s,    h/3, -s/sqrt(3)     )  — base 2
+      //   T3 = ( 0,    h/3,  2s/sqrt(3)    )  — base 3 (front)
+      // h = size * sqrt(6) / 3  (정사면체 높이)
+      // 4면: [0,1,3], [0,3,2], [0,2,1], [1,2,3] (base)
+      const s = def.size / 2;
+      const h = def.size * (Math.sqrt(6) / 3);
+      const inv3 = 1 / Math.sqrt(3);
+      const cosA = Math.cos(spinner.angleRad);
+      const sinA = Math.sin(spinner.angleRad);
+
+      const projectTri = (lx: number, ly: number, lz: number): [number, number, number] => {
+        const rx = lx * cosA - lz * sinA;
+        const rz = lx * sinA + lz * cosA;
+        return [spinner.x + rx, spinner.y + ly, rz];
+      };
+
+      type TVtx = [number, number, number];
+      const T: [TVtx, TVtx, TVtx, TVtx] = [
+        projectTri(  0,    -h,        0         ), // 0 top
+        projectTri(  s,  h / 3, -s * inv3       ), // 1 base 1
+        projectTri( -s,  h / 3, -s * inv3       ), // 2 base 2
+        projectTri(  0,  h / 3,  2 * s * inv3   ), // 3 base 3 (front)
+      ];
+
+      type TriFace = { idx: [number, number, number]; color: number };
+      const triFaces: TriFace[] = [
+        { idx: [0, 1, 3], color: TRI_FACE0 },
+        { idx: [0, 3, 2], color: TRI_FACE1 },
+        { idx: [0, 2, 1], color: TRI_FACE2 },
+        { idx: [1, 2, 3], color: TRI_FACE1 }, // base
+      ];
+
+      type VisTriFace = { color: number; x0: number; y0: number; x1: number; y1: number; x2: number; y2: number; avgZ: number };
+      const visTriFaces: VisTriFace[] = [];
+
+      for (const tf of triFaces) {
+        const [i0, i1, i2] = tf.idx;
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const t0 = T[i0]!; const t1 = T[i1]!; const t2 = T[i2]!;
+
+        // 법선 Z 성분
+        const ex1 = t1[0] - t0[0]; const ey1 = t1[1] - t0[1];
+        const ex2 = t2[0] - t0[0]; const ey2 = t2[1] - t0[1];
+        const nz = ex1 * ey2 - ey1 * ex2;
+
+        if (nz >= 0) {
+          const avgZ = (t0[2] + t1[2] + t2[2]) / 3;
+          visTriFaces.push({
+            color: tf.color,
+            x0: t0[0], y0: t0[1],
+            x1: t1[0], y1: t1[1],
+            x2: t2[0], y2: t2[1],
+            avgZ,
+          });
+        }
       }
 
-      const R = def.size / Math.sqrt(3);
-      const TWO_PI_OVER_3 = (2 * Math.PI) / 3;
-      const x0 = spinner.x + R * Math.cos(spinner.angleRad);
-      const y0 = spinner.y + R * Math.sin(spinner.angleRad);
-      const x1 = spinner.x + R * Math.cos(spinner.angleRad + TWO_PI_OVER_3);
-      const y1 = spinner.y + R * Math.sin(spinner.angleRad + TWO_PI_OVER_3);
-      const x2 = spinner.x + R * Math.cos(spinner.angleRad + 2 * TWO_PI_OVER_3);
-      const y2 = spinner.y + R * Math.sin(spinner.angleRad + 2 * TWO_PI_OVER_3);
+      visTriFaces.sort((a, b) => a.avgZ - b.avgZ);
 
-      gfx
-        .clear()
-        .fillStyle(SPINNER_COLOR, spinnerAlpha)
-        .fillTriangle(x0, y0, x1, y1, x2, y2)
-        .setVisible(true);
+      for (const vf of visTriFaces) {
+        gfx.fillStyle(vf.color, 1).fillTriangle(vf.x0, vf.y0, vf.x1, vf.y1, vf.x2, vf.y2);
+      }
     }
 
     // Gate 연출
