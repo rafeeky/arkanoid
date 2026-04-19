@@ -73,6 +73,8 @@ export type AppContext = {
   getScreenState(): Readonly<ScreenState>;
   handlePresentationEvent(event: PresentationEvent): void;
   getVisualEffectController(): import('../presentation/controller/VisualEffectController').VisualEffectController;
+  /** Dev 전용: 진행 중인 intro 를 즉시 스킵한다. IntroSequenceFinished 가 발행되어 Flow 가 RoundIntro 로 전이한다. */
+  skipIntroSequence(): void;
   /** AudioPlayer를 교체한다. GameScene.create 후 PhaserAudioPlayer 주입에 사용. */
   setAudioPlayer(player: IAudioPlayer): void;
   /** 테스트 전용: GameplayController 상태를 직접 교체한다. 프로덕션 코드에서 호출 금지. */
@@ -351,6 +353,10 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     gameplayController.setState(state);
   }
 
+  function skipIntroSequence(): void {
+    visualEffectController.skipIntroSequence(handlePresentationEvent);
+  }
+
   return {
     tick,
     getFlowState,
@@ -360,5 +366,6 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     getVisualEffectController,
     setAudioPlayer,
     _setGameplayState,
+    skipIntroSequence,
   };
 }

@@ -4,7 +4,7 @@ export const GameplayConfigTable: GameplayConfig = {
   initialLives: 3,
   baseBarWidth: 120,
   barMoveSpeed: 420,
-  ballInitialSpeed: 420,
+  ballInitialSpeed: 588,
   ballInitialAngleDeg: -60,
   roundIntroDurationMs: 1500,
   blockHitFlashDurationMs: 120,

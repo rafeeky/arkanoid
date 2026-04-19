@@ -58,7 +58,7 @@ const ITEM_HEIGHT = 12;
 export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
   // HUD 구분선
   const hudDivider = scene.add
-    .rectangle(480, HUD_HEIGHT, 960, 2, 0x444444)
+    .rectangle(360, HUD_HEIGHT, 720, 2, 0x444444)
     .setOrigin(0.5, 0.5)
     .setVisible(false);
 
@@ -73,7 +73,7 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
     .setVisible(false);
 
   const hudLives = scene.add
-    .text(480, 10, 'LIVES  3', {
+    .text(360, 10, 'LIVES  3', {
       fontSize: '20px',
       color: '#ffffff',
       fontFamily: 'monospace',
@@ -82,7 +82,7 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
     .setVisible(false);
 
   const hudRound = scene.add
-    .text(940, 10, 'RD 1', {
+    .text(700, 10, 'RD 1', {
       fontSize: '20px',
       color: '#ffffff',
       fontFamily: 'monospace',
@@ -92,12 +92,12 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
 
   // 바
   const bar = scene.add
-    .rectangle(480, 680, 120, BAR_HEIGHT, 0xffffff)
+    .rectangle(360, 680, 120, BAR_HEIGHT, 0xffffff)
     .setVisible(false);
 
   // 공
   const ball = scene.add
-    .arc(480, 660, BALL_RADIUS, 0, 360, false, 0xffffff)
+    .arc(360, 660, BALL_RADIUS, 0, 360, false, 0xffffff)
     .setVisible(false);
 
   return {

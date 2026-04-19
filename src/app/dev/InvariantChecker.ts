@@ -32,7 +32,7 @@ const BLOCK_HALF_H = 12;
 const BALL_RADIUS = 8;
 
 /** 캔버스 너비 (MovementSystem / CollisionService와 동일) */
-const CANVAS_WIDTH = 960;
+const CANVAS_WIDTH = 720;
 
 /**
  * DefaultInvariantChecker: 5가지 invariant를 검증한다.

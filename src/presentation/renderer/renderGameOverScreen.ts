@@ -20,7 +20,7 @@ export function createGameOverScreenObjects(
   scene: Phaser.Scene,
 ): GameOverScreenObjects {
   const gameOverLabel = scene.add
-    .text(480, 200, '', {
+    .text(360, 200, '', {
       fontSize: '56px',
       color: '#ff4444',
       fontFamily: 'monospace',
@@ -29,7 +29,7 @@ export function createGameOverScreenObjects(
     .setVisible(false);
 
   const finalScoreText = scene.add
-    .text(480, 310, '', {
+    .text(360, 310, '', {
       fontSize: '28px',
       color: '#ffffff',
       fontFamily: 'monospace',
@@ -38,7 +38,7 @@ export function createGameOverScreenObjects(
     .setVisible(false);
 
   const highScoreText = scene.add
-    .text(480, 360, '', {
+    .text(360, 360, '', {
       fontSize: '24px',
       color: '#aaaaaa',
       fontFamily: 'monospace',
@@ -47,7 +47,7 @@ export function createGameOverScreenObjects(
     .setVisible(false);
 
   const newHighScoreText = scene.add
-    .text(480, 410, 'NEW HIGH SCORE!', {
+    .text(360, 410, 'NEW HIGH SCORE!', {
       fontSize: '26px',
       color: '#ffdd44',
       fontFamily: 'monospace',
@@ -56,7 +56,7 @@ export function createGameOverScreenObjects(
     .setVisible(false);
 
   const retryText = scene.add
-    .text(480, 480, '', {
+    .text(360, 360, '', {
       fontSize: '22px',
       color: '#aaaaaa',
       fontFamily: 'monospace',

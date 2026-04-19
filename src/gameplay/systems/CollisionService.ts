@@ -51,7 +51,7 @@ export type CollisionFact =
 
 // --- Constants ---
 
-const CANVAS_WIDTH = 960;
+const CANVAS_WIDTH = 720;
 const CANVAS_HEIGHT = 720;
 const BALL_RADIUS = 8;
 const BLOCK_WIDTH = 64;

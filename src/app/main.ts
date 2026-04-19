@@ -86,7 +86,7 @@ function createGame(appContext: AppContext, devContext: DevContext | undefined):
 
   return new Phaser.Game({
     type: Phaser.AUTO,
-    width: 960,
+    width: 720,
     height: 720,
     backgroundColor: '#000000',
     parent: 'app',

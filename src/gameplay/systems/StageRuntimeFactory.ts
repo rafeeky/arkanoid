@@ -7,7 +7,7 @@ import type { BlockState } from '../state/BlockState';
 const BLOCK_WIDTH = 64;
 const BLOCK_HEIGHT = 24;
 const BLOCK_GRID_START_Y = 80;
-const BLOCK_GRID_LEFT_MARGIN = 40;
+const BLOCK_GRID_LEFT_MARGIN = 56;
 const BLOCK_GAP = 4;
 const BAR_HEIGHT = 16;
 

@@ -300,12 +300,12 @@ describe('ItemFellOffFloor resolution', () => {
 
 describe('Bug C regression: 벽 반사 후 공 위치 스냅', () => {
   const BALL_RADIUS = 8;
-  const CANVAS_WIDTH = 960;
+  const CANVAS_WIDTH = 720;
   const WALL_PUSH_OUT_EPSILON = 0.5;
 
   it('우측 벽 충돌 후 ball.x는 벽 안쪽으로 스냅된다', () => {
     // 고속 이동으로 벽을 overshoot한 상태 (x > CANVAS_WIDTH - BALL_RADIUS)
-    const ball = activeBall({ x: 965, y: 300, vx: 400, vy: -200 });
+    const ball = activeBall({ x: 725, y: 300, vx: 400, vy: -200 });
     const state = makeState({ balls: [ball] });
     const facts: CollisionFact[] = [{ type: 'BallHitWall', ballId: 'ball_0', side: 'right' }];
     const { nextState } = applyCollisions(state, facts, tables);

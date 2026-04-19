@@ -27,12 +27,12 @@ import type { BlockState } from '../state/BlockState';
 const BALL_RADIUS = 8;
 const BLOCK_WIDTH = 64;
 const BLOCK_HEIGHT = 24;
-const CANVAS_WIDTH = 960;
+const CANVAS_WIDTH = 720;
 const CANVAS_HEIGHT = 720;
 
 // Stage 1 grid layout (from StageRuntimeFactory + stage1.json)
 const BLOCK_GRID_START_Y = 80;
-const BLOCK_GRID_LEFT_MARGIN = 40;
+const BLOCK_GRID_LEFT_MARGIN = 56;
 const BLOCK_GAP = 4;
 
 // ---------------------------------------------------------------------------

@@ -17,7 +17,7 @@ import type { BlockState } from '../state/BlockState';
 const BALL_RADIUS = 8;
 const BLOCK_WIDTH = 64;
 const BLOCK_HEIGHT = 24;
-const CANVAS_WIDTH = 960;
+const CANVAS_WIDTH = 720;
 
 // --- Helpers ---
 

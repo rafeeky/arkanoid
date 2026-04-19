@@ -83,6 +83,16 @@ export class GameScene extends Phaser.Scene {
     const dt = deltaMs / 1000;
     const input = this.keyboardInputSource.readSnapshot();
 
+    // Dev 모드 전용: introStory 중 space 입력이면 즉시 intro 스킵.
+    // appContext.tick() 호출 전에 처리해 이번 틱에 바로 RoundIntro 로 전이.
+    if (
+      this.devContext !== undefined &&
+      input.spaceJustPressed &&
+      this.appContext.getFlowState().kind === 'introStory'
+    ) {
+      this.appContext.skipIntroSequence();
+    }
+
     // AppContext.tick() 내부에서 ScreenDirector.update 도 호출됨
     this.appContext.tick(input, dt);
 

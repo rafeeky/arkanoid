@@ -13,7 +13,7 @@ export function createRoundIntroScreenObjects(
   scene: Phaser.Scene,
 ): RoundIntroScreenObjects {
   const roundLabel = scene.add
-    .text(480, 300, '', {
+    .text(360, 300, '', {
       fontSize: '48px',
       color: '#ffffff',
       fontFamily: 'monospace',
@@ -22,7 +22,7 @@ export function createRoundIntroScreenObjects(
     .setVisible(false);
 
   const readyLabel = scene.add
-    .text(480, 380, '', {
+    .text(360, 380, '', {
       fontSize: '32px',
       color: '#aaffaa',
       fontFamily: 'monospace',

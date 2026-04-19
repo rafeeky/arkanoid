@@ -17,7 +17,7 @@ export function createGameClearScreenObjects(
   scene: Phaser.Scene,
 ): GameClearScreenObjects {
   const headlineText = scene.add
-    .text(480, 200, '', {
+    .text(360, 200, '', {
       fontSize: '52px',
       color: '#ffdd44',
       fontFamily: 'monospace',
@@ -26,7 +26,7 @@ export function createGameClearScreenObjects(
     .setVisible(false);
 
   const finalScoreText = scene.add
-    .text(480, 310, '', {
+    .text(360, 310, '', {
       fontSize: '30px',
       color: '#ffffff',
       fontFamily: 'monospace',
@@ -35,7 +35,7 @@ export function createGameClearScreenObjects(
     .setVisible(false);
 
   const highScoreText = scene.add
-    .text(480, 370, '', {
+    .text(360, 370, '', {
       fontSize: '24px',
       color: '#aaaaaa',
       fontFamily: 'monospace',
@@ -44,7 +44,7 @@ export function createGameClearScreenObjects(
     .setVisible(false);
 
   const retryText = scene.add
-    .text(480, 460, '', {
+    .text(360, 460, '', {
       fontSize: '22px',
       color: '#aaaaaa',
       fontFamily: 'monospace',

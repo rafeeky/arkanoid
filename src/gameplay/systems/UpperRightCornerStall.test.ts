@@ -16,7 +16,7 @@ import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
 
 const BALL_RADIUS = 8;
-const CANVAS_WIDTH = 960;
+const CANVAS_WIDTH = 720;
 const BLOCK_WIDTH = 64;
 const BLOCK_HEIGHT = 24;
 

@@ -13,7 +13,7 @@ export type TitleScreenObjects = {
  */
 export function createTitleScreenObjects(scene: Phaser.Scene): TitleScreenObjects {
   const logo = scene.add
-    .text(480, 200, 'ARKANOID', {
+    .text(360, 200, 'ARKANOID', {
       fontSize: '64px',
       color: '#ffffff',
       fontFamily: 'monospace',
@@ -22,7 +22,7 @@ export function createTitleScreenObjects(scene: Phaser.Scene): TitleScreenObject
     .setVisible(false);
 
   const startText = scene.add
-    .text(480, 360, '', {
+    .text(360, 360, '', {
       fontSize: '24px',
       color: '#ffffff',
       fontFamily: 'monospace',
@@ -31,7 +31,7 @@ export function createTitleScreenObjects(scene: Phaser.Scene): TitleScreenObject
     .setVisible(false);
 
   const highScoreText = scene.add
-    .text(480, 430, '', {
+    .text(360, 430, '', {
       fontSize: '20px',
       color: '#ffff00',
       fontFamily: 'monospace',

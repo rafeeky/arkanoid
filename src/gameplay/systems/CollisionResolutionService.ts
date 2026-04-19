@@ -41,7 +41,7 @@ type ApplyOptions = {
 
 // --- Playfield geometry constants (mirror of CollisionService to avoid cross-import) ---
 
-const CANVAS_WIDTH = 960;
+const CANVAS_WIDTH = 720;
 const BALL_RADIUS = 8;
 
 /**

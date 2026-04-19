@@ -20,7 +20,7 @@ const BLOCK_WIDTH = 64;
 const BLOCK_HEIGHT = 24;
 const BALL_RADIUS = 8;
 const CANVAS_HEIGHT = 720;
-const CANVAS_WIDTH = 960;
+const CANVAS_WIDTH = 720;
 
 function isBallCenterInsideBlock(ball: BallState, block: BlockState): boolean {
   if (block.isDestroyed) return false;

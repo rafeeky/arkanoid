@@ -6,7 +6,7 @@ import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
 import type { BallHitBlockFact, BallHitWallFact } from './CollisionService';
 import { enforceMinAngle } from './CollisionResolutionService';
 
-const CANVAS_WIDTH = 960;
+const CANVAS_WIDTH = 720;
 const CANVAS_HEIGHT = 720;
 const BAR_HEIGHT = 16;
 const BALL_RADIUS = 8;

@@ -14,12 +14,12 @@ export function createIntroStoryScreenObjects(
   scene: Phaser.Scene,
 ): IntroStoryScreenObjects {
   const storyText = scene.add
-    .text(480, 300, '', {
+    .text(360, 300, '', {
       fontSize: '28px',
       color: '#e0e0e0',
       fontFamily: 'monospace',
       align: 'center',
-      wordWrap: { width: 760 },
+      wordWrap: { width: 640 },
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);

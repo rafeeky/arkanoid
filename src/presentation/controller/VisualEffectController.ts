@@ -95,6 +95,20 @@ export class VisualEffectController {
     return this.introPhase;
   }
 
+  /**
+   * skipIntroSequence — 진행 중인 intro 를 즉시 건너뛰고 IntroSequenceFinished 를 발행한다.
+   * dev 모드 사용자가 space 로 intro 를 스킵할 때 호출한다.
+   * 이미 emit 된 상태면 no-op.
+   */
+  skipIntroSequence(emitPresentationEvent: (e: PresentationEvent) => void): void {
+    if (!this.introActive) return;
+    if (this.introFinishedEmitted) return;
+    this.introPhase = 'done';
+    this.introPhaseElapsedMs = 0;
+    this.introFinishedEmitted = true;
+    emitPresentationEvent({ type: 'IntroSequenceFinished' });
+  }
+
   // ────────────────────────────────────────────
   //  Gameplay 이벤트 핸들러
   // ────────────────────────────────────────────
@@ -182,21 +196,12 @@ export class VisualEffectController {
       }
       case 'hold': {
         if (this.introPhaseElapsedMs >= page.holdDurationMs) {
-          this.introPhase = 'erasing';
-          this.introPhaseElapsedMs = 0;
-        }
-        break;
-      }
-      case 'erasing': {
-        const eraseDuration = page.text.length * page.eraseSpeedMs;
-        if (this.introPhaseElapsedMs >= eraseDuration) {
-          // 다음 페이지로 진행하거나 시퀀스 완료
+          // 지우기 연출을 건너뛰고 즉시 다음 페이지 타이핑 또는 done 으로 전이.
           if (this.introPageIndex < this.introPages.length - 1) {
             this.introPageIndex++;
             this.introPhase = 'typing';
             this.introPhaseElapsedMs = 0;
           } else {
-            // 마지막 페이지 erasing 완료 → done
             this.introPhase = 'done';
             this.introPhaseElapsedMs = 0;
             if (!this.introFinishedEmitted) {
@@ -205,6 +210,11 @@ export class VisualEffectController {
             }
           }
         }
+        break;
+      }
+      case 'erasing': {
+        // 현재는 hold 에서 바로 다음 페이지로 전이하므로 erasing 은 사용되지 않음.
+        // (과거 호환 및 향후 복원 대비로 case 는 남겨둔다)
         break;
       }
       case 'done':
