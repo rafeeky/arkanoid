@@ -1,0 +1,33 @@
+import { describe, it, expect } from 'vitest';
+import { validateUITextTable } from './validateUITextTable';
+import { UITextTable } from '../tables/UITextTable';
+
+describe('validateUITextTable', () => {
+  it('passes with the full UITextTable', () => {
+    const result = validateUITextTable(UITextTable);
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('fails when a required key is missing', () => {
+    const stripped = UITextTable.filter((e) => e.textId !== 'txt_gameover');
+    const result = validateUITextTable(stripped);
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('txt_gameover'))).toBe(true);
+  });
+
+  it('fails when multiple required keys are missing', () => {
+    const stripped = UITextTable.filter(
+      (e) => e.textId !== 'txt_title_start' && e.textId !== 'txt_retry'
+    );
+    const result = validateUITextTable(stripped);
+    expect(result.isValid).toBe(false);
+    expect(result.errors.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('fails on an empty table', () => {
+    const result = validateUITextTable([]);
+    expect(result.isValid).toBe(false);
+    expect(result.errors.length).toBe(8);
+  });
+});
