@@ -9,19 +9,122 @@
   "ballInitialSpeed": 588,
   "ballInitialAngleDeg": -60,
   "blocks": [
-    { "row": 0, "col": 1, "definitionId": "basic" },
-    { "row": 0, "col": 3, "definitionId": "magnet_drop" },
-    { "row": 0, "col": 5, "definitionId": "basic" },
-    { "row": 0, "col": 7, "definitionId": "laser_drop" },
-    { "row": 1, "col": 2, "definitionId": "basic" },
-    { "row": 1, "col": 4, "definitionId": "basic_drop" },
-    { "row": 1, "col": 6, "definitionId": "basic" },
-    { "row": 1, "col": 8, "definitionId": "basic" },
-    { "row": 2, "col": 1, "definitionId": "basic" },
-    { "row": 2, "col": 8, "definitionId": "basic" }
+    {
+      "row": 0,
+      "col": 0,
+      "definitionId": "basic"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "definitionId": "basic"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "definitionId": "basic"
+    },
+    {
+      "row": 0,
+      "col": 4,
+      "definitionId": "basic"
+    },
+    {
+      "row": 0,
+      "col": 6,
+      "definitionId": "basic"
+    },
+    {
+      "row": 0,
+      "col": 7,
+      "definitionId": "basic"
+    },
+    {
+      "row": 0,
+      "col": 8,
+      "definitionId": "laser_drop"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "definitionId": "laser_drop"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "definitionId": "basic_drop"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "definitionId": "basic"
+    },
+    {
+      "row": 1,
+      "col": 4,
+      "definitionId": "basic"
+    },
+    {
+      "row": 1,
+      "col": 6,
+      "definitionId": "basic"
+    },
+    {
+      "row": 1,
+      "col": 7,
+      "definitionId": "magnet_drop"
+    },
+    {
+      "row": 1,
+      "col": 8,
+      "definitionId": "basic"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "definitionId": "basic"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "definitionId": "magnet_drop"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "definitionId": "basic"
+    },
+    {
+      "row": 2,
+      "col": 4,
+      "definitionId": "basic"
+    },
+    {
+      "row": 2,
+      "col": 6,
+      "definitionId": "basic"
+    },
+    {
+      "row": 2,
+      "col": 7,
+      "definitionId": "basic_drop"
+    },
+    {
+      "row": 2,
+      "col": 8,
+      "definitionId": "basic"
+    }
   ],
   "spinners": [
-    { "definitionId": "spinner_cube", "x": 200, "y": 400 },
-    { "definitionId": "spinner_triangle", "x": 520, "y": 400 }
+    {
+      "definitionId": "spinner_cube",
+      "x": 437,
+      "y": 9
+    },
+    {
+      "definitionId": "spinner_cube",
+      "x": 282,
+      "y": 8
+    }
   ]
 }
