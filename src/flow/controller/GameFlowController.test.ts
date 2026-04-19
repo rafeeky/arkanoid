@@ -39,35 +39,35 @@ describe('GameFlowController — 통합 시나리오', () => {
       // Title → RoundIntro
       controller.handleInput(snapSpace);
       expect(controller.getState().kind).toBe('roundIntro');
-      expect(events.at(-1)).toEqual({ type: 'EnteredRoundIntro' });
+      expect(events.at(-1)).toEqual({ type: 'EnteredRoundIntro', from: 'title' });
 
       // RoundIntro → InGame
       const roundIntroFinished: PresentationEvent = { type: 'RoundIntroFinished' };
       controller.handlePresentationEvent(roundIntroFinished);
       expect(controller.getState().kind).toBe('inGame');
-      expect(events.at(-1)).toEqual({ type: 'EnteredInGame' });
+      expect(events.at(-1)).toEqual({ type: 'EnteredInGame', from: 'roundIntro' });
 
       // InGame → RoundIntro (LifeLost, lives=1)
       const lifeLost1: GameplayEvent = { type: 'LifeLost', remainingLives: 1 };
       controller.handleGameplayEvent(lifeLost1);
       expect(controller.getState().kind).toBe('roundIntro');
-      expect(events.at(-1)).toEqual({ type: 'EnteredRoundIntro' });
+      expect(events.at(-1)).toEqual({ type: 'EnteredRoundIntro', from: 'inGame' });
 
       // RoundIntro → InGame (다시)
       controller.handlePresentationEvent(roundIntroFinished);
       expect(controller.getState().kind).toBe('inGame');
-      expect(events.at(-1)).toEqual({ type: 'EnteredInGame' });
+      expect(events.at(-1)).toEqual({ type: 'EnteredInGame', from: 'roundIntro' });
 
       // InGame → GameOver (LifeLost, lives=0 → Controller가 GameOverConditionMet으로 변환)
       const lifeLost0: GameplayEvent = { type: 'LifeLost', remainingLives: 0 };
       controller.handleGameplayEvent(lifeLost0);
       expect(controller.getState().kind).toBe('gameOver');
-      expect(events.at(-1)).toEqual({ type: 'EnteredGameOver' });
+      expect(events.at(-1)).toEqual({ type: 'EnteredGameOver', from: 'inGame' });
 
       // GameOver → Title (스페이스)
       controller.handleInput(snapSpace);
       expect(controller.getState().kind).toBe('title');
-      expect(events.at(-1)).toEqual({ type: 'EnteredTitle' });
+      expect(events.at(-1)).toEqual({ type: 'EnteredTitle', from: 'gameOver' });
     });
 
     it('각 전이마다 Entered 이벤트가 정확히 1회 발행됨', () => {
@@ -79,10 +79,10 @@ describe('GameFlowController — 통합 시나리오', () => {
       controller.handleInput(snapSpace); // → title
 
       expect(events).toEqual([
-        { type: 'EnteredRoundIntro' },
-        { type: 'EnteredInGame' },
-        { type: 'EnteredGameOver' },
-        { type: 'EnteredTitle' },
+        { type: 'EnteredRoundIntro', from: 'title' },
+        { type: 'EnteredInGame', from: 'roundIntro' },
+        { type: 'EnteredGameOver', from: 'inGame' },
+        { type: 'EnteredTitle', from: 'gameOver' },
       ]);
     });
   });
@@ -98,7 +98,7 @@ describe('GameFlowController — 통합 시나리오', () => {
       controller.handleGameplayEvent(stageCleared);
 
       expect(controller.getState().kind).toBe('title');
-      expect(events.at(-1)).toEqual({ type: 'EnteredTitle' });
+      expect(events.at(-1)).toEqual({ type: 'EnteredTitle', from: 'inGame' });
     });
   });
 
@@ -151,15 +151,15 @@ describe('GameFlowController — 통합 시나리오', () => {
 
       controller.handleInput(snapSpace); // → roundIntro
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(listener).toHaveBeenLastCalledWith({ type: 'EnteredRoundIntro' });
+      expect(listener).toHaveBeenLastCalledWith({ type: 'EnteredRoundIntro', from: 'title' });
 
       controller.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
       expect(listener).toHaveBeenCalledTimes(2);
-      expect(listener).toHaveBeenLastCalledWith({ type: 'EnteredInGame' });
+      expect(listener).toHaveBeenLastCalledWith({ type: 'EnteredInGame', from: 'roundIntro' });
 
       controller.handleGameplayEvent({ type: 'StageCleared' }); // → title
       expect(listener).toHaveBeenCalledTimes(3);
-      expect(listener).toHaveBeenLastCalledWith({ type: 'EnteredTitle' });
+      expect(listener).toHaveBeenLastCalledWith({ type: 'EnteredTitle', from: 'inGame' });
     });
   });
 });

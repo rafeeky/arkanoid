@@ -31,6 +31,15 @@ export class GameplayController {
   }
 
   /**
+   * 외부에서 상태를 교체한다.
+   * AppContext 의 GameplayLifecycleHandler 가 새 스테이지 초기화 또는
+   * 재시도 리셋 시 사용한다.
+   */
+  setState(newState: GameplayRuntimeState): void {
+    this.state = newState;
+  }
+
+  /**
    * Advances the simulation by one tick.
    * Returns the Gameplay events emitted this tick.
    *

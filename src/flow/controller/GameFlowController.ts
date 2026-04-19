@@ -93,7 +93,8 @@ export class GameFlowController {
   }
 
   private applyCommand(command: FlowCommand): void {
-    const next = nextState(this.state.kind, command);
+    const from = this.state.kind;
+    const next = nextState(from, command);
     if (next === null) return;
 
     const nextStageIndex =
@@ -104,6 +105,6 @@ export class GameFlowController {
       currentStageIndex: nextStageIndex,
     };
 
-    this.listener(onEnter(next));
+    this.listener(onEnter(next, from));
   }
 }
