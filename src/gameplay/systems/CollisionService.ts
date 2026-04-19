@@ -230,6 +230,29 @@ export type SweptBlockHit = {
   block: BlockState;
   /** Which face was hit */
   side: 'left' | 'right' | 'top' | 'bottom';
+  /**
+   * When true, the hit was detected because the ball centre was already inside
+   * the expanded AABB at the start of this sweep (tEntry <= 0).
+   * The caller MUST push the ball to the actual expanded AABB boundary rather
+   * than relying on the tiny epsilon nudge from the contact point.
+   */
+  alreadyInside: boolean;
+  /**
+   * The expanded AABB boundaries used for this hit.
+   * Provided so the caller can compute the exact push-out position.
+   */
+  expandedBounds: {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  };
+  /**
+   * When the normal components on both axes are nearly equal (corner approach),
+   * both axes should be reflected.  This flag is set when
+   * |txEntry - tyEntry| < CORNER_THRESHOLD.
+   */
+  isCorner: boolean;
 };
 
 /**
@@ -249,6 +272,13 @@ export type SweptBlockHit = {
  * We solve four slab entry times and take the largest (entry), compare with
  * the smallest (exit).  If entry < exit and entry ≤ 1 we have a hit.
  */
+/**
+ * When |txEntry - tyEntry| is smaller than this threshold (in normalised
+ * sweep-time units) the ball is considered to be hitting a corner — both
+ * velocity components will be reversed by the caller.
+ */
+const CORNER_THRESHOLD = 0.02;
+
 function sweepBallVsBlock(
   x0: number,
   y0: number,
@@ -264,6 +294,8 @@ function sweepBallVsBlock(
   const right  = block.x + BLOCK_WIDTH  + BALL_RADIUS;
   const top    = block.y             - BALL_RADIUS;
   const bottom = block.y + BLOCK_HEIGHT + BALL_RADIUS;
+
+  const expandedBounds = { left, right, top, bottom };
 
   // Slab method — compute entry/exit times for x and y axes separately
   let txEntry: number;
@@ -306,10 +338,63 @@ function sweepBallVsBlock(
   // (tEntry <= 0), we use t=0 but still determine the side so we can push
   // out immediately.
   const t = Math.max(0, tEntry);
+  const alreadyInside = tEntry <= 0;
 
-  // Determine hit side from which axis had the later entry
+  // Determine hit side.
+  // For the normal case (tEntry > 0): the constraining slab (larger txEntry/tyEntry)
+  // determines the hit face.
+  // For the already-inside case (tEntry <= 0): use the velocity direction to pick
+  // the face the ball is moving TOWARD (shortest exit distance in velocity direction).
+  // This fixes the bug where the old code reflected the wrong axis and sent the ball
+  // deeper into the block body.
   let side: 'left' | 'right' | 'top' | 'bottom';
-  if (txEntry > tyEntry) {
+  const isCorner = !alreadyInside && Math.abs(txEntry - tyEntry) < CORNER_THRESHOLD;
+
+  if (alreadyInside) {
+    // Determine the face the ball entered from by finding the minimum
+    // penetration depth in the direction OPPOSITE to the ball's velocity.
+    //
+    // If vy > 0 (moving down), the ball came from above → entered TOP face.
+    //   Entry penetration on y = y0 - top  (how far it has crossed the top boundary)
+    // If vy < 0 (moving up), the ball came from below → entered BOTTOM face.
+    //   Entry penetration on y = bottom - y0
+    // Likewise for x.
+    //
+    // We pick the axis with the smallest entry penetration — the face through
+    // which the ball most recently entered — and push it back out through that face.
+    let xPenetration = Infinity;
+    let yPenetration = Infinity;
+    let xSideEntry: 'left' | 'right' = 'left';
+    let ySideEntry: 'top' | 'bottom' = 'top';
+
+    if (dx !== 0) {
+      if (vx > 0) {
+        // Moving right → entered from LEFT face
+        xPenetration = x0 - left;
+        xSideEntry = 'left';
+      } else {
+        // Moving left → entered from RIGHT face
+        xPenetration = right - x0;
+        xSideEntry = 'right';
+      }
+    }
+
+    if (dy !== 0) {
+      if (vy > 0) {
+        // Moving down → entered from TOP face
+        yPenetration = y0 - top;
+        ySideEntry = 'top';
+      } else {
+        // Moving up → entered from BOTTOM face
+        yPenetration = bottom - y0;
+        ySideEntry = 'bottom';
+      }
+    }
+
+    // Push out through the face with the smallest penetration depth
+    // (the face the ball entered most recently / most shallowly).
+    side = xPenetration <= yPenetration ? xSideEntry : ySideEntry;
+  } else if (txEntry > tyEntry) {
     // x-axis was the constraining slab
     side = dx > 0 ? 'left' : 'right';
   } else {
@@ -317,7 +402,7 @@ function sweepBallVsBlock(
     side = dy > 0 ? 'top' : 'bottom';
   }
 
-  return { t, block, side };
+  return { t, block, side, alreadyInside, expandedBounds, isCorner };
 }
 
 /**

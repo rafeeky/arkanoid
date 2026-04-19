@@ -3,11 +3,12 @@ import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
 import type { ItemDropState } from '../state/ItemDropState';
 import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
-import type { BallHitBlockFact } from './CollisionService';
+import type { BallHitBlockFact, BallHitWallFact } from './CollisionService';
 import { sweepBallVsBlocks } from './CollisionService';
 import { enforceMinAngle } from './CollisionResolutionService';
 
 const CANVAS_WIDTH = 960;
+const CANVAS_HEIGHT = 720;
 const BAR_HEIGHT = 16;
 const BALL_RADIUS = 8;
 const BLOCK_WIDTH = 64;
@@ -66,23 +67,28 @@ export type BallMoveResult = {
   ball: BallState;
   /** BallHitBlock facts accumulated during this tick (0..MAX_BOUNCE_COUNT) */
   blockFacts: BallHitBlockFact[];
+  /** BallHitWall facts accumulated during this tick (walls handled inside swept loop) */
+  wallFacts: BallHitWallFact[];
 };
 
 /**
- * Moves the ball for the given dt using swept AABB collision against the
- * provided block list.
+ * Moves the ball for the given dt using swept AABB collision against blocks
+ * AND playfield walls (left, right, top).
  *
  * Algorithm (per-tick):
- *   1. Compute earliest swept hit among active blocks for remaining dt.
+ *   1. Compute earliest swept hit among active blocks AND walls for remaining dt.
  *   2. If hit within remaining dt:
- *      a. Advance ball to the hit position (t * remaining dt).
- *      b. Reflect the velocity on the hit axis.
- *      c. Accumulate a BallHitBlockFact.
- *      d. Subtract elapsed time from remaining dt and repeat (up to MAX_BOUNCE_COUNT).
+ *      a. Advance ball to the hit position.
+ *      b. Reflect the velocity on the hit axis (both axes for corner hits).
+ *      c. Push ball strictly outside the boundary (expanded AABB boundary for
+ *         blocks, wall boundary for walls).
+ *      d. Accumulate a fact.
+ *      e. Subtract elapsed time from remaining dt and repeat (up to MAX_BOUNCE_COUNT).
  *   3. If no hit, advance ball by the remaining dt and stop.
  *
- * Wall / Bar collisions are intentionally NOT handled here; they continue to
- * be handled by detectCollisions / applyCollisions in the normal pipeline.
+ * Walls are handled here (instead of the post-tick detectCollisions pipeline)
+ * to prevent the ball from escaping the playfield during a single tick when a
+ * block and a wall are hit in the same frame.
  *
  * @param ball    Current ball state (inactive balls are returned unchanged)
  * @param dt      Time delta for this tick (seconds)
@@ -94,20 +100,27 @@ export function moveBallWithCollisions(
   blocks: BlockState[],
 ): BallMoveResult {
   if (!ball.isActive) {
-    return { ball, blockFacts: [] };
+    return { ball, blockFacts: [], wallFacts: [] };
   }
 
   const blockFacts: BallHitBlockFact[] = [];
+  const wallFacts: BallHitWallFact[] = [];
   // Track which blocks have already been reflected this tick to prevent the
   // same block from flipping the velocity more than once (sign-flip bug).
   const hitBlockIds = new Set<string>();
+  // Track which walls have been hit this tick to prevent duplicate reflections.
+  const hitWalls = new Set<'left' | 'right' | 'top'>();
   let current = ball;
   let remaining = dt;
 
   for (let bounce = 0; bounce < MAX_BOUNCE_COUNT; bounce++) {
     if (remaining <= 0) break;
 
-    const hit = sweepBallVsBlocks(
+    // --- Compute earliest wall hit ---
+    const wallHit = sweepBallVsWalls(current.x, current.y, current.vx, current.vy, remaining);
+
+    // --- Compute earliest block hit ---
+    const blockHit = sweepBallVsBlocks(
       current.x,
       current.y,
       current.vx,
@@ -116,8 +129,19 @@ export function moveBallWithCollisions(
       blocks,
     );
 
-    if (hit === null) {
-      // No more block collisions — advance freely for remaining time
+    // Determine which comes first (wall or block)
+    const wallFirst =
+      wallHit !== null &&
+      (blockHit === null || wallHit.t <= blockHit.t) &&
+      !hitWalls.has(wallHit.side);
+
+    const blockFirst =
+      blockHit !== null &&
+      !hitBlockIds.has(blockHit.block.id) &&
+      (wallHit === null || blockHit.t < wallHit.t || hitWalls.has(wallHit.side));
+
+    if (!wallFirst && !blockFirst) {
+      // No more collisions — advance freely for remaining time
       current = {
         ...current,
         x: current.x + current.vx * remaining,
@@ -127,60 +151,125 @@ export function moveBallWithCollisions(
       break;
     }
 
-    // Skip this block if we have already bounced off it this tick.
-    // This prevents the t=0 re-entry loop where the same block flips the
-    // velocity twice and restores the original direction.
-    if (hitBlockIds.has(hit.block.id)) {
-      // Advance freely for remaining time (treat as if no hit)
-      current = {
-        ...current,
-        x: current.x + current.vx * remaining,
-        y: current.y + current.vy * remaining,
-      };
-      remaining = 0;
-      break;
+    if (wallFirst && wallHit !== null) {
+      // --- Wall collision ---
+      const elapsed = wallHit.t * remaining;
+      let contactX = current.x + current.vx * elapsed;
+      let contactY = current.y + current.vy * elapsed;
+
+      let newVx = current.vx;
+      let newVy = current.vy;
+
+      // Reflect and clamp to boundary
+      if (wallHit.side === 'left') {
+        newVx = Math.abs(newVx); // ensure positive (moving right)
+        contactX = BALL_RADIUS + BLOCK_PUSH_OUT_EPSILON;
+      } else if (wallHit.side === 'right') {
+        newVx = -Math.abs(newVx); // ensure negative (moving left)
+        contactX = CANVAS_WIDTH - BALL_RADIUS - BLOCK_PUSH_OUT_EPSILON;
+      } else {
+        // top
+        newVy = Math.abs(newVy); // ensure positive (moving down)
+        contactY = BALL_RADIUS + BLOCK_PUSH_OUT_EPSILON;
+      }
+
+      const enforced = enforceMinAngle(newVx, newVy);
+      newVx = enforced.vx;
+      newVy = enforced.vy;
+
+      wallFacts.push({ type: 'BallHitWall', ballId: ball.id, side: wallHit.side });
+      hitWalls.add(wallHit.side);
+      remaining -= elapsed;
+      current = { ...current, x: contactX, y: contactY, vx: newVx, vy: newVy };
+
+    } else if (blockHit !== null) {
+      // --- Block collision ---
+      const elapsed = blockHit.t * remaining;
+      const contactX = current.x + current.vx * elapsed;
+      const contactY = current.y + current.vy * elapsed;
+
+      // Reflect velocity.
+      // Corner hits (isCorner=true) reflect both axes to prevent the ball
+      // from sliding along the corner and tunnelling into the block.
+      let newVx = current.vx;
+      let newVy = current.vy;
+      if (blockHit.isCorner) {
+        // Both axes reversed for corner impact
+        newVx = -newVx;
+        newVy = -newVy;
+      } else if (blockHit.side === 'left' || blockHit.side === 'right') {
+        newVx = -newVx;
+      } else {
+        newVy = -newVy;
+      }
+      const enforced = enforceMinAngle(newVx, newVy);
+      newVx = enforced.vx;
+      newVy = enforced.vy;
+
+      // Position correction.
+      // For normal hits (t > 0): contactX/Y is on the expanded AABB boundary,
+      // so a small epsilon nudge is enough.
+      // For already-inside hits (t = 0): contactX/Y equals the starting position
+      // which is already inside the boundary — we MUST push to the actual
+      // expanded AABB face.
+      let pushX = contactX;
+      let pushY = contactY;
+      const bounds = blockHit.expandedBounds;
+
+      if (blockHit.alreadyInside) {
+        // Push to the actual expanded AABB boundary + epsilon
+        switch (blockHit.side) {
+          case 'top':    pushY = bounds.top    - BLOCK_PUSH_OUT_EPSILON; break;
+          case 'bottom': pushY = bounds.bottom + BLOCK_PUSH_OUT_EPSILON; break;
+          case 'left':   pushX = bounds.left   - BLOCK_PUSH_OUT_EPSILON; break;
+          case 'right':  pushX = bounds.right  + BLOCK_PUSH_OUT_EPSILON; break;
+        }
+      } else {
+        // contactX/Y is already on the boundary; just nudge by epsilon
+        switch (blockHit.side) {
+          case 'top':    pushY = contactY - BLOCK_PUSH_OUT_EPSILON; break;
+          case 'bottom': pushY = contactY + BLOCK_PUSH_OUT_EPSILON; break;
+          case 'left':   pushX = contactX - BLOCK_PUSH_OUT_EPSILON; break;
+          case 'right':  pushX = contactX + BLOCK_PUSH_OUT_EPSILON; break;
+        }
+      }
+
+      // For corner hits, push out on both axes
+      if (blockHit.isCorner) {
+        // Apply push in the direction the ball came from on each axis
+        if (current.vx > 0) {
+          pushX = bounds.right + BLOCK_PUSH_OUT_EPSILON;
+        } else if (current.vx < 0) {
+          pushX = bounds.left - BLOCK_PUSH_OUT_EPSILON;
+        }
+        if (current.vy > 0) {
+          pushY = bounds.bottom + BLOCK_PUSH_OUT_EPSILON;
+        } else if (current.vy < 0) {
+          pushY = bounds.top - BLOCK_PUSH_OUT_EPSILON;
+        }
+      }
+
+      blockFacts.push({
+        type: 'BallHitBlock',
+        ballId: ball.id,
+        blockId: blockHit.block.id,
+        side: blockHit.side,
+      });
+
+      hitBlockIds.add(blockHit.block.id);
+
+      if (blockHit.alreadyInside) {
+        // The ball was already inside the expanded AABB at the start of this
+        // sweep (missed by previous tick).  The push-out corrects the position;
+        // consuming the remaining time prevents the free-advance from moving
+        // the ball back inside the expanded AABB and producing a re-hit next tick.
+        remaining = 0;
+      } else {
+        remaining -= elapsed;
+      }
+
+      current = { ...current, x: pushX, y: pushY, vx: newVx, vy: newVy };
     }
-
-    // Advance ball to the exact contact point
-    const elapsed = hit.t * remaining;
-    const contactX = current.x + current.vx * elapsed;
-    const contactY = current.y + current.vy * elapsed;
-
-    // Reflect velocity on the hit axis and enforce minimum angle
-    let newVx = current.vx;
-    let newVy = current.vy;
-    if (hit.side === 'left' || hit.side === 'right') {
-      newVx = -newVx;
-    } else {
-      newVy = -newVy;
-    }
-    const enforced = enforceMinAngle(newVx, newVy);
-    newVx = enforced.vx;
-    newVy = enforced.vy;
-
-    // Position correction: push the ball out by epsilon along the collision
-    // normal so the centre is strictly outside the expanded AABB boundary.
-    // Without this nudge, the centre lands exactly on the boundary and the
-    // very next sweep iteration sees tExit > 0 → spurious second hit.
-    let pushX = contactX;
-    let pushY = contactY;
-    switch (hit.side) {
-      case 'top':    pushY = contactY - BLOCK_PUSH_OUT_EPSILON; break;
-      case 'bottom': pushY = contactY + BLOCK_PUSH_OUT_EPSILON; break;
-      case 'left':   pushX = contactX - BLOCK_PUSH_OUT_EPSILON; break;
-      case 'right':  pushX = contactX + BLOCK_PUSH_OUT_EPSILON; break;
-    }
-
-    blockFacts.push({
-      type: 'BallHitBlock',
-      ballId: ball.id,
-      blockId: hit.block.id,
-      side: hit.side,
-    });
-
-    hitBlockIds.add(hit.block.id);
-    remaining -= elapsed;
-    current = { ...current, x: pushX, y: pushY, vx: newVx, vy: newVy };
   }
 
   // If we hit the bounce cap and there is still time left, just free-advance
@@ -193,7 +282,85 @@ export function moveBallWithCollisions(
     };
   }
 
-  return { ball: current, blockFacts };
+  // Final wall clamp — safety net ensuring the ball cannot escape the playfield
+  // regardless of floating-point accumulation.
+  current = clampBallToPlayfield(current);
+
+  return { ball: current, blockFacts, wallFacts };
+}
+
+// ---------------------------------------------------------------------------
+// Wall swept collision helpers
+// ---------------------------------------------------------------------------
+
+type WallHit = {
+  t: number;
+  side: 'left' | 'right' | 'top';
+};
+
+/**
+ * Computes the earliest wall collision time for the ball sweep.
+ * Only left, right, and top walls are bouncing surfaces.
+ * The bottom (floor) is a loss condition, not a wall.
+ */
+function sweepBallVsWalls(
+  x0: number,
+  y0: number,
+  vx: number,
+  vy: number,
+  dt: number,
+): WallHit | null {
+  let earliest: WallHit | null = null;
+
+  function checkWall(t: number, side: 'left' | 'right' | 'top'): void {
+    if (t > 0 && t <= 1 && (earliest === null || t < (earliest as WallHit).t)) {
+      earliest = { t, side };
+    }
+  }
+
+  // Left wall: ball centre must reach x = BALL_RADIUS
+  if (vx < 0) {
+    checkWall((BALL_RADIUS - x0) / (vx * dt), 'left');
+  }
+
+  // Right wall: ball centre must reach x = CANVAS_WIDTH - BALL_RADIUS
+  if (vx > 0) {
+    checkWall((CANVAS_WIDTH - BALL_RADIUS - x0) / (vx * dt), 'right');
+  }
+
+  // Top wall: ball centre must reach y = BALL_RADIUS
+  if (vy < 0) {
+    checkWall((BALL_RADIUS - y0) / (vy * dt), 'top');
+  }
+
+  return earliest;
+}
+
+/**
+ * Clamps the ball position to playfield bounds [BALL_RADIUS, CANVAS_WIDTH-BALL_RADIUS]
+ * on x-axis and [BALL_RADIUS, CANVAS_HEIGHT] on y-axis (floor is open).
+ * Also ensures velocity points inward if ball is at a boundary.
+ */
+function clampBallToPlayfield(ball: BallState): BallState {
+  let { x, y, vx, vy } = ball;
+
+  if (x - BALL_RADIUS < 0) {
+    x = BALL_RADIUS + BLOCK_PUSH_OUT_EPSILON;
+    if (vx < 0) vx = -vx;
+  } else if (x + BALL_RADIUS > CANVAS_WIDTH) {
+    x = CANVAS_WIDTH - BALL_RADIUS - BLOCK_PUSH_OUT_EPSILON;
+    if (vx > 0) vx = -vx;
+  }
+
+  if (y - BALL_RADIUS < 0) {
+    y = BALL_RADIUS + BLOCK_PUSH_OUT_EPSILON;
+    if (vy < 0) vy = -vy;
+  }
+
+  if (x === ball.x && y === ball.y && vx === ball.vx && vy === ball.vy) {
+    return ball; // no change
+  }
+  return { ...ball, x, y, vx, vy };
 }
 
 // ---------------------------------------------------------------------------
@@ -376,6 +543,18 @@ export function sanityCheckBallBlockSeparation(
       blockId: block.id,
       side,
     };
+
+    // Dev-mode diagnostic: log sanity-check corrections so players can share
+    // console output when a tunnel-through bug is reported.
+    // process.env.NODE_ENV is set to 'production' by bundlers for prod builds.
+    if (typeof process !== 'undefined' && process.env['NODE_ENV'] !== 'production') {
+      console.warn(
+        `[SANITY CHECK] ball ${ball.id} inside block ${block.id} at` +
+        ` (${ball.x.toFixed(2)}, ${ball.y.toFixed(2)})` +
+        ` vx=${ball.vx.toFixed(1)} vy=${ball.vy.toFixed(1)}` +
+        ` pushed to (${newX.toFixed(2)}, ${newY.toFixed(2)}) side=${side}`,
+      );
+    }
 
     return { ball: correctedBall, wasInside: true, collisionFact };
   }

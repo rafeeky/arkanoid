@@ -8,7 +8,7 @@ import type { GameplayEvent } from '../events/gameplayEvents';
 import { resolveGameplayCommands } from './InputCommandResolver';
 import { moveBar, moveBallWithCollisions, moveItemDrop, moveAttachedBallToBar, sanityCheckBallBlockSeparation } from '../systems/MovementSystem';
 import { detectCollisions } from '../systems/CollisionService';
-import type { BallHitBlockFact } from '../systems/CollisionService';
+import type { BallHitBlockFact, BallHitWallFact } from '../systems/CollisionService';
 import { applyCollisions } from '../systems/CollisionResolutionService';
 import { judgeStageOutcome } from '../systems/StageRuleService';
 
@@ -78,15 +78,19 @@ export class GameplayController {
     const newBar = moveBar(this.state.bar, moveDirection, dt, this.deps.config);
     const currentBlocks = this.state.blocks;
 
-    // Block collisions are resolved inside moveBallWithCollisions (swept AABB).
-    // Wall / Bar collisions remain in the detectCollisions pipeline below.
+    // Block and wall collisions are resolved inside moveBallWithCollisions (swept AABB).
+    // Bar / item collisions remain in the detectCollisions pipeline below.
     // After swept movement, a post-tick sanity check pushes the ball out of any
     // block it may have entered due to floating-point drift or extreme dt.
     const accumulatedBlockFacts: BallHitBlockFact[] = [];
+    const accumulatedSweptWallFacts: BallHitWallFact[] = [];
     const newBalls = this.state.balls.map((ball) => {
       const result = moveBallWithCollisions(ball, dt, currentBlocks);
       for (const f of result.blockFacts) {
         accumulatedBlockFacts.push(f);
+      }
+      for (const f of result.wallFacts) {
+        accumulatedSweptWallFacts.push(f);
       }
 
       // Layer 2: post-tick sanity check — defensive last-resort separation.
@@ -115,14 +119,20 @@ export class GameplayController {
       itemDrops: newItemDrops,
     };
 
-    // 5. Detect collisions (wall, bar, item — block facts already gathered above)
+    // 5. Detect collisions (bar, item — block and wall facts already gathered above)
     const pipelineCollisions = detectCollisions(this.state, prevState);
-    // Filter out any BallHitBlock facts from the normal pipeline to avoid
-    // double-processing blocks that were already handled in movement.
-    const wallBarItemCollisions = pipelineCollisions.filter(
-      (f) => f.type !== 'BallHitBlock',
-    );
-    const collisions = [...accumulatedBlockFacts, ...wallBarItemCollisions];
+    // Filter out BallHitBlock facts (handled by swept movement) and
+    // BallHitWall facts for balls whose wall collision was already handled
+    // inside moveBallWithCollisions to avoid double-reflecting the velocity.
+    const sweptWallBallIds = new Set(accumulatedSweptWallFacts.map((f) => f.ballId));
+    const barItemCollisions = pipelineCollisions.filter((f) => {
+      if (f.type === 'BallHitBlock') return false; // already swept
+      if (f.type === 'BallHitWall' && sweptWallBallIds.has(f.ballId)) return false; // already swept
+      return true;
+    });
+    // Wall facts from swept movement need to be included so applyCollisions can
+    // run any side-effects (currently none for walls, but keeps the pipeline consistent).
+    const collisions = [...accumulatedBlockFacts, ...accumulatedSweptWallFacts, ...barItemCollisions];
 
     // 6. Apply collision results
     // Block facts from moveBallWithCollisions have already had their velocity
