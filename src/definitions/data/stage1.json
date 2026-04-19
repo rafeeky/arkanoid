@@ -9,16 +9,15 @@
   "ballInitialSpeed": 588,
   "ballInitialAngleDeg": -60,
   "blocks": [
-    { "row": 0, "col": 2,  "definitionId": "basic" },
-    { "row": 0, "col": 3,  "definitionId": "basic" },
-    { "row": 0, "col": 4,  "definitionId": "basic_drop" },
-    { "row": 0, "col": 5,  "definitionId": "basic" },
-    { "row": 0, "col": 6,  "definitionId": "basic" },
-
-    { "row": 1, "col": 2,  "definitionId": "basic" },
-    { "row": 1, "col": 3,  "definitionId": "basic" },
-    { "row": 1, "col": 4,  "definitionId": "basic" },
-    { "row": 1, "col": 5,  "definitionId": "basic" },
-    { "row": 1, "col": 6,  "definitionId": "basic" }
+    { "row": 0, "col": 2, "definitionId": "basic" },
+    { "row": 0, "col": 3, "definitionId": "basic_drop" },
+    { "row": 0, "col": 4, "definitionId": "magnet_drop" },
+    { "row": 0, "col": 5, "definitionId": "laser_drop" },
+    { "row": 0, "col": 6, "definitionId": "basic" },
+    { "row": 1, "col": 2, "definitionId": "basic" },
+    { "row": 1, "col": 3, "definitionId": "basic" },
+    { "row": 1, "col": 4, "definitionId": "basic" },
+    { "row": 1, "col": 5, "definitionId": "basic" },
+    { "row": 1, "col": 6, "definitionId": "basic" }
   ]
 }

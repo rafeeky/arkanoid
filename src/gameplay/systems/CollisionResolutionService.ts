@@ -264,11 +264,12 @@ function resolveBlock(
 
     // Item drop — only if no item currently on screen
     if (def && def.dropItemType !== 'none' && state.itemDrops.length === 0) {
-      const itemDef = tables.itemDefinitions[def.dropItemType];
+      const dropType = def.dropItemType;
+      const itemDef = tables.itemDefinitions[dropType];
       const fallSpeed = itemDef ? itemDef.fallSpeed : 160;
       const newItem: ItemDropState = {
         id: `item_${block.id}`,
-        itemType: 'expand',
+        itemType: dropType,
         x: block.x + 32, // center of 64px block
         y: block.y + 12, // center of 24px block
         fallSpeed,
@@ -278,7 +279,7 @@ function resolveBlock(
       events.push({
         type: 'ItemSpawned',
         itemId: newItem.id,
-        itemType: 'expand',
+        itemType: dropType,
         x: newItem.x,
         y: newItem.y,
       });

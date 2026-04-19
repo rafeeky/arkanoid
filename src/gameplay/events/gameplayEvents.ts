@@ -26,7 +26,7 @@ export type BlockDestroyedEvent = {
 export type ItemSpawnedEvent = {
   type: 'ItemSpawned';
   itemId: string;
-  itemType: 'expand';
+  itemType: 'expand' | 'magnet' | 'laser';
   x: number;
   y: number;
 };

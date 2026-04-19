@@ -428,14 +428,15 @@ describe('GameplayLifecycleHandler.loadNextStage', () => {
     expect(next.laserShots).toHaveLength(0);
   });
 
-  it('loadNextStage: spinnerStates가 새 스테이지 기반으로 재생성된다 (stage2 spinner 없음)', () => {
+  it('loadNextStage: spinnerStates가 새 스테이지 기반으로 재생성된다 (stage2 spinner 1개)', () => {
     const handler = makeHandler();
     const spinners = [
       { id: 'spinner_0', definitionId: 'spinner_cube', x: 100, y: 200, angleRad: 1.2 },
     ] as const;
     const prev = { ...makeProgressState(), spinnerStates: spinners };
     const next = handler.loadNextStage(prev, stage2, config);
-    // stage2에 spinners 필드가 없으면 빈 배열
-    expect(next.spinnerStates).toHaveLength(0);
+    // stage2에 spinner_cube 1개 — 이전 spinnerStates는 버려지고 새 스테이지 데이터로 재생성된다
+    expect(next.spinnerStates).toHaveLength(1);
+    expect(next.spinnerStates[0]!.definitionId).toBe('spinner_cube');
   });
 });

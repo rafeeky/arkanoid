@@ -21,6 +21,30 @@ describe('validateBlockDefinition', () => {
     expect(result.errors).toHaveLength(0);
   });
 
+  it('passes for the "magnet_drop" block', () => {
+    const result = validateBlockDefinition(BlockDefinitionTable['magnet_drop']!);
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('passes for the "laser_drop" block', () => {
+    const result = validateBlockDefinition(BlockDefinitionTable['laser_drop']!);
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('fails when dropItemType is invalid', () => {
+    const result = validateBlockDefinition({
+      definitionId: 'invalid_drop',
+      maxHits: 1,
+      score: 10,
+      dropItemType: 'unknown' as 'none',
+      visualId: 'block_invalid_drop',
+    });
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('dropItemType'))).toBe(true);
+  });
+
   it('fails when maxHits is 0', () => {
     const result = validateBlockDefinition({
       definitionId: 'invalid',

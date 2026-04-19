@@ -15,6 +15,20 @@ export const BlockDefinitionTable: Record<string, BlockDefinition> = {
     dropItemType: 'expand',
     visualId: 'block_basic_drop',
   },
+  magnet_drop: {
+    definitionId: 'magnet_drop',
+    maxHits: 1,
+    score: 10,
+    dropItemType: 'magnet',
+    visualId: 'block_magnet_drop',
+  },
+  laser_drop: {
+    definitionId: 'laser_drop',
+    maxHits: 1,
+    score: 10,
+    dropItemType: 'laser',
+    visualId: 'block_laser_drop',
+  },
   tough: {
     definitionId: 'tough',
     maxHits: 2,

@@ -11,5 +11,12 @@ export function validateBlockDefinition(def: BlockDefinition): ValidationResult 
     errors.push(`[${def.definitionId}] score must be >= 0, got ${def.score}`);
   }
 
+  const validDropItemTypes: ReadonlyArray<string> = ['none', 'expand', 'magnet', 'laser'];
+  if (!validDropItemTypes.includes(def.dropItemType)) {
+    errors.push(
+      `[${def.definitionId}] dropItemType must be one of [none, expand, magnet, laser], got ${def.dropItemType}`
+    );
+  }
+
   return { isValid: errors.length === 0, errors };
 }
