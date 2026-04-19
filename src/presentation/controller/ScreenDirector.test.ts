@@ -3,6 +3,7 @@ import { ScreenDirector } from './ScreenDirector';
 import { VisualEffectController } from './VisualEffectController';
 import type { GameFlowState } from '../../flow/state/GameFlowState';
 import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
+import type { IntroSequenceEntry } from '../../definitions/types/IntroSequenceEntry';
 import type { PresentationEvent } from '../events/presentationEvents';
 
 const ROUND_INTRO_DURATION = 1500;
@@ -24,7 +25,7 @@ function makeFlow(kind: GameFlowState['kind']): Readonly<GameFlowState> {
 }
 
 function makeDirector(): ScreenDirector {
-  return new ScreenDirector(ROUND_INTRO_DURATION, new VisualEffectController(config));
+  return new ScreenDirector(ROUND_INTRO_DURATION, new VisualEffectController(config, []));
 }
 
 const noEmit = (_e: PresentationEvent): void => {};
@@ -110,7 +111,7 @@ describe('ScreenDirector', () => {
 
   describe('VisualEffectController 통합 — blockHitFlashBlockIds 반영', () => {
     it('BlockHit 이벤트 후 update 시 blockHitFlashBlockIds 에 blockId 가 포함된다', () => {
-      const vfx = new VisualEffectController(config);
+      const vfx = new VisualEffectController(config, []);
       const director = new ScreenDirector(ROUND_INTRO_DURATION, vfx);
 
       vfx.handleGameplayEvent({ type: 'BlockHit', blockId: 'b1', remainingHits: 1 });
@@ -120,7 +121,7 @@ describe('ScreenDirector', () => {
     });
 
     it('플래시 타이머 만료 후 blockHitFlashBlockIds 에서 제거된다', () => {
-      const vfx = new VisualEffectController(config);
+      const vfx = new VisualEffectController(config, []);
       const director = new ScreenDirector(ROUND_INTRO_DURATION, vfx);
 
       vfx.handleGameplayEvent({ type: 'BlockHit', blockId: 'b1', remainingHits: 1 });
@@ -132,7 +133,7 @@ describe('ScreenDirector', () => {
 
   describe('VisualEffectController 통합 — isBarBreaking 반영', () => {
     it('LifeLost 이벤트 후 update 시 isBarBreaking = true', () => {
-      const vfx = new VisualEffectController(config);
+      const vfx = new VisualEffectController(config, []);
       const director = new ScreenDirector(ROUND_INTRO_DURATION, vfx);
 
       vfx.handleGameplayEvent({ type: 'LifeLost', remainingLives: 2 });
@@ -142,7 +143,7 @@ describe('ScreenDirector', () => {
     });
 
     it('700ms 이후 isBarBreaking = false', () => {
-      const vfx = new VisualEffectController(config);
+      const vfx = new VisualEffectController(config, []);
       const director = new ScreenDirector(ROUND_INTRO_DURATION, vfx);
 
       vfx.handleGameplayEvent({ type: 'LifeLost', remainingLives: 2 });
@@ -152,7 +153,7 @@ describe('ScreenDirector', () => {
     });
 
     it('LifeLostPresentationFinished 가 emitPresentationEvent 콜백으로 전달된다', () => {
-      const vfx = new VisualEffectController(config);
+      const vfx = new VisualEffectController(config, []);
       const director = new ScreenDirector(ROUND_INTRO_DURATION, vfx);
 
       vfx.handleGameplayEvent({ type: 'LifeLost', remainingLives: 2 });
@@ -163,5 +164,110 @@ describe('ScreenDirector', () => {
       expect(emitted).toHaveLength(1);
       expect(emitted[0]?.type).toBe('LifeLostPresentationFinished');
     });
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+//  ScreenDirector — introStory 진입 / Intro 상태 반영 테스트
+// ────────────────────────────────────────────────────────────
+
+/** 2페이지 짜리 IntroSequenceTable (VisualEffectController 테스트와 동일 설정) */
+const introPages: IntroSequenceEntry[] = [
+  {
+    pageIndex: 0,
+    text: 'AB',
+    typingSpeedMs: 50,  // typing duration = 100ms
+    holdDurationMs: 200,
+    eraseSpeedMs: 25,   // erasing duration = 50ms
+  },
+  {
+    pageIndex: 1,
+    text: 'CDE',
+    typingSpeedMs: 40,  // typing duration = 120ms
+    holdDurationMs: 300,
+    eraseSpeedMs: 20,   // erasing duration = 60ms
+  },
+];
+
+function makeIntroDirector(): ScreenDirector {
+  return new ScreenDirector(ROUND_INTRO_DURATION, new VisualEffectController(config, introPages));
+}
+
+describe('ScreenDirector — introStory 진입 시 startIntroSequence 호출', () => {
+  it('introStory 에 처음 진입하면 VisualEffectController.startIntroSequence 가 호출된다 (spy)', () => {
+    const vfx = new VisualEffectController(config, introPages);
+    const startSpy = vi.spyOn(vfx, 'startIntroSequence');
+    const director = new ScreenDirector(ROUND_INTRO_DURATION, vfx);
+
+    director.update(makeFlow('introStory'), 0, () => {});
+    expect(startSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('introStory 에서 introStory 로 연속 update 시 startIntroSequence 는 1회만 호출된다', () => {
+    const vfx = new VisualEffectController(config, introPages);
+    const startSpy = vi.spyOn(vfx, 'startIntroSequence');
+    const director = new ScreenDirector(ROUND_INTRO_DURATION, vfx);
+
+    director.update(makeFlow('introStory'), 0, () => {});
+    director.update(makeFlow('introStory'), 16, () => {});
+    director.update(makeFlow('introStory'), 16, () => {});
+    expect(startSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('introStory → roundIntro → introStory 재진입 시 startIntroSequence 2회 호출', () => {
+    const vfx = new VisualEffectController(config, introPages);
+    const startSpy = vi.spyOn(vfx, 'startIntroSequence');
+    const director = new ScreenDirector(ROUND_INTRO_DURATION, vfx);
+
+    director.update(makeFlow('introStory'), 0, () => {});
+    director.update(makeFlow('roundIntro'), 0, () => {});
+    director.update(makeFlow('introStory'), 0, () => {});
+    expect(startSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ScreenDirector — ScreenState 에 intro 필드 반영', () => {
+  it('introStory 진입 첫 update 후 introPageIndex = 0, introPhase = typing', () => {
+    const director = makeIntroDirector();
+    director.update(makeFlow('introStory'), 0, () => {});
+    const state = director.getScreenState();
+    expect(state.introPageIndex).toBe(0);
+    expect(state.introPhase).toBe('typing');
+  });
+
+  it('typing 50ms 경과 후 introTypingProgress ≈ 0.5', () => {
+    const director = makeIntroDirector();
+    director.update(makeFlow('introStory'), 0, () => {});   // 진입 (리셋)
+    director.update(makeFlow('introStory'), 50, () => {}); // 50ms 경과
+    expect(director.getScreenState().introTypingProgress).toBeCloseTo(0.5);
+  });
+
+  it('typing 완료(100ms) 후 introPhase = hold', () => {
+    const director = makeIntroDirector();
+    director.update(makeFlow('introStory'), 0, () => {});
+    director.update(makeFlow('introStory'), 100, () => {});
+    expect(director.getScreenState().introPhase).toBe('hold');
+  });
+
+  it('모든 페이지 진행 후 IntroSequenceFinished 가 emitPresentationEvent 를 통해 전달된다', () => {
+    const director = makeIntroDirector();
+    const emitted: PresentationEvent[] = [];
+    const emit = (e: PresentationEvent): void => { emitted.push(e); };
+
+    director.update(makeFlow('introStory'), 0, emit);   // 진입 (start)
+    // page 0: typing 100ms
+    director.update(makeFlow('introStory'), 100, emit);
+    // page 0: hold 200ms
+    director.update(makeFlow('introStory'), 200, emit);
+    // page 0: erasing 50ms → page 1 진입
+    director.update(makeFlow('introStory'), 50, emit);
+    // page 1: typing 120ms
+    director.update(makeFlow('introStory'), 120, emit);
+    // page 1: hold 300ms
+    director.update(makeFlow('introStory'), 300, emit);
+    // page 1: erasing 60ms → done + IntroSequenceFinished
+    director.update(makeFlow('introStory'), 60, emit);
+
+    expect(emitted.some((e) => e.type === 'IntroSequenceFinished')).toBe(true);
   });
 });

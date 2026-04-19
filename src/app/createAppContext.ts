@@ -21,6 +21,7 @@ import { STAGE_DEFINITIONS, StageDefinitionTable } from '../definitions/tables/S
 import { BlockDefinitionTable } from '../definitions/tables/BlockDefinitionTable';
 import { ItemDefinitionTable } from '../definitions/tables/ItemDefinitionTable';
 import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
+import { IntroSequenceTable } from '../definitions/tables/IntroSequenceTable';
 import type { DevContext } from './dev/DevContext';
 import type { CollisionLogEntry } from './dev/CollisionLog';
 
@@ -119,7 +120,8 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
   });
 
   // VisualEffectController: Gameplay 이벤트를 받아 시각 연출 타이머 관리
-  const visualEffectController = new VisualEffectController(config);
+  // IntroSequenceTable 주입: Intro 페이지 타이머 진행에 사용
+  const visualEffectController = new VisualEffectController(config, IntroSequenceTable);
 
   // ScreenDirector: VisualEffectController 를 내부에서 update 호출
   const screenDirector = new ScreenDirector(config.roundIntroDurationMs, visualEffectController);
