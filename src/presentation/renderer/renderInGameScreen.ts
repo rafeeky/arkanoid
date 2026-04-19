@@ -26,6 +26,8 @@ const ITEM_COLOR = 0xffdd00;
 // 바 색상 — activeEffect 별
 const BAR_COLOR_NORMAL = 0xffffff;
 const BAR_COLOR_EXPAND = 0xffee99; // 연한 노랑 틴트: 확장 효과 중임을 표시
+const BAR_COLOR_MAGNET = 0x88ccff; // 연한 파랑 틴트: 자석 효과 중임을 표시
+const BAR_COLOR_LASER  = 0xff8888; // 연한 빨강 틴트: 레이저 효과 중임을 표시 (Phase 5 대비)
 
 export type InGameObjects = {
   bar: Phaser.GameObjects.Rectangle;
@@ -40,6 +42,8 @@ export type InGameObjects = {
   hudRound: Phaser.GameObjects.Text;
   // HUD 구분선
   hudDivider: Phaser.GameObjects.Rectangle;
+  // 바 효과 남은 시간 표시 (magnet/laser 활성 시에만 visible)
+  hudEffectTimer: Phaser.GameObjects.Text;
 };
 
 const HUD_HEIGHT = 60;
@@ -100,6 +104,17 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
     .arc(360, 660, BALL_RADIUS, 0, 360, false, 0xffffff)
     .setVisible(false);
 
+  // 바 효과 남은 시간 텍스트 (화면 하단 중앙, 바 위)
+  // activeEffect が magnet/laser の時だけ visible になる
+  const hudEffectTimer = scene.add
+    .text(360, 648, '', {
+      fontSize: '14px',
+      color: '#88ccff',
+      fontFamily: 'monospace',
+    })
+    .setOrigin(0.5, 1)
+    .setVisible(false);
+
   return {
     bar,
     ball,
@@ -109,6 +124,7 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
     hudLives,
     hudRound,
     hudDivider,
+    hudEffectTimer,
   };
 }
 
@@ -143,8 +159,18 @@ export function renderInGameScreen(
 
   // 바 — 파괴 연출: progress(1.0→0.0) 기반으로 alpha/scaleX 선형 감소
   const bar = gameplayState.bar;
-  // activeEffect に応じた色を選択: expand 中は連黄色, 通常は白
-  const barColor = bar.activeEffect === 'expand' ? BAR_COLOR_EXPAND : BAR_COLOR_NORMAL;
+  // activeEffect に応じた色を選択
+  // expand → 연한 노랑, magnet → 연한 파랑, laser → 연한 빨강, 기본 → 흰색
+  let barColor: number;
+  if (bar.activeEffect === 'expand') {
+    barColor = BAR_COLOR_EXPAND;
+  } else if (bar.activeEffect === 'magnet') {
+    barColor = BAR_COLOR_MAGNET;
+  } else if (bar.activeEffect === 'laser') {
+    barColor = BAR_COLOR_LASER;
+  } else {
+    barColor = BAR_COLOR_NORMAL;
+  }
   if (screenState.isBarBreaking) {
     // barBreakProgress: 1.0 = 연출 시작, 0.0 = 연출 종료
     const alpha = barBreakProgress;                      // 1.0 → 0.0
@@ -240,6 +266,26 @@ export function renderInGameScreen(
     }
   }
 
+  // 바 효과 타이머 HUD
+  // magnet 활성: "MAGNET X.Xs" 형태로 표시. laser는 Phase 5에서 추가 예정.
+  if (hudViewModel.activeEffect === 'magnet' && hudViewModel.magnetRemainingMs > 0) {
+    const seconds = (hudViewModel.magnetRemainingMs / 1000).toFixed(1);
+    objects.hudEffectTimer
+      .setText(`MAGNET ${seconds}s`)
+      .setColor('#88ccff')
+      .setVisible(true);
+  } else if (hudViewModel.activeEffect === 'laser') {
+    // Phase 5 대비 laser 쿨다운 표시 (쿨다운 0이면 READY 표시)
+    const cdSeconds = (hudViewModel.laserCooldownMs / 1000).toFixed(1);
+    const laserText = hudViewModel.laserCooldownMs > 0 ? `LASER CD ${cdSeconds}s` : 'LASER READY';
+    objects.hudEffectTimer
+      .setText(laserText)
+      .setColor('#ff8888')
+      .setVisible(true);
+  } else {
+    objects.hudEffectTimer.setVisible(false);
+  }
+
   // scene 파라미터는 블록/아이템 생성에만 사용됨. 명시적 void 처리 불필요.
   void scene;
 }
@@ -252,6 +298,7 @@ export function hideInGameScreen(objects: InGameObjects): void {
   objects.hudScore.setVisible(false);
   objects.hudLives.setVisible(false);
   objects.hudRound.setVisible(false);
+  objects.hudEffectTimer.setVisible(false);
   objects.bar.setVisible(false);
   objects.ball.setVisible(false);
   for (const rect of objects.blockMap.values()) {

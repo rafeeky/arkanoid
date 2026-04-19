@@ -154,7 +154,7 @@ export class SceneRenderer {
       hideTitleScreen(this.titleObjects);
       hideRoundIntroScreen(this.roundIntroObjects);
       hideIntroStoryScreen(this.introStoryObjects);
-      const hudVm = this.hudPresenter.buildHudViewModel(gameplayState.session);
+      const hudVm = this.hudPresenter.buildHudViewModel(gameplayState);
       const barBreakProgress = this.visualEffectController.getBarBreakProgress();
       renderInGameScreen(
         this.scene,
