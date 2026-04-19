@@ -2,7 +2,7 @@ import type { StageDefinition } from '../types/StageDefinition';
 import type { BlockDefinition } from '../types/BlockDefinition';
 import type { ValidationResult } from './ValidationResult';
 
-const GRID_ROWS = 5;
+const MAX_GRID_ROWS = 8;
 const GRID_COLS = 13;
 
 export function validateStageDefinition(
@@ -15,9 +15,9 @@ export function validateStageDefinition(
   for (const placement of stage.blocks) {
     const { row, col, definitionId } = placement;
 
-    if (row < 0 || row >= GRID_ROWS) {
+    if (row < 0 || row >= MAX_GRID_ROWS) {
       errors.push(
-        `[${stage.stageId}] block at (row=${row}, col=${col}) has row out of range [0, ${GRID_ROWS - 1}]`
+        `[${stage.stageId}] block at (row=${row}, col=${col}) has row out of range [0, ${MAX_GRID_ROWS - 1}]`
       );
     }
     if (col < 0 || col >= GRID_COLS) {

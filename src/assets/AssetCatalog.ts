@@ -15,6 +15,7 @@ export const AssetCatalog: Readonly<Record<string, string>> = {
   // 징글
   jingle_round_start: 'assets/sfx/jingle_round_start.wav',
   jingle_gameover: 'assets/sfx/jingle_gameover.wav',
+  jingle_gameclear: 'assets/sfx/jingle_gameclear.wav',
 
   // SFX
   sfx_block_hit: 'assets/sfx/sfx_block_hit.wav',

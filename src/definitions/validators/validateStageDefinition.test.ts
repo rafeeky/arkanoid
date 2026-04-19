@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateStageDefinition } from './validateStageDefinition';
-import { StageDefinitionTable } from '../tables/StageDefinitionTable';
+import { STAGE_DEFINITIONS, StageDefinitionTable } from '../tables/StageDefinitionTable';
 import { BlockDefinitionTable } from '../tables/BlockDefinitionTable';
 
 describe('validateStageDefinition', () => {
@@ -23,6 +23,52 @@ describe('validateStageDefinition', () => {
       (b) => b.definitionId === 'basic_drop'
     ).length;
     expect(dropCount).toBe(6);
+  });
+
+  it('passes for stage2 with the full BlockDefinitionTable', () => {
+    const stage2 = STAGE_DEFINITIONS[1];
+    expect(stage2).toBeDefined();
+    const result = validateStageDefinition(stage2!, BlockDefinitionTable);
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('stage2 has exactly 78 block placements (6 rows x 13 cols)', () => {
+    const stage2 = STAGE_DEFINITIONS[1];
+    expect(stage2!.blocks).toHaveLength(78);
+  });
+
+  it('stage2 has exactly 8 "basic_drop" placements', () => {
+    const stage2 = STAGE_DEFINITIONS[1];
+    const dropCount = stage2!.blocks.filter(
+      (b) => b.definitionId === 'basic_drop'
+    ).length;
+    expect(dropCount).toBe(8);
+  });
+
+  it('passes for stage3 with the full BlockDefinitionTable', () => {
+    const stage3 = STAGE_DEFINITIONS[2];
+    expect(stage3).toBeDefined();
+    const result = validateStageDefinition(stage3!, BlockDefinitionTable);
+    expect(result.isValid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('stage3 has exactly 91 block placements (7 rows x 13 cols)', () => {
+    const stage3 = STAGE_DEFINITIONS[2];
+    expect(stage3!.blocks).toHaveLength(91);
+  });
+
+  it('stage3 has exactly 10 "basic_drop" placements', () => {
+    const stage3 = STAGE_DEFINITIONS[2];
+    const dropCount = stage3!.blocks.filter(
+      (b) => b.definitionId === 'basic_drop'
+    ).length;
+    expect(dropCount).toBe(10);
+  });
+
+  it('STAGE_DEFINITIONS has exactly 3 stages', () => {
+    expect(STAGE_DEFINITIONS).toHaveLength(3);
   });
 
   it('fails when a block references an unknown definitionId', () => {

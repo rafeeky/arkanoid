@@ -117,6 +117,40 @@ function generateDoubleBeepWav(freq1, freq2, dur1Ms, dur2Ms, amplitude = 0.5) {
   return Buffer.concat([header, pcmData]);
 }
 
+/**
+ * 여러 주파수를 순서대로 재생하는 다중 음 WAV.
+ * GameClear 징글 등 상행 시퀀스에 사용.
+ * @param {Array<{freq: number, durationMs: number}>} notes
+ * @param {number} amplitude
+ */
+function generateSequenceWav(notes, amplitude = 0.5) {
+  const segments = notes.map((note) => ({
+    n: Math.floor(SAMPLE_RATE * note.durationMs / 1000),
+    freq: note.freq,
+  }));
+  const numSamples = segments.reduce((sum, s) => sum + s.n, 0);
+  const header = buildWavHeader(numSamples, SAMPLE_RATE, 1, 16);
+  const pcmData = Buffer.alloc(numSamples * 2);
+
+  let offset = 0;
+  for (const seg of segments) {
+    for (let i = 0; i < seg.n; i++) {
+      const t = i / SAMPLE_RATE;
+      const angle = 2 * Math.PI * seg.freq * t;
+      let sample = Math.sin(angle);
+      const progress = i / seg.n;
+      let env = 1.0;
+      if (progress < 0.05) env = progress / 0.05;
+      else if (progress > 0.85) env = (1 - progress) / 0.15;
+      const value = Math.round(sample * amplitude * env * 32767);
+      pcmData.writeInt16LE(Math.max(-32768, Math.min(32767, value)), (offset + i) * 2);
+    }
+    offset += seg.n;
+  }
+
+  return Buffer.concat([header, pcmData]);
+}
+
 // -------------------------------------------------------------------
 // 각 cue에 맞는 소리 정의
 // ResourceId 기준으로 파일명을 결정한다 (AssetCatalog.ts와 일치)
@@ -161,6 +195,16 @@ const sounds = [
     filename: 'sfx_ui_confirm.wav',
     description: 'UI 확인 SFX (짧고 깔끔한 beep)',
     generate: () => generateBeepWav(698, 80, 0.4, 'decay'),
+  },
+  {
+    filename: 'jingle_gameclear.wav',
+    description: 'GameClear 징글 (C→E→G→C 상행 4음, 약 1000ms)',
+    generate: () => generateSequenceWav([
+      { freq: 523,  durationMs: 200 }, // C5
+      { freq: 659,  durationMs: 200 }, // E5
+      { freq: 784,  durationMs: 200 }, // G5
+      { freq: 1047, durationMs: 400 }, // C6 (길게 마무리)
+    ], 0.5),
   },
 ];
 

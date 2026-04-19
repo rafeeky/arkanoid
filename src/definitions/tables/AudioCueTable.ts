@@ -49,4 +49,10 @@ export const AudioCueTable: AudioCueEntry[] = [
     resourceId:   'sfx_ui_confirm',
     playbackType: 'sfx',
   },
+  {
+    cueId:        'cue_gameclear_jingle',
+    eventType:    'EnteredGameClear',
+    resourceId:   'jingle_gameclear',
+    playbackType: 'jingle',
+  },
 ];

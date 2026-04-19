@@ -28,6 +28,20 @@ describe('validateAudioCueTable', () => {
   it('fails on an empty table', () => {
     const result = validateAudioCueTable([]);
     expect(result.isValid).toBe(false);
-    expect(result.errors.length).toBe(8);
+    expect(result.errors.length).toBe(9);
+  });
+
+  it('AudioCueTable contains EnteredGameClear mapping', () => {
+    const entry = AudioCueTable.find((e) => e.eventType === 'EnteredGameClear');
+    expect(entry).toBeDefined();
+    expect(entry!.resourceId).toBe('jingle_gameclear');
+    expect(entry!.playbackType).toBe('jingle');
+  });
+
+  it('fails when EnteredGameClear is missing', () => {
+    const stripped = AudioCueTable.filter((e) => e.eventType !== 'EnteredGameClear');
+    const result = validateAudioCueTable(stripped);
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('EnteredGameClear'))).toBe(true);
   });
 });

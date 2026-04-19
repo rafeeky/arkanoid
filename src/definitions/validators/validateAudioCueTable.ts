@@ -10,6 +10,7 @@ const REQUIRED_EVENT_TYPES: readonly string[] = [
   'LifeLost',
   'EnteredGameOver',
   'UiConfirm',
+  'EnteredGameClear',
 ];
 
 export function validateAudioCueTable(entries: AudioCueEntry[]): ValidationResult {
