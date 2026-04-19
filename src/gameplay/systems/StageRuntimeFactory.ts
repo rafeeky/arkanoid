@@ -15,17 +15,24 @@ const BAR_HEIGHT = 16;
 
 // ---------------------------------------------------------------------------
 // 회전체 원 궤도 clamp 상수
-// canvas 720x720, HUD 상단 60px, 바 하단 여유 80px
+// canvas 720x720, CIRCLE_RADIUS=60, CIRCLE_CLAMP_MARGIN=10
 // circleCenterX ∈ [CIRCLE_RADIUS + CIRCLE_CLAMP_MARGIN, CANVAS_WIDTH - CIRCLE_RADIUS - CIRCLE_CLAMP_MARGIN]
-//              = [110, 610]
-// circleCenterY ∈ [HUD_HEIGHT + CIRCLE_RADIUS + CIRCLE_CLAMP_MARGIN, CANVAS_HEIGHT - CIRCLE_RADIUS - BAR_CLEARANCE]
-//              = [170, 540]
+//              = [70, 650]
+// circleCenterY ∈ [MIN_CIRCLE_CENTER_Y, CANVAS_HEIGHT - CIRCLE_RADIUS - BAR_CLEARANCE]
+//              = [380, 580]
+// 궤도 y 범위 = [380-60, 580+60] = [320, 640]. 바(660)와 20px 여유.
 // ---------------------------------------------------------------------------
 const CANVAS_WIDTH = 720;
 const CANVAS_HEIGHT = 720;
-const HUD_HEIGHT = 60;
 const BAR_CLEARANCE = 80;
 const CIRCLE_CLAMP_MARGIN = 10;
+
+/**
+ * 원 궤도 중심 y 하한.
+ * 블록 영역(상단)을 침범하지 않도록 명시적 상수로 고정한다.
+ * 궤도 최상단 = MIN_CIRCLE_CENTER_Y - CIRCLE_RADIUS = 380 - 60 = 320.
+ */
+const MIN_CIRCLE_CENTER_Y = 380;
 
 /**
  * Creates the initial GameplayRuntimeState from a StageDefinition.
@@ -111,10 +118,10 @@ function buildSpinnerStates(def: StageDefinition): readonly SpinnerRuntimeState[
     );
 
     // circleCenterY: descentEndY 자체를 원 중심으로 사용.
-    // HUD 위쪽 및 바 근처로 침범하지 않도록 clamp.
+    // 블록 영역 침범 방지(하한 380)와 바 근처 침범 방지(상한 580)로 clamp.
     const circleCenterY = clamp(
       descentEndY,
-      HUD_HEIGHT + CIRCLE_RADIUS + CIRCLE_CLAMP_MARGIN,
+      MIN_CIRCLE_CENTER_Y,
       CANVAS_HEIGHT - CIRCLE_RADIUS - BAR_CLEARANCE,
     );
 
