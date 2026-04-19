@@ -15,6 +15,7 @@ import type { CollisionLogEntry } from '../../app/dev/CollisionLog';
  *   4. 최근 충돌 로그 (우측 상단 5줄)
  *   5. 현재 공 vx, vy 수치 표시
  *   6. Flow 상태 + tickIndex
+ *   7. MVP3 활성 효과 패널 (좌하단 — Phase 2 전까지 자리 확보용 '--' 표시)
  *
  * 풀(Pool) 패턴:
  *   - 블록 ID 텍스트는 construction 시 BLOCK_POOL_SIZE 개를 미리 생성.
@@ -72,6 +73,11 @@ export class DevOverlayRenderer {
   // Flow 상태 + tick 텍스트
   private readonly flowStateText: Phaser.GameObjects.Text;
 
+  // MVP3 활성 효과 패널 (좌하단)
+  // TODO(mvp3): MVP3 Phase 2 에서 RuntimeState 에 activeEffect/magnet/laser/spinner 필드가 추가되면
+  // 여기 defensive read 대신 실제 값을 연결할 것.
+  private readonly mvp3EffectPanelText: Phaser.GameObjects.Text;
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
 
@@ -117,6 +123,15 @@ export class DevOverlayRenderer {
     // Flow 상태 텍스트
     this.flowStateText = scene.add
       .text(8, height - 30, '', TEXT_STYLE_HUD)
+      .setOrigin(0, 1)
+      .setDepth(103)
+      .setVisible(false);
+
+    // MVP3 활성 효과 패널 — 6줄 블록. 현재는 모두 '--' 고정.
+    // TODO(mvp3): MVP3 Phase 2 에서 RuntimeState 에 activeEffect/magnet/laser/spinner 필드가 추가되면
+    // 여기 defensive read 대신 실제 값을 연결할 것.
+    this.mvp3EffectPanelText = scene.add
+      .text(8, height - 14, '', TEXT_STYLE_HUD)
       .setOrigin(0, 1)
       .setDepth(103)
       .setVisible(false);
@@ -218,6 +233,68 @@ export class DevOverlayRenderer {
       )
       .setPosition(8, height - 30)
       .setVisible(true);
+
+    // 7. MVP3 활성 효과 패널 (좌하단)
+    // TODO(mvp3): MVP3 Phase 2 에서 RuntimeState 에 activeEffect/magnet/laser/spinner 필드가 추가되면
+    // 여기 defensive read 대신 실제 값을 연결할 것.
+    this.mvp3EffectPanelText
+      .setText(this.buildMvp3EffectPanel(gameplayState))
+      .setPosition(8, height - 14)
+      .setVisible(true);
+  }
+
+  /**
+   * buildMvp3EffectPanel — MVP3 RuntimeState 확장 이전 자리 확보용 패널 텍스트 생성.
+   *
+   * MVP3 §7-1 에서 예정된 필드:
+   *   - bar.activeEffect: 현재 'none' | 'expand' 만 존재 → 그대로 표시
+   *   - magnetRemainingTime: 미존재 → '--'
+   *   - attachedBallIds: 미존재 → count 0
+   *   - laserCooldownRemaining: 미존재 → '--'
+   *   - laserShots: 미존재 → 0
+   *   - spinnerStates: 미존재 → 0
+   *
+   * bar.activeEffect 는 현재 타입이 'none' | 'expand' 로 좁혀 있으므로
+   * as any 없이 직접 읽는다. MVP3 Phase 2 에서 union이 확장되면 그대로 표시된다.
+   */
+  private buildMvp3EffectPanel(gameplayState: Readonly<GameplayRuntimeState>): string {
+    // bar.activeEffect 는 MVP1 타입에도 존재 — 직접 읽기 안전
+    const activeEffect: string = gameplayState.bar.activeEffect;
+
+    // 나머지 필드는 MVP3 Phase 2 이전에는 존재하지 않으므로 defensive read.
+    // type assertion 없이 unknown 경유로 안전하게 접근한다.
+    const barExtra = gameplayState.bar as Record<string, unknown>;
+    const sessionExtra = gameplayState as Record<string, unknown>;
+
+    const magnetMs = typeof barExtra['magnetRemainingTime'] === 'number'
+      ? `${(barExtra['magnetRemainingTime'] as number).toFixed(0)}ms`
+      : '--';
+
+    const attachedCount =
+      Array.isArray(barExtra['attachedBallIds'])
+        ? (barExtra['attachedBallIds'] as unknown[]).length
+        : 0;
+
+    const laserCd = typeof barExtra['laserCooldownRemaining'] === 'number'
+      ? `${(barExtra['laserCooldownRemaining'] as number).toFixed(0)}ms`
+      : '--';
+
+    const laserShots = Array.isArray(barExtra['laserShots'])
+      ? (barExtra['laserShots'] as unknown[]).length
+      : 0;
+
+    const spinnerCount = Array.isArray(sessionExtra['spinnerStates'])
+      ? (sessionExtra['spinnerStates'] as unknown[]).length
+      : 0;
+
+    return [
+      `EFFECT: ${activeEffect}`,
+      `MAGNET: ${magnetMs}`,
+      `ATTACHED BALLS: ${attachedCount}`,
+      `LASER CD: ${laserCd}`,
+      `LASER SHOTS: ${laserShots}`,
+      `SPINNERS: ${spinnerCount}`,
+    ].join('\n');
   }
 
   /**
@@ -234,5 +311,6 @@ export class DevOverlayRenderer {
     }
     this.ballVelocityText.setVisible(false);
     this.flowStateText.setVisible(false);
+    this.mvp3EffectPanelText.setVisible(false);
   }
 }
