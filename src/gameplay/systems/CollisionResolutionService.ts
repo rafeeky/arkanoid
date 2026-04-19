@@ -28,6 +28,17 @@ type Tables = {
   config: GameplayConfig;
 };
 
+type ApplyOptions = {
+  /**
+   * When true, ball velocity reflection for BallHitBlock facts is skipped.
+   * Use this when moveBallWithCollisions has already reflected the velocity
+   * during the swept movement phase.
+   *
+   * Default: false (legacy behaviour — resolveBlock reflects the ball).
+   */
+  blockReflectionAlreadyApplied?: boolean;
+};
+
 // --- Minimum angle enforcement ---
 
 const MIN_ANGLE_FROM_AXIS_DEG = 15;
@@ -42,8 +53,11 @@ const MIN_SIN = Math.sin((MIN_ANGLE_FROM_AXIS_DEG * Math.PI) / 180); // ≈ 0.25
  * - Likewise, if |vy|/speed < sin(15°), vy is clamped and vx is recalculated.
  * - Speed magnitude is always preserved.
  * - Normal angles (>15° from both axes) are not modified.
+ *
+ * Exported so that MovementSystem can apply the same angle constraints after
+ * swept block reflections.
  */
-function enforceMinAngle(vx: number, vy: number): { vx: number; vy: number } {
+export function enforceMinAngle(vx: number, vy: number): { vx: number; vy: number } {
   const speed = Math.sqrt(vx * vx + vy * vy);
   if (speed === 0) return { vx, vy };
 
@@ -146,13 +160,14 @@ function resolveBlock(
   state: GameplayRuntimeState,
   fact: BallHitBlockFact,
   tables: Tables,
+  skipBallReflection = false,
 ): { state: GameplayRuntimeState; events: GameplayEvent[] } {
   const events: GameplayEvent[] = [];
 
-  // Reflect ball
-  let balls = state.balls.map((b) =>
-    b.id === fact.ballId ? reflectBallBlock(b, fact) : b,
-  );
+  // Reflect ball (skip when swept movement has already applied the reflection)
+  let balls = skipBallReflection
+    ? state.balls
+    : state.balls.map((b) => (b.id === fact.ballId ? reflectBallBlock(b, fact) : b));
 
   // Update block
   let blocks: BlockState[] = state.blocks;
@@ -283,9 +298,11 @@ export function applyCollisions(
   initialState: GameplayRuntimeState,
   collisions: CollisionFact[],
   tables: Tables,
+  options: ApplyOptions = {},
 ): ApplyResult {
   let state = initialState;
   const allEvents: GameplayEvent[] = [];
+  const skipBlockReflection = options.blockReflectionAlreadyApplied ?? false;
 
   for (const fact of collisions) {
     let result: { state: GameplayRuntimeState; events: GameplayEvent[] };
@@ -298,7 +315,7 @@ export function applyCollisions(
         result = resolveBar(state, fact);
         break;
       case 'BallHitBlock':
-        result = resolveBlock(state, fact, tables);
+        result = resolveBlock(state, fact, tables, skipBlockReflection);
         break;
       case 'BallHitFloor':
         result = resolveFloor(state, fact);

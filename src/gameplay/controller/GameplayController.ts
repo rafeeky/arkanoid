@@ -6,8 +6,9 @@ import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
 import type { GameplayEvent } from '../events/gameplayEvents';
 
 import { resolveGameplayCommands } from './InputCommandResolver';
-import { moveBar, moveBallSubSteps, moveItemDrop, moveAttachedBallToBar } from '../systems/MovementSystem';
-import { detectCollisions, probeSubStepCollision } from '../systems/CollisionService';
+import { moveBar, moveBallWithCollisions, moveItemDrop, moveAttachedBallToBar } from '../systems/MovementSystem';
+import { detectCollisions } from '../systems/CollisionService';
+import type { BallHitBlockFact } from '../systems/CollisionService';
 import { applyCollisions } from '../systems/CollisionResolutionService';
 import { judgeStageOutcome } from '../systems/StageRuleService';
 
@@ -76,19 +77,16 @@ export class GameplayController {
 
     const newBar = moveBar(this.state.bar, moveDirection, dt, this.deps.config);
     const currentBlocks = this.state.blocks;
+
+    // Block collisions are resolved inside moveBallWithCollisions (swept AABB).
+    // Wall / Bar collisions remain in the detectCollisions pipeline below.
+    const accumulatedBlockFacts: BallHitBlockFact[] = [];
     const newBalls = this.state.balls.map((ball) => {
-      const moved = moveBallSubSteps(ball, dt, (candidate) =>
-        probeSubStepCollision(
-          candidate.x,
-          candidate.y,
-          candidate.vx,
-          candidate.vy,
-          currentBlocks,
-          newBar,
-          ball.vy,
-        ),
-      );
-      return moveAttachedBallToBar(moved, newBar);
+      const result = moveBallWithCollisions(ball, dt, currentBlocks);
+      for (const f of result.blockFacts) {
+        accumulatedBlockFacts.push(f);
+      }
+      return moveAttachedBallToBar(result.ball, newBar);
     });
     const newItemDrops = this.state.itemDrops.map((item) => moveItemDrop(item, dt));
 
@@ -99,10 +97,22 @@ export class GameplayController {
       itemDrops: newItemDrops,
     };
 
-    // 5. Detect collisions
-    const collisions = detectCollisions(this.state, prevState);
+    // 5. Detect collisions (wall, bar, item — block facts already gathered above)
+    const pipelineCollisions = detectCollisions(this.state, prevState);
+    // Filter out any BallHitBlock facts from the normal pipeline to avoid
+    // double-processing blocks that were already handled in movement.
+    const wallBarItemCollisions = pipelineCollisions.filter(
+      (f) => f.type !== 'BallHitBlock',
+    );
+    const collisions = [...accumulatedBlockFacts, ...wallBarItemCollisions];
 
     // 6. Apply collision results
+    // Block facts from moveBallWithCollisions have already had their velocity
+    // reflections applied during the swept movement phase. The wall/bar/item
+    // facts from the normal pipeline still need the full resolution (including
+    // ball reflection for blocks from that pipeline, though we filter those out
+    // above). We pass blockReflectionAlreadyApplied=true so that resolveBlock
+    // does not double-reflect the velocity.
     const { nextState, events: collisionEvents } = applyCollisions(
       this.state,
       collisions,
@@ -111,6 +121,7 @@ export class GameplayController {
         itemDefinitions: this.deps.itemDefinitions,
         config: this.deps.config,
       },
+      { blockReflectionAlreadyApplied: true },
     );
     this.state = nextState;
     for (const e of collisionEvents) {

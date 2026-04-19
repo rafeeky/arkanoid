@@ -270,3 +270,136 @@ describe('GameplayController - 스테이지 클리어', () => {
     expect(ctrl.getState().isStageCleared).toBe(true);
   });
 });
+
+// ============================================================
+// Tunneling regression tests (swept AABB)
+// ============================================================
+
+describe('터널링 회귀 테스트 — swept AABB 충돌', () => {
+  /**
+   * 공이 dt=0.016(60fps) 한 틱에 블록 영역을 완전히 통과할 수 있는 속도로 이동.
+   * 블록 x=150, y=280, 64x24.
+   * 공 초기 위치 (100, 300), 속도 (550, -300) 대각선.
+   * 한 틱 후 공의 이동거리 ≈ 10px — 블록에 맞아야 한다.
+   * 이전 구현(probe-stop)에서는 블록 충돌 이벤트가 누락됐으나
+   * swept AABB 구현에서는 BlockHit 또는 BlockDestroyed 이벤트가 발행돼야 한다.
+   */
+  it('정상 속도 공이 블록에 충돌하면 BlockHit/BlockDestroyed 이벤트가 발행된다', () => {
+    const blockX = 150;
+    const blockY = 280;
+
+    // Stage with one block at the target position
+    const targetStage: StageDefinition = {
+      ...simpleStage,
+      blocks: [{ row: 0, col: 0, definitionId: 'basic' }],
+    };
+    const initialState = createGameplayRuntimeFromStageDefinition(
+      targetStage,
+      config,
+      blockDefinitions,
+      3,
+    );
+
+    // Place ball just to the left of the block, moving right-upward diagonally
+    // Block is at x=40, y=80 from factory — override with a custom state
+    const modState: GameplayRuntimeState = {
+      ...initialState,
+      blocks: [
+        { id: 'block_target', x: blockX, y: blockY, remainingHits: 1, isDestroyed: false, definitionId: 'basic' },
+      ],
+      balls: [
+        { id: 'ball_0', x: 100, y: 300, vx: 550, vy: -300, isActive: true },
+      ],
+    };
+
+    const ctrl = new GameplayController(modState, deps);
+    // Run several ticks so the ball definitely reaches the block
+    const hitEvents: { type: string }[] = [];
+    for (let i = 0; i < 10; i++) {
+      const events = ctrl.tick(noInput, 0.016);
+      for (const e of events) {
+        if (e.type === 'BlockHit' || e.type === 'BlockDestroyed') {
+          hitEvents.push(e);
+        }
+      }
+      if (hitEvents.length > 0) break;
+    }
+
+    expect(hitEvents.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * 고속 공 터널링 테스트.
+   * 공 속도 600 px/s, dt=0.016 → 이동거리 ≈ 9.6px (블록 높이 24px보다 작으므로 단일 틱 통과 가능).
+   * 공이 블록 바로 앞에서 시작하여 한 틱에 블록을 통과하는 시나리오.
+   * 블록 x=200, y=280, 공 x=190, y=291 (블록 왼쪽 edge 근처).
+   */
+  it('블록 바로 앞에서 한 틱에 충돌이 발생한다', () => {
+    const blockX = 200;
+    const blockY = 280;
+    const modState: GameplayRuntimeState = {
+      session: { currentStageIndex: 0, score: 0, lives: 3, highScore: 0 },
+      bar: { x: 480, y: 660, width: 120, moveSpeed: 420, activeEffect: 'none' },
+      blocks: [
+        { id: 'blk', x: blockX, y: blockY, remainingHits: 1, isDestroyed: false, definitionId: 'basic' },
+      ],
+      balls: [
+        // Ball is 8px radius, block left edge at 200. Ball center at 183 → edge at 191.
+        // Moving right at 600px/s. After one 16ms tick: x = 183 + 600*0.016 = 192.6
+        // Swept AABB should detect entry into block's expanded zone.
+        { id: 'ball_0', x: 183, y: blockY + 12, vx: 600, vy: 0, isActive: true },
+      ],
+      itemDrops: [],
+      isStageCleared: false,
+    };
+
+    const ctrl = new GameplayController(modState, deps);
+    const events = ctrl.tick(noInput, 0.016);
+    const blockEvents = events.filter((e) => e.type === 'BlockHit' || e.type === 'BlockDestroyed');
+    expect(blockEvents.length).toBeGreaterThan(0);
+
+    // After collision, ball should have reversed vx (bounced off left face)
+    const ball = getBall(ctrl.getState());
+    expect(ball.vx).toBeLessThan(0);
+  });
+
+  /**
+   * 공이 연속된 두 블록을 한 틱에 통과하지 않는다.
+   * 두 블록이 x 방향으로 나란히 배치. 공이 첫 번째 블록에 맞으면 반사돼야 한다.
+   */
+  it('연속된 블록 배치에서 첫 번째 블록에서 반사된다', () => {
+    const modState: GameplayRuntimeState = {
+      session: { currentStageIndex: 0, score: 0, lives: 3, highScore: 0 },
+      bar: { x: 480, y: 660, width: 120, moveSpeed: 420, activeEffect: 'none' },
+      blocks: [
+        { id: 'blk0', x: 200, y: 280, remainingHits: 1, isDestroyed: false, definitionId: 'basic' },
+        { id: 'blk1', x: 268, y: 280, remainingHits: 1, isDestroyed: false, definitionId: 'basic' },
+      ],
+      balls: [
+        // Ball approaching first block from the left
+        { id: 'ball_0', x: 183, y: 292, vx: 600, vy: 0, isActive: true },
+      ],
+      itemDrops: [],
+      isStageCleared: false,
+    };
+
+    const ctrl = new GameplayController(modState, deps);
+    const events = ctrl.tick(noInput, 0.016);
+
+    // Only first block should register a hit
+    const blockEvents = events.filter(
+      (e): e is { type: 'BlockHit'; blockId: string; remainingHits: number } | { type: 'BlockDestroyed'; blockId: string; scoreDelta: number } =>
+        e.type === 'BlockHit' || e.type === 'BlockDestroyed',
+    );
+    expect(blockEvents.length).toBe(1);
+    expect(blockEvents[0]).toBeDefined();
+    // The hit block must be blk0 (first one in path)
+    if (blockEvents[0] && 'blockId' in blockEvents[0]) {
+      expect(blockEvents[0].blockId).toBe('blk0');
+    }
+
+    // Ball should have reversed vx
+    const ball = getBall(ctrl.getState());
+    expect(ball.vx).toBeLessThan(0);
+  });
+});

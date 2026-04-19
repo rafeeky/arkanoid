@@ -218,55 +218,132 @@ function detectItemFellOff(item: ItemDropState): ItemFellOffFloorFact | null {
   return null;
 }
 
-// --- Sub-step collision probe (lightweight, for MovementSystem integration) ---
+// --- Swept collision (for MovementSystem integration) ---
 
 /**
- * Quick probe used by moveBallSubSteps onStep callback.
- *
- * Purpose: **tunnel prevention only** — stops the ball at the sub-step where
- * it would enter a boundary, so the full CollisionResolutionService can apply
- * the reflection correctly on the final state. The velocity is returned
- * unchanged; only the position is "frozen" at this step.
- *
- * When a collision boundary is crossed, returns { vx, vy } identical to the
- * input (no velocity change), which signals moveBallSubSteps to stop advancing
- * further sub-steps. The final position will be on or just inside the boundary
- * so detectCollisions() can pick it up normally.
- *
- * Returns null when no boundary is crossed — sub-stepping continues.
+ * Result of a swept ball-vs-block collision test.
  */
-export function probeSubStepCollision(
-  cx: number,
-  cy: number,
+export type SweptBlockHit = {
+  /** Normalised hit time in [0, 1] (0 = start of sweep, 1 = end) */
+  t: number;
+  /** The block that was hit */
+  block: BlockState;
+  /** Which face was hit */
+  side: 'left' | 'right' | 'top' | 'bottom';
+};
+
+/**
+ * Swept circle-vs-AABB collision using Minkowski sum expansion.
+ *
+ * Expands the block AABB by BALL_RADIUS on every side, then tests whether
+ * the ball's centre ray (from x0,y0 in direction vx,vy over dt) intersects
+ * the expanded AABB.  Returns the earliest intersection time t ∈ (0, 1] or
+ * null if there is no intersection within the sweep.
+ *
+ * "Expanded AABB" sides:
+ *   left   = block.x           - BALL_RADIUS
+ *   right  = block.x + width   + BALL_RADIUS
+ *   top    = block.y           - BALL_RADIUS
+ *   bottom = block.y + height  + BALL_RADIUS
+ *
+ * We solve four slab entry times and take the largest (entry), compare with
+ * the smallest (exit).  If entry < exit and entry ≤ 1 we have a hit.
+ */
+function sweepBallVsBlock(
+  x0: number,
+  y0: number,
   vx: number,
   vy: number,
-  blocks: BlockState[],
-  bar: BarState,
-  prevVy: number,
-): { vx: number; vy: number } | null {
-  // Wall probe — stop when ball has crossed a wall boundary
-  if (cx - BALL_RADIUS <= 0) return { vx, vy };
-  if (cx + BALL_RADIUS >= CANVAS_WIDTH) return { vx, vy };
-  if (cy - BALL_RADIUS <= 0) return { vx, vy };
+  dt: number,
+  block: BlockState,
+): SweptBlockHit | null {
+  const dx = vx * dt;
+  const dy = vy * dt;
 
-  // Bar probe (only when moving downward)
-  if (prevVy > 0) {
-    const barRect = rectFromBar(bar);
-    if (circleOverlapsRect(cx, cy, BALL_RADIUS, barRect)) {
-      return { vx, vy };
-    }
+  const left   = block.x             - BALL_RADIUS;
+  const right  = block.x + BLOCK_WIDTH  + BALL_RADIUS;
+  const top    = block.y             - BALL_RADIUS;
+  const bottom = block.y + BLOCK_HEIGHT + BALL_RADIUS;
+
+  // Slab method — compute entry/exit times for x and y axes separately
+  let txEntry: number;
+  let txExit: number;
+  if (dx === 0) {
+    // No movement in x; already inside if x0 is between slabs
+    if (x0 < left || x0 > right) return null;
+    txEntry = -Infinity;
+    txExit  =  Infinity;
+  } else {
+    const t1x = (left  - x0) / dx;
+    const t2x = (right - x0) / dx;
+    txEntry = Math.min(t1x, t2x);
+    txExit  = Math.max(t1x, t2x);
   }
 
-  // Block probe — stop when ball enters an active block
+  let tyEntry: number;
+  let tyExit: number;
+  if (dy === 0) {
+    if (y0 < top || y0 > bottom) return null;
+    tyEntry = -Infinity;
+    tyExit  =  Infinity;
+  } else {
+    const t1y = (top    - y0) / dy;
+    const t2y = (bottom - y0) / dy;
+    tyEntry = Math.min(t1y, t2y);
+    tyExit  = Math.max(t1y, t2y);
+  }
+
+  const tEntry = Math.max(txEntry, tyEntry);
+  const tExit  = Math.min(txExit,  tyExit);
+
+  // No hit if the slabs don't overlap, or entry is beyond the sweep, or entry
+  // is at or before t=0 (already inside — treat as touching, handle below)
+  if (tEntry >= tExit) return null;
+  if (tEntry > 1) return null;
+  if (tExit  <= 0) return null;
+
+  // Use tEntry clamped to [0, 1].  If the ball starts already overlapping
+  // (tEntry <= 0), we use t=0 but still determine the side so we can push
+  // out immediately.
+  const t = Math.max(0, tEntry);
+
+  // Determine hit side from which axis had the later entry
+  let side: 'left' | 'right' | 'top' | 'bottom';
+  if (txEntry > tyEntry) {
+    // x-axis was the constraining slab
+    side = dx > 0 ? 'left' : 'right';
+  } else {
+    // y-axis was the constraining slab
+    side = dy > 0 ? 'top' : 'bottom';
+  }
+
+  return { t, block, side };
+}
+
+/**
+ * Tests the ball sweep against all active blocks and returns the earliest hit,
+ * or null if none.
+ */
+export function sweepBallVsBlocks(
+  x0: number,
+  y0: number,
+  vx: number,
+  vy: number,
+  dt: number,
+  blocks: BlockState[],
+): SweptBlockHit | null {
+  let earliest: SweptBlockHit | null = null;
+
   for (const block of blocks) {
     if (block.isDestroyed) continue;
-    const rect = rectFromBlock(block);
-    if (circleOverlapsRect(cx, cy, BALL_RADIUS, rect)) {
-      return { vx, vy };
+    const hit = sweepBallVsBlock(x0, y0, vx, vy, dt, block);
+    if (hit === null) continue;
+    if (earliest === null || hit.t < earliest.t) {
+      earliest = hit;
     }
   }
 
-  return null;
+  return earliest;
 }
 
 // --- Main export ---
