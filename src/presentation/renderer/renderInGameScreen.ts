@@ -27,6 +27,15 @@ const ITEM_COLOR = 0xffdd00;
 // 회전체 색상
 const SPINNER_COLOR = 0xaa88ff; // 보라 계열 임시 색상
 
+// Gate 연출 파라미터
+// Gate: 천장 근처에서 좌/우 두 문이 수평으로 열리는 입구 연출.
+// Unity 포팅 시: SpawnGateView.Animator 또는 Tween으로 대응.
+const GATE_COLOR = 0x888888;          // 입구 색상: 회색
+const GATE_HEIGHT = 12;               // 문 높이 (px)
+const GATE_Y = 6;                     // 천장 기준 y 위치 (중심)
+const GATE_OPEN_END = 0.15;           // spawnProgress < 0.15: 열리는 구간
+const GATE_CLOSE_START = 0.85;        // spawnProgress >= 0.85: 닫히는 구간
+
 // 바 색상 — activeEffect 별
 const BAR_COLOR_NORMAL = 0xffffff;
 const BAR_COLOR_EXPAND = 0xffee99; // 연한 노랑 틴트: 확장 효과 중임을 표시
@@ -47,6 +56,10 @@ export type InGameObjects = {
   // 매 프레임 spinnerStates 배열과 id 기준으로 add/remove 동기화
   // Unity 포팅 시: SpinnerView MonoBehaviour + ObjectPool 형태로 대응.
   spinnerMap: Map<string, Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics>;
+  // Gate 풀: spinnerId → [leftDoor, rightDoor]
+  // spawning phase 동안만 표시. active 전환 후 숨김.
+  // Unity 포팅 시: SpawnGateView MonoBehaviour 형태로 대응.
+  gateMap: Map<string, [Phaser.GameObjects.Rectangle, Phaser.GameObjects.Rectangle]>;
   // HUD
   hudScore: Phaser.GameObjects.Text;
   hudLives: Phaser.GameObjects.Text;
@@ -133,6 +146,7 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
     itemMap: new Map(),
     laserMap: new Map(),
     spinnerMap: new Map(),
+    gateMap: new Map(),
     hudScore,
     hudLives,
     hudRound,
@@ -311,12 +325,30 @@ export function renderInGameScreen(
   // cube: Rectangle + setRotation(angleRad). 한 변 = size.
   // triangle: Graphics로 매 틱 재그림. 정삼각형, 한 변 = size.
   //   정삼각형의 3 vertex를 angleRad 기준으로 계산: 외접원 반지름 = size / sqrt(3).
+  //
+  // spawning phase 처리:
+  //   alpha = 0.3 + 0.7 * spawnProgress (반투명 fade-in: 시작 희미 → 도착 완전)
+  //   위치: core가 계산한 spinner.y 그대로 사용.
+  //
+  // Gate 연출 (천장 입구 열림/닫힘):
+  //   spawnProgress < GATE_OPEN_END: 열리는 중 (openRatio 0 → 1)
+  //   GATE_OPEN_END <= spawnProgress < GATE_CLOSE_START: 완전 열림 (openRatio = 1)
+  //   spawnProgress >= GATE_CLOSE_START: 닫히는 중 (openRatio 1 → 0)
+  //   phase = 'active': gate 숨김
+  //
   // Unity 포팅 시: SpinnerView MonoBehaviour + ObjectPool 형태로 대응.
+  //                Gate: SpawnGateView.Animator 또는 DOTween으로 대응.
   const activeSpinnerIds = new Set<string>();
   for (const spinner of gameplayState.spinnerStates) {
     activeSpinnerIds.add(spinner.id);
     const def = spinnerDefinitions[spinner.definitionId];
     if (def === undefined) continue;
+
+    // spawning phase: fade-in alpha 계산
+    const spinnerAlpha =
+      spinner.phase === 'spawning'
+        ? 0.3 + 0.7 * spinner.spawnProgress
+        : 1.0;
 
     if (def.kind === 'cube') {
       // cube: Rectangle. setRotation(angleRad)으로 회전 반영.
@@ -338,6 +370,7 @@ export function renderInGameScreen(
       rect
         .setPosition(spinner.x, spinner.y)
         .setRotation(spinner.angleRad)
+        .setAlpha(spinnerAlpha)
         .setVisible(true);
     } else {
       // triangle: Graphics. 매 틱 재그림.
@@ -364,9 +397,78 @@ export function renderInGameScreen(
 
       gfx
         .clear()
-        .fillStyle(SPINNER_COLOR, 1)
+        .fillStyle(SPINNER_COLOR, spinnerAlpha)
         .fillTriangle(x0, y0, x1, y1, x2, y2)
         .setVisible(true);
+    }
+
+    // Gate 연출
+    // Gate openRatio: 0=완전 닫힘, 1=완전 열림.
+    // 각 door 의 실제 width = (def.size / 2) * (1 - openRatio).
+    // left door: 오른쪽 끝 = spinner.x. right door: 왼쪽 끝 = spinner.x.
+    // 즉, left door 의 center x = spinner.x - doorWidth / 2,
+    //     right door 의 center x = spinner.x + doorWidth / 2.
+    if (spinner.phase === 'spawning') {
+      let openRatio: number;
+      if (spinner.spawnProgress < GATE_OPEN_END) {
+        // 열리는 구간: 0 → 1
+        openRatio = spinner.spawnProgress / GATE_OPEN_END;
+      } else if (spinner.spawnProgress < GATE_CLOSE_START) {
+        // 완전 열림 구간
+        openRatio = 1.0;
+      } else {
+        // 닫히는 구간: 1 → 0
+        openRatio = 1.0 - (spinner.spawnProgress - GATE_CLOSE_START) / (1.0 - GATE_CLOSE_START);
+      }
+
+      const halfSize = def.size / 2;
+      const doorWidth = halfSize * (1.0 - openRatio);
+
+      let gates = objects.gateMap.get(spinner.id);
+      if (gates === undefined) {
+        const leftDoor = scene.add.rectangle(
+          spinner.x - doorWidth / 2,
+          GATE_Y,
+          doorWidth,
+          GATE_HEIGHT,
+          GATE_COLOR,
+        );
+        const rightDoor = scene.add.rectangle(
+          spinner.x + doorWidth / 2,
+          GATE_Y,
+          doorWidth,
+          GATE_HEIGHT,
+          GATE_COLOR,
+        );
+        gates = [leftDoor, rightDoor];
+        objects.gateMap.set(spinner.id, gates);
+      }
+
+      const [leftDoor, rightDoor] = gates;
+      if (doorWidth > 0) {
+        leftDoor
+          .setPosition(spinner.x - doorWidth / 2, GATE_Y)
+          .setSize(doorWidth, GATE_HEIGHT)
+          .setFillStyle(GATE_COLOR)
+          .setAlpha(1)
+          .setVisible(true);
+        rightDoor
+          .setPosition(spinner.x + doorWidth / 2, GATE_Y)
+          .setSize(doorWidth, GATE_HEIGHT)
+          .setFillStyle(GATE_COLOR)
+          .setAlpha(1)
+          .setVisible(true);
+      } else {
+        leftDoor.setVisible(false);
+        rightDoor.setVisible(false);
+      }
+    } else {
+      // phase === 'active': gate 숨김
+      const gates = objects.gateMap.get(spinner.id);
+      if (gates !== undefined) {
+        gates[0].setVisible(false);
+        gates[1].setVisible(false);
+      }
     }
   }
 
@@ -374,6 +476,14 @@ export function renderInGameScreen(
   for (const [id, obj] of objects.spinnerMap) {
     if (!activeSpinnerIds.has(id)) {
       obj.setVisible(false);
+    }
+  }
+
+  // 소멸된 회전체의 gate 숨기기
+  for (const [id, gates] of objects.gateMap) {
+    if (!activeSpinnerIds.has(id)) {
+      gates[0].setVisible(false);
+      gates[1].setVisible(false);
     }
   }
 
@@ -423,5 +533,9 @@ export function hideInGameScreen(objects: InGameObjects): void {
   }
   for (const obj of objects.spinnerMap.values()) {
     obj.setVisible(false);
+  }
+  for (const gates of objects.gateMap.values()) {
+    gates[0].setVisible(false);
+    gates[1].setVisible(false);
   }
 }
