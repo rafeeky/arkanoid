@@ -3,14 +3,19 @@
  *
  * mvp3.md §13-4 회전체 테스트 스펙:
  * - tick: angleRad 증가, 2π 순환
+ * - tick: spawning 하강 로직 (spawnProgress, y, easeOutCubic)
+ * - tick: spawnProgress >= 1 시 phase='active' 전환
  * - handleBallCollisions: 공-cube 충돌 (원 근사)
  * - handleBallCollisions: 공-triangle 충돌
+ * - handleBallCollisions: phase='spawning'이면 충돌 skip (ghost)
  * - handleBlockCollisions: phase=0일 때 블록 피격, phase=π/4(허용 밖)일 때 피격 없음
+ * - handleBlockCollisions: phase='spawning'이면 블록 피격 skip (ghost)
  * - 여러 spinner 동시 존재 시 독립 처리
  */
 
 import { describe, it, expect } from 'vitest';
-import { SpinnerSystem, normalizeAngle } from './SpinnerSystem';
+import { SpinnerSystem, normalizeAngle, SPAWN_DURATION_MS } from './SpinnerSystem';
+import { easeOutCubic } from '../../shared/easing';
 import type { SpinnerRuntimeState } from '../state/SpinnerRuntimeState';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -49,6 +54,22 @@ function makeSpinner(
     x: 360,
     y: 300,
     angleRad: 0,
+    phase: 'active',
+    targetY: 300,
+    spawnProgress: 1,
+    ...overrides,
+  };
+}
+
+function makeSpawningSpinner(
+  overrides: Partial<SpinnerRuntimeState> & { id: string; definitionId: string; targetY: number },
+): SpinnerRuntimeState {
+  return {
+    x: 360,
+    y: 0,
+    angleRad: 0,
+    phase: 'spawning',
+    spawnProgress: 0,
     ...overrides,
   };
 }
@@ -110,10 +131,10 @@ describe('normalizeAngle', () => {
 });
 
 // ---------------------------------------------------------------------------
-// SpinnerSystem.tick
+// SpinnerSystem.tick — active phase (기존 동작)
 // ---------------------------------------------------------------------------
 
-describe('SpinnerSystem.tick', () => {
+describe('SpinnerSystem.tick — active phase', () => {
   const system = new SpinnerSystem(spinnerDefs);
 
   it('dt=1초 뒤 cube spinner의 angleRad가 rotationSpeed만큼 증가한다', () => {
@@ -129,7 +150,6 @@ describe('SpinnerSystem.tick', () => {
   });
 
   it('각도가 2π를 초과하면 [0, 2π) 범위로 순환한다', () => {
-    // 2π - 0.1 에서 1초 tick → 1.5 rad 증가 → 2π + 1.4 → 정규화
     const spinner = makeSpinner({
       id: 's0',
       definitionId: 'spinner_cube',
@@ -156,11 +176,113 @@ describe('SpinnerSystem.tick', () => {
     expect(result[0]!.angleRad).toBeCloseTo(1.0);
   });
 
-  it('spinner 위치(x, y)는 tick 후에도 변경되지 않는다 (정적 배치)', () => {
-    const spinner = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 200, y: 400 });
+  it('active spinner 위치(x, y)는 tick 후에도 변경되지 않는다 (정적 배치)', () => {
+    const spinner = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 200, y: 400, targetY: 400 });
     const result = system.tick([spinner], 1);
     expect(result[0]!.x).toBe(200);
     expect(result[0]!.y).toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SpinnerSystem.tick — spawning phase
+// ---------------------------------------------------------------------------
+
+describe('SpinnerSystem.tick — spawning phase', () => {
+  const system = new SpinnerSystem(spinnerDefs);
+
+  it('dt=400ms → spawnProgress=0.5, y=easeOutCubic(0.5)*targetY', () => {
+    const targetY = 400;
+    const spinner = makeSpawningSpinner({
+      id: 's0',
+      definitionId: 'spinner_cube',
+      targetY,
+      spawnProgress: 0,
+      y: 0,
+    });
+    const dt = 400 / 1000; // 0.4초
+    const result = system.tick([spinner], dt);
+
+    const expectedProgress = 400 / SPAWN_DURATION_MS; // 0.5
+    const expectedY = easeOutCubic(expectedProgress) * targetY;
+
+    expect(result[0]!.spawnProgress).toBeCloseTo(expectedProgress);
+    expect(result[0]!.y).toBeCloseTo(expectedY);
+    expect(result[0]!.phase).toBe('spawning');
+  });
+
+  it('dt=800ms (SPAWN_DURATION_MS) 경과 시 phase=active로 전환', () => {
+    const targetY = 400;
+    const spinner = makeSpawningSpinner({
+      id: 's0',
+      definitionId: 'spinner_cube',
+      targetY,
+      spawnProgress: 0,
+      y: 0,
+    });
+    const dt = SPAWN_DURATION_MS / 1000; // 0.8초
+    const result = system.tick([spinner], dt);
+
+    expect(result[0]!.phase).toBe('active');
+    expect(result[0]!.spawnProgress).toBe(1);
+    expect(result[0]!.y).toBe(targetY);
+  });
+
+  it('progress > 1이 되는 dt에서도 y=targetY, progress=1로 고정된다', () => {
+    const targetY = 300;
+    const spinner = makeSpawningSpinner({
+      id: 's0',
+      definitionId: 'spinner_cube',
+      targetY,
+      spawnProgress: 0.8, // 이미 80% 진행
+      y: easeOutCubic(0.8) * targetY,
+    });
+    const dt = 1.0; // 1초 → progress 넘침
+    const result = system.tick([spinner], dt);
+
+    expect(result[0]!.phase).toBe('active');
+    expect(result[0]!.spawnProgress).toBe(1);
+    expect(result[0]!.y).toBe(targetY);
+  });
+
+  it('spawnProgress=0일 때 y=0 (입구)', () => {
+    const spinner = makeSpawningSpinner({
+      id: 's0',
+      definitionId: 'spinner_cube',
+      targetY: 400,
+      spawnProgress: 0,
+      y: 0,
+    });
+    // dt=0이면 진행 없음
+    const result = system.tick([spinner], 0);
+    expect(result[0]!.y).toBeCloseTo(0);
+    expect(result[0]!.spawnProgress).toBeCloseTo(0);
+  });
+
+  it('spawning 중인 spinner의 y는 easeOutCubic 커브를 따른다 (progress=0.5)', () => {
+    const targetY = 200;
+    const progress = 0.5;
+    const spinner = makeSpawningSpinner({
+      id: 's0',
+      definitionId: 'spinner_cube',
+      targetY,
+      spawnProgress: progress,
+      y: easeOutCubic(progress) * targetY,
+    });
+    // progress=0.5에서 dt=0 → y 불변 확인 (easeOutCubic(0.5)*200)
+    const result = system.tick([spinner], 0);
+    expect(result[0]!.y).toBeCloseTo(easeOutCubic(progress) * targetY);
+  });
+
+  it('x 좌표는 spawning 중에도 변경되지 않는다', () => {
+    const spinner = makeSpawningSpinner({
+      id: 's0',
+      definitionId: 'spinner_cube',
+      x: 360,
+      targetY: 400,
+    });
+    const result = system.tick([spinner], 0.4);
+    expect(result[0]!.x).toBe(360);
   });
 });
 
@@ -181,6 +303,43 @@ describe('SpinnerSystem.handleBallCollisions — 비활성 공', () => {
 });
 
 // ---------------------------------------------------------------------------
+// SpinnerSystem.handleBallCollisions — spawning phase (ghost)
+// ---------------------------------------------------------------------------
+
+describe('SpinnerSystem.handleBallCollisions — spawning phase ghost', () => {
+  const system = new SpinnerSystem(spinnerDefs);
+
+  it('phase=spawning인 spinner와 공이 겹쳐도 충돌이 없다 (ghost)', () => {
+    // spinner와 공을 완전히 겹치게 배치하되 phase='spawning'
+    const spinner = makeSpawningSpinner({
+      id: 's0',
+      definitionId: 'spinner_cube',
+      x: 360,
+      y: 300,
+      targetY: 300,
+      spawnProgress: 0.5,
+    });
+    const ball = makeBall({ x: 360, y: 280, vx: 0, vy: 200 }); // 겹치는 위치
+    const result = system.handleBallCollisions(ball, [spinner]);
+
+    expect(result.collided).toBe(false);
+    expect(result.nextBall.vx).toBe(ball.vx);
+    expect(result.nextBall.vy).toBe(ball.vy);
+    expect(result.nextBall.x).toBe(ball.x);
+    expect(result.nextBall.y).toBe(ball.y);
+  });
+
+  it('모든 spinner가 spawning이면 공은 불변이다', () => {
+    const s0 = makeSpawningSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 280, targetY: 400, spawnProgress: 0.3 });
+    const s1 = makeSpawningSpinner({ id: 's1', definitionId: 'spinner_triangle', x: 400, y: 280, targetY: 400, spawnProgress: 0.7 });
+    const ball = makeBall({ x: 380, y: 280, vx: 100, vy: 100 });
+    const result = system.handleBallCollisions(ball, [s0, s1]);
+    expect(result.collided).toBe(false);
+    expect(result.nextBall).toBe(ball); // 동일 참조 반환
+  });
+});
+
+// ---------------------------------------------------------------------------
 // SpinnerSystem.handleBallCollisions — cube (원 근사)
 // ---------------------------------------------------------------------------
 
@@ -189,7 +348,6 @@ describe('SpinnerSystem.handleBallCollisions — cube', () => {
 
   it('공이 cube spinner와 겹칠 때 collided=true를 반환한다', () => {
     // cube size=48, 반지름=24. BALL_RADIUS=8. 결합 반지름=32.
-    // 공을 spinner 중심에서 20px 위에 배치 → 겹침
     const spinner = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 300 });
     const ball = makeBall({ x: 360, y: 280, vx: 0, vy: 200 }); // 아래로 이동 중
     const result = system.handleBallCollisions(ball, [spinner]);
@@ -197,7 +355,6 @@ describe('SpinnerSystem.handleBallCollisions — cube', () => {
   });
 
   it('공이 cube spinner로 향하는 방향으로 반사된다', () => {
-    // 공이 spinner 위에서 아래로(vy>0) 이동 → 반사 후 vy<0
     const spinner = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 300 });
     const ball = makeBall({ x: 360, y: 280, vx: 0, vy: 200 });
     const result = system.handleBallCollisions(ball, [spinner]);
@@ -206,7 +363,6 @@ describe('SpinnerSystem.handleBallCollisions — cube', () => {
   });
 
   it('공이 spinner 옆에서 수평으로 이동할 때 vx 방향이 반전된다', () => {
-    // 공이 spinner 왼쪽(x=332)에서 오른쪽으로(vx>0) 이동
     const spinner = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 300 });
     const ball = makeBall({ x: 336, y: 300, vx: 200, vy: 0 });
     const result = system.handleBallCollisions(ball, [spinner]);
@@ -215,20 +371,17 @@ describe('SpinnerSystem.handleBallCollisions — cube', () => {
   });
 
   it('공이 spinner와 멀리 있을 때 충돌이 없다', () => {
-    // cube 반지름=24, BALL=8, 결합=32. 거리 100px이면 충돌 없음
     const spinner = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 300 });
     const ball = makeBall({ x: 360, y: 200, vx: 0, vy: 200 }); // 거리 100px
     const result = system.handleBallCollisions(ball, [spinner]);
     expect(result.collided).toBe(false);
-    expect(result.nextBall.vy).toBe(200); // 속도 불변
+    expect(result.nextBall.vy).toBe(200);
   });
 
   it('공이 이미 spinner에서 멀어지는 방향이면 분리만 한다 (속도 반전 없음)', () => {
-    // 공이 spinner 위에서 위쪽으로(vy<0) 이동 중 — 이미 분리 방향
     const spinner = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 300 });
     const ball = makeBall({ x: 360, y: 280, vx: 0, vy: -200 });
     const result = system.handleBallCollisions(ball, [spinner]);
-    // collided는 true (겹침은 맞음), 하지만 vy 방향은 그대로 (-200)
     expect(result.collided).toBe(true);
     expect(result.nextBall.vy).toBe(-200);
   });
@@ -244,7 +397,6 @@ describe('SpinnerSystem.handleBallCollisions — cube', () => {
     });
     const ball = makeBall({ x: spinnerX, y: spinnerY - 20, vx: 0, vy: 200 });
     const result = system.handleBallCollisions(ball, [spinner]);
-    // 결합 반지름 = 24 + 8 = 32. 반사 후 공과 spinner 간 거리 >= 32
     const dist = Math.sqrt(
       (result.nextBall.x - spinnerX) ** 2 + (result.nextBall.y - spinnerY) ** 2,
     );
@@ -260,7 +412,6 @@ describe('SpinnerSystem.handleBallCollisions — triangle', () => {
   const system = new SpinnerSystem(spinnerDefs);
 
   it('공이 triangle spinner와 겹칠 때 충돌을 감지한다', () => {
-    // triangle size=48, 반지름=24. 결합 반지름=32.
     const spinner = makeSpinner({ id: 's0', definitionId: 'spinner_triangle', x: 360, y: 300 });
     const ball = makeBall({ x: 360, y: 282, vx: 0, vy: 200 });
     const result = system.handleBallCollisions(ball, [spinner]);
@@ -283,9 +434,6 @@ describe('SpinnerSystem.handleBallCollisions — 여러 spinner', () => {
   const system = new SpinnerSystem(spinnerDefs);
 
   it('두 spinner가 모두 겹칠 때 가장 가까운 spinner에 대해서만 반사한다', () => {
-    // spinner A: (360, 300), spinner B: (400, 300)
-    // 공: (380, 300) — 두 spinner 모두 겹침 (거리 20 < 32)
-    // A까지 거리 20, B까지 거리 20 → 동일 거리; 첫 번째 처리
     const spinnerA = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 300 });
     const spinnerB = makeSpinner({ id: 's1', definitionId: 'spinner_cube', x: 400, y: 300 });
     const ball = makeBall({ x: 380, y: 300, vx: 100, vy: 0 });
@@ -297,23 +445,52 @@ describe('SpinnerSystem.handleBallCollisions — 여러 spinner', () => {
     const ball = makeBall({ x: 360, y: 300 });
     const result = system.handleBallCollisions(ball, []);
     expect(result.collided).toBe(false);
-    expect(result.nextBall).toBe(ball); // 동일 참조
+    expect(result.nextBall).toBe(ball);
   });
 });
 
 // ---------------------------------------------------------------------------
-// SpinnerSystem.handleBlockCollisions
+// SpinnerSystem.handleBlockCollisions — spawning phase (ghost)
+// ---------------------------------------------------------------------------
+
+describe('SpinnerSystem.handleBlockCollisions — spawning phase ghost', () => {
+  const system = new SpinnerSystem(spinnerDefs);
+
+  it('phase=spawning인 spinner는 phase=0이어도 블록을 피격하지 않는다', () => {
+    const spinner = makeSpawningSpinner({
+      id: 's0',
+      definitionId: 'spinner_cube',
+      x: 360,
+      y: 288, // 블록 근접 위치
+      targetY: 300,
+      spawnProgress: 0.5,
+      angleRad: 0, // 본래라면 활성 phase
+    });
+    const block = makeBlock({ id: 'b0', x: 336, y: 288, remainingHits: 2 });
+    const result = system.handleBlockCollisions([spinner], [block], blockDefs);
+    expect(result.nextBlocks[0]!.remainingHits).toBe(2);
+    expect(result.events).toHaveLength(0);
+  });
+
+  it('모든 spinner가 spawning이면 블록은 불변이다', () => {
+    const s0 = makeSpawningSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 288, targetY: 300, spawnProgress: 0.1, angleRad: 0 });
+    const block = makeBlock({ id: 'b0', x: 336, y: 288, remainingHits: 3 });
+    const result = system.handleBlockCollisions([s0], [block], blockDefs);
+    expect(result.events).toHaveLength(0);
+    expect(result.scoreDelta).toBe(0);
+    expect(result.nextBlocks[0]!.remainingHits).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SpinnerSystem.handleBlockCollisions — active phase (기존 동작)
 // ---------------------------------------------------------------------------
 
 describe('SpinnerSystem.handleBlockCollisions', () => {
   const system = new SpinnerSystem(spinnerDefs);
 
   it('phase=0일 때 인접 블록을 1 피격한다', () => {
-    // cube blockCollisionPhases=[0, π/2]. angleRad=0 → 활성
-    // spinner: (360, 300), block 중심: (360+32, 300+12) = (392, 312)
-    // 단, 블록을 spinner와 겹치도록 배치
     const spinner = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 300, angleRad: 0 });
-    // 블록 좌상단 (336, 288) → 중심 (368, 300) → spinner에서 약 8px
     const block = makeBlock({ id: 'b0', x: 336, y: 288, remainingHits: 2 });
     const result = system.handleBlockCollisions([spinner], [block], blockDefs);
     expect(result.nextBlocks[0]!.remainingHits).toBe(1);
@@ -331,8 +508,6 @@ describe('SpinnerSystem.handleBlockCollisions', () => {
   });
 
   it('phase=π/4 (허용 밖)일 때 블록 피격 없음', () => {
-    // cube phases=[0, π/2]. π/4 ≈ 0.785. 가장 가까운 phase=0와의 차이=π/4≈0.785 > 0.1
-    // phase=π/2=1.5708. 차이=0.785 > 0.1
     const spinner = makeSpinner({
       id: 's0',
       definitionId: 'spinner_cube',
@@ -347,7 +522,6 @@ describe('SpinnerSystem.handleBlockCollisions', () => {
   });
 
   it('phase=π/2 (cube 두 번째 허용 phase)일 때 블록 피격', () => {
-    // cube blockCollisionPhases=[0, π/2]. π/2에서 활성
     const spinner = makeSpinner({
       id: 's0',
       definitionId: 'spinner_cube',
@@ -382,7 +556,6 @@ describe('SpinnerSystem.handleBlockCollisions', () => {
 
   it('범위 밖 블록은 피격하지 않는다', () => {
     const spinner = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 300, angleRad: 0 });
-    // 블록을 spinner에서 멀리 배치 (200px 이상)
     const block = makeBlock({ id: 'b0', x: 600, y: 500, remainingHits: 1 });
     const result = system.handleBlockCollisions([spinner], [block], blockDefs);
     expect(result.events).toHaveLength(0);
@@ -402,12 +575,10 @@ describe('SpinnerSystem.handleBlockCollisions', () => {
   });
 
   it('여러 spinner가 같은 블록을 동일 틱에 독립적으로 처리한다', () => {
-    // 두 spinner가 모두 phase 활성 상태, 같은 블록 위에 위치
     const s0 = makeSpinner({ id: 's0', definitionId: 'spinner_cube', x: 360, y: 300, angleRad: 0 });
     const s1 = makeSpinner({ id: 's1', definitionId: 'spinner_cube', x: 368, y: 300, angleRad: 0 });
     const block = makeBlock({ id: 'b0', x: 336, y: 288, remainingHits: 3 });
     const result = system.handleBlockCollisions([s0, s1], [block], blockDefs);
-    // 두 spinner 모두 블록을 타격 → remainingHits=1 (3-2)
     expect(result.nextBlocks[0]!.remainingHits).toBe(1);
     expect(result.events).toHaveLength(2);
   });
@@ -416,7 +587,6 @@ describe('SpinnerSystem.handleBlockCollisions', () => {
     const block = makeBlock({ id: 'b0', x: 336, y: 288 });
     const result = system.handleBlockCollisions([], [block], blockDefs);
     expect(result.events).toHaveLength(0);
-    expect(result.nextBlocks).toBe(block ? result.nextBlocks : result.nextBlocks); // 그냥 확인
   });
 
   it('블록 목록이 비어 있으면 이벤트가 없다', () => {

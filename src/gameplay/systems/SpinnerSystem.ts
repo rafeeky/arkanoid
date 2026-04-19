@@ -2,9 +2,12 @@
  * SpinnerSystem
  *
  * 책임:
- * - tick: 매 틱 모든 spinnerStates의 angleRad 업데이트 (회전만, 이동 없음)
- * - handleBallCollisions: 공 ↔ 회전체 원 근사 충돌 및 반사
- * - handleBlockCollisions: 회전체 ↔ 블록 phase-gate 충돌 (상태 의존)
+ * - tick: 매 틱 모든 spinnerStates 업데이트
+ *     - phase='spawning': spawnProgress 진행, y = easeOutCubic(progress) * targetY
+ *       progress >= 1 도달 시 phase='active' 전환
+ *     - phase='active': angleRad 업데이트 (회전만, 이동 없음)
+ * - handleBallCollisions: phase='active'인 spinner만 공 충돌 감지 (spawning 중엔 ghost)
+ * - handleBlockCollisions: phase='active'인 spinner만 블록 충돌 감지
  *
  * 원 근사 설계 결정:
  * - 정육면체/삼각형 모두 size/2 반지름의 원으로 처리한다.
@@ -28,6 +31,7 @@ import type { BlockState } from '../state/BlockState';
 import type { SpinnerDefinition } from '../../definitions/types/SpinnerDefinition';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { GameplayEvent } from '../events/gameplayEvents';
+import { easeOutCubic } from '../../shared/easing';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -48,6 +52,9 @@ const BLOCK_HEIGHT = 24;
 /** 블록 대각선 반 길이 (px). 회전체-블록 거리 검사에 사용. */
 const BLOCK_HALF_DIAG = Math.sqrt((BLOCK_WIDTH / 2) ** 2 + (BLOCK_HEIGHT / 2) ** 2);
 
+/** 등장 애니메이션 총 지속 시간 (ms). */
+export const SPAWN_DURATION_MS = 800;
+
 // ---------------------------------------------------------------------------
 // SpinnerSystem
 // ---------------------------------------------------------------------------
@@ -60,8 +67,10 @@ export class SpinnerSystem {
   // -------------------------------------------------------------------------
 
   /**
-   * 매 틱: 모든 spinnerStates의 angleRad 업데이트.
-   * 정적 배치 — 위치(x, y)는 변경하지 않는다.
+   * 매 틱: 모든 spinnerStates 업데이트.
+   *
+   * phase='spawning': spawnProgress 진행 → y 갱신 → 완료 시 phase='active' 전환.
+   * phase='active': angleRad 업데이트 (위치 불변).
    *
    * @param spinnerStates 현재 회전체 상태 목록
    * @param dt            경과 시간 (초)
@@ -74,6 +83,11 @@ export class SpinnerSystem {
       const def = this.spinnerDefinitions[s.definitionId];
       if (!def) return s;
 
+      if (s.phase === 'spawning') {
+        return this.tickSpawning(s, dt);
+      }
+
+      // phase='active': 회전만 업데이트
       const newAngle = normalizeAngle(s.angleRad + def.rotationSpeedRadPerSec * dt);
       return { ...s, angleRad: newAngle };
     });
@@ -85,6 +99,7 @@ export class SpinnerSystem {
 
   /**
    * 공 ↔ 회전체 충돌 검사 및 반사.
+   * phase='active'인 spinner만 처리한다. spawning 중인 spinner는 ghost 취급.
    * 원 근사: 회전체를 size/2 반지름 원으로 취급.
    * 공이 여러 회전체와 겹칠 경우 가장 가까운 하나만 처리한다.
    *
@@ -102,11 +117,17 @@ export class SpinnerSystem {
       return { nextBall: ball, collided: false };
     }
 
+    // phase='active'인 spinner만 대상으로 한다
+    const activeSpinners = spinnerStates.filter((s) => s.phase === 'active');
+    if (activeSpinners.length === 0) {
+      return { nextBall: ball, collided: false };
+    }
+
     // 가장 가까운 겹침 회전체를 찾는다
     let closestSpinner: SpinnerRuntimeState | undefined;
     let closestDist = Infinity;
 
-    for (const s of spinnerStates) {
+    for (const s of activeSpinners) {
       const def = this.spinnerDefinitions[s.definitionId];
       if (!def) continue;
 
@@ -185,6 +206,7 @@ export class SpinnerSystem {
 
   /**
    * 회전체 ↔ 블록 phase-gate 충돌.
+   * phase='active'인 spinner만 처리한다. spawning 중인 spinner는 ghost 취급.
    *
    * 각 spinnerState에 대해:
    * 1. 현재 angleRad(2π 정규화)가 blockCollisionPhases 중 하나와 ±PHASE_TOLERANCE 이내인지 확인
@@ -211,13 +233,19 @@ export class SpinnerSystem {
       return { nextBlocks: blocks, events: [], scoreDelta: 0 };
     }
 
+    // phase='active'인 spinner만 대상으로 한다
+    const activeSpinners = spinnerStates.filter((s) => s.phase === 'active');
+    if (activeSpinners.length === 0) {
+      return { nextBlocks: blocks, events: [], scoreDelta: 0 };
+    }
+
     const events: GameplayEvent[] = [];
     let totalScoreDelta = 0;
 
     // 불변 처리: 블록 변경 사항을 Map으로 추적
     const blockUpdates = new Map<string, BlockState>();
 
-    for (const s of spinnerStates) {
+    for (const s of activeSpinners) {
       const def = this.spinnerDefinitions[s.definitionId];
       if (!def) continue;
 
@@ -279,6 +307,29 @@ export class SpinnerSystem {
   // -------------------------------------------------------------------------
   // Private helpers
   // -------------------------------------------------------------------------
+
+  /**
+   * spawning phase 틱: spawnProgress 진행 및 y 갱신.
+   */
+  private tickSpawning(s: SpinnerRuntimeState, dt: number): SpinnerRuntimeState {
+    const newProgress = Math.min(1, s.spawnProgress + (dt * 1000) / SPAWN_DURATION_MS);
+    const newY = easeOutCubic(newProgress) * s.targetY;
+
+    if (newProgress >= 1) {
+      return {
+        ...s,
+        phase: 'active',
+        spawnProgress: 1,
+        y: s.targetY,
+      };
+    }
+
+    return {
+      ...s,
+      spawnProgress: newProgress,
+      y: newY,
+    };
+  }
 
   /**
    * 현재 각도가 phase 허용 범위 안에 있는지 확인한다.

@@ -81,7 +81,10 @@ function buildSpinnerStates(def: StageDefinition): readonly SpinnerRuntimeState[
     id: `spinner_${index}`,
     definitionId: placement.definitionId,
     x: placement.x,
-    y: placement.y,
+    y: 0,
     angleRad: placement.initialAngleRad ?? 0,
+    phase: 'spawning' as const,
+    targetY: placement.y,
+    spawnProgress: 0,
   }));
 }

@@ -1274,7 +1274,7 @@ describe('MVP3 Phase7 — 회전체 기믹 E2E', () => {
     ctx._setGameplayState({
       ...state,
       spinnerStates: [
-        { id: 'spinner_0', definitionId: 'spinner_cube', x: spinnerX, y: spinnerY, angleRad: 0 },
+        { id: 'spinner_0', definitionId: 'spinner_cube', x: spinnerX, y: spinnerY, angleRad: 0, phase: 'active' as const, targetY: spinnerY, spawnProgress: 1 },
       ],
       balls: state.balls.map((b) => ({
         ...b,
@@ -1304,7 +1304,7 @@ describe('MVP3 Phase7 — 회전체 기믹 E2E', () => {
     ctx._setGameplayState({
       ...state,
       spinnerStates: [
-        { id: 'spinner_0', definitionId: 'spinner_cube', x: 360, y: 300, angleRad: 0 },
+        { id: 'spinner_0', definitionId: 'spinner_cube', x: 360, y: 300, angleRad: 0, phase: 'active' as const, targetY: 300, spawnProgress: 1 },
       ],
     });
 
@@ -1333,7 +1333,7 @@ describe('MVP3 Phase7 — 회전체 기믹 E2E', () => {
     ctx._setGameplayState({
       ...state,
       spinnerStates: [
-        { id: 'spinner_0', definitionId: 'spinner_cube', x: spinnerX, y: spinnerY, angleRad: 0 },
+        { id: 'spinner_0', definitionId: 'spinner_cube', x: spinnerX, y: spinnerY, angleRad: 0, phase: 'active' as const, targetY: spinnerY, spawnProgress: 1 },
       ],
       blocks: [
         {

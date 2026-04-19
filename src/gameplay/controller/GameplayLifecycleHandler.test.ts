@@ -245,7 +245,7 @@ describe('GameplayLifecycleHandler.resetForRetry', () => {
   it('resetForRetry: spinnerStates 는 그대로 유지', () => {
     const handler = makeHandler();
     const spinners = [
-      { id: 'spinner_0', definitionId: 'spinner_cube', x: 100, y: 200, angleRad: 0.5 },
+      { id: 'spinner_0', definitionId: 'spinner_cube', x: 100, y: 200, angleRad: 0.5, phase: 'active' as const, targetY: 200, spawnProgress: 1 },
     ] as const;
     const prev = { ...makeStateWithProgress(), spinnerStates: spinners };
     const next = handler.resetForRetry(prev, stage1, config);
@@ -431,7 +431,7 @@ describe('GameplayLifecycleHandler.loadNextStage', () => {
   it('loadNextStage: spinnerStates가 새 스테이지 기반으로 재생성된다 (stage2 spinner 1개)', () => {
     const handler = makeHandler();
     const spinners = [
-      { id: 'spinner_0', definitionId: 'spinner_cube', x: 100, y: 200, angleRad: 1.2 },
+      { id: 'spinner_0', definitionId: 'spinner_cube', x: 100, y: 200, angleRad: 1.2, phase: 'active' as const, targetY: 200, spawnProgress: 1 },
     ] as const;
     const prev = { ...makeProgressState(), spinnerStates: spinners };
     const next = handler.loadNextStage(prev, stage2, config);
