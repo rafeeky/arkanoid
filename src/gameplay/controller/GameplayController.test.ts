@@ -351,6 +351,11 @@ describe('터널링 회귀 테스트 — swept AABB 충돌', () => {
       ],
       itemDrops: [],
       isStageCleared: false,
+      magnetRemainingTime: 0,
+      attachedBallIds: [],
+      laserCooldownRemaining: 0,
+      laserShots: [],
+      spinnerStates: [],
     };
 
     const ctrl = new GameplayController(modState, deps);
@@ -381,6 +386,11 @@ describe('터널링 회귀 테스트 — swept AABB 충돌', () => {
       ],
       itemDrops: [],
       isStageCleared: false,
+      magnetRemainingTime: 0,
+      attachedBallIds: [],
+      laserCooldownRemaining: 0,
+      laserShots: [],
+      spinnerStates: [],
     };
 
     const ctrl = new GameplayController(modState, deps);

@@ -74,6 +74,36 @@ describe('GameplayLifecycleHandler.initializeStage', () => {
     const state = handler.initializeStage(stage1, config, config.initialLives);
     expect(state.isStageCleared).toBe(false);
   });
+
+  it('magnetRemainingTime = 0', () => {
+    const handler = makeHandler();
+    const state = handler.initializeStage(stage1, config, config.initialLives);
+    expect(state.magnetRemainingTime).toBe(0);
+  });
+
+  it('attachedBallIds = []', () => {
+    const handler = makeHandler();
+    const state = handler.initializeStage(stage1, config, config.initialLives);
+    expect(state.attachedBallIds).toHaveLength(0);
+  });
+
+  it('laserCooldownRemaining = 0', () => {
+    const handler = makeHandler();
+    const state = handler.initializeStage(stage1, config, config.initialLives);
+    expect(state.laserCooldownRemaining).toBe(0);
+  });
+
+  it('laserShots = []', () => {
+    const handler = makeHandler();
+    const state = handler.initializeStage(stage1, config, config.initialLives);
+    expect(state.laserShots).toHaveLength(0);
+  });
+
+  it('spinnerStates = [] (spinners 없는 스테이지)', () => {
+    const handler = makeHandler();
+    const state = handler.initializeStage(stage1, config, config.initialLives);
+    expect(state.spinnerStates).toHaveLength(0);
+  });
 });
 
 describe('GameplayLifecycleHandler.resetForRetry', () => {
@@ -179,6 +209,48 @@ describe('GameplayLifecycleHandler.resetForRetry', () => {
     const prev = makeStateWithProgress();
     const next = handler.resetForRetry(prev, stage1, config);
     expect(next.bar.width).toBe(config.baseBarWidth);
+  });
+
+  it('resetForRetry: magnetRemainingTime = 0', () => {
+    const handler = makeHandler();
+    const prev = { ...makeStateWithProgress(), magnetRemainingTime: 5000 };
+    const next = handler.resetForRetry(prev, stage1, config);
+    expect(next.magnetRemainingTime).toBe(0);
+  });
+
+  it('resetForRetry: attachedBallIds = []', () => {
+    const handler = makeHandler();
+    const prev = { ...makeStateWithProgress(), attachedBallIds: ['ball_0'] as readonly string[] };
+    const next = handler.resetForRetry(prev, stage1, config);
+    expect(next.attachedBallIds).toHaveLength(0);
+  });
+
+  it('resetForRetry: laserCooldownRemaining = 0', () => {
+    const handler = makeHandler();
+    const prev = { ...makeStateWithProgress(), laserCooldownRemaining: 800 };
+    const next = handler.resetForRetry(prev, stage1, config);
+    expect(next.laserCooldownRemaining).toBe(0);
+  });
+
+  it('resetForRetry: laserShots = []', () => {
+    const handler = makeHandler();
+    const prev = {
+      ...makeStateWithProgress(),
+      laserShots: [{ id: 'laser_0', x: 300, y: 200, vy: -400 }] as const,
+    };
+    const next = handler.resetForRetry(prev, stage1, config);
+    expect(next.laserShots).toHaveLength(0);
+  });
+
+  it('resetForRetry: spinnerStates 는 그대로 유지', () => {
+    const handler = makeHandler();
+    const spinners = [
+      { id: 'spinner_0', definitionId: 'spinner_cube', x: 100, y: 200, angleRad: 0.5 },
+    ] as const;
+    const prev = { ...makeStateWithProgress(), spinnerStates: spinners };
+    const next = handler.resetForRetry(prev, stage1, config);
+    expect(next.spinnerStates).toHaveLength(1);
+    expect(next.spinnerStates[0]!.id).toBe('spinner_0');
   });
 });
 
@@ -320,5 +392,50 @@ describe('GameplayLifecycleHandler.loadNextStage', () => {
     const next = handler.loadNextStage(prev, stage2, config);
     expect(next.bar.x).toBe(stage2.barSpawnX);
     expect(next.bar.y).toBe(stage2.barSpawnY);
+  });
+
+  it('loadNextStage: magnetRemainingTime = 0', () => {
+    const handler = makeHandler();
+    const prev = { ...makeProgressState(), magnetRemainingTime: 3000 };
+    const next = handler.loadNextStage(prev, stage2, config);
+    expect(next.magnetRemainingTime).toBe(0);
+  });
+
+  it('loadNextStage: attachedBallIds = []', () => {
+    const handler = makeHandler();
+    const prev = {
+      ...makeProgressState(),
+      attachedBallIds: ['ball_0'] as readonly string[],
+    };
+    const next = handler.loadNextStage(prev, stage2, config);
+    expect(next.attachedBallIds).toHaveLength(0);
+  });
+
+  it('loadNextStage: laserCooldownRemaining = 0', () => {
+    const handler = makeHandler();
+    const prev = { ...makeProgressState(), laserCooldownRemaining: 500 };
+    const next = handler.loadNextStage(prev, stage2, config);
+    expect(next.laserCooldownRemaining).toBe(0);
+  });
+
+  it('loadNextStage: laserShots = []', () => {
+    const handler = makeHandler();
+    const prev = {
+      ...makeProgressState(),
+      laserShots: [{ id: 'laser_0', x: 200, y: 100, vy: -400 }] as const,
+    };
+    const next = handler.loadNextStage(prev, stage2, config);
+    expect(next.laserShots).toHaveLength(0);
+  });
+
+  it('loadNextStage: spinnerStates가 새 스테이지 기반으로 재생성된다 (stage2 spinner 없음)', () => {
+    const handler = makeHandler();
+    const spinners = [
+      { id: 'spinner_0', definitionId: 'spinner_cube', x: 100, y: 200, angleRad: 1.2 },
+    ] as const;
+    const prev = { ...makeProgressState(), spinnerStates: spinners };
+    const next = handler.loadNextStage(prev, stage2, config);
+    // stage2에 spinners 필드가 없으면 빈 배열
+    expect(next.spinnerStates).toHaveLength(0);
   });
 });

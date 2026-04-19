@@ -99,6 +99,11 @@ function makeMinimalState(overrides: {
     blocks: [],
     itemDrops: [],
     isStageCleared: false,
+    magnetRemainingTime: 0,
+    attachedBallIds: [],
+    laserCooldownRemaining: 0,
+    laserShots: [],
+    spinnerStates: [],
   };
 }
 

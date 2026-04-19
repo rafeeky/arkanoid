@@ -3,5 +3,5 @@ export type BarState = {
   y: number;
   width: number;
   moveSpeed: number;
-  activeEffect: 'none' | 'expand';
+  activeEffect: 'none' | 'expand' | 'magnet' | 'laser';
 };

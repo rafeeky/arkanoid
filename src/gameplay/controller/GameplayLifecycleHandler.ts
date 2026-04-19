@@ -75,6 +75,12 @@ export class GameplayLifecycleHandler {
       bar: resetBar,
       balls: resetBalls,
       itemDrops: [],
+      // 자석/레이저 효과 타이머 초기화
+      magnetRemainingTime: 0,
+      attachedBallIds: [],
+      laserCooldownRemaining: 0,
+      laserShots: [],
+      // spinnerStates 는 스테이지 내 보존 (회전체는 LifeLost 후에도 유지)
     };
   }
 
@@ -102,6 +108,9 @@ export class GameplayLifecycleHandler {
       currentState.session.lives, // 현재 라이프 유지
     );
 
+    // freshState 는 StageRuntimeFactory 에서 생성되므로:
+    //   - magnet/laser 관련 필드가 모두 0/빈배열로 초기화됨
+    //   - spinnerStates 는 새 스테이지 definition 기반으로 재생성됨
     return {
       ...freshState,
       session: {

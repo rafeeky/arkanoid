@@ -20,11 +20,15 @@ export type ItemSpawnedEvent = {
   y: number;
 };
 
+/** バー効果の全種別。Phase 3/4/5 で itemType も拡張予定。 */
+export type BarEffectKind = 'none' | 'expand' | 'magnet' | 'laser';
+
 export type ItemCollectedEvent = {
   type: 'ItemCollected';
+  // TODO(mvp3-phase3): itemType を 'expand' | 'magnet' | 'laser' に拡張する
   itemType: 'expand';
-  replacedEffect: 'none' | 'expand';
-  newEffect: 'none' | 'expand';
+  replacedEffect: BarEffectKind;
+  newEffect: BarEffectKind;
 };
 
 export type LifeLostEvent = {

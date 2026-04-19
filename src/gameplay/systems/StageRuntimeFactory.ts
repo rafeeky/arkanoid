@@ -3,6 +3,7 @@ import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { GameplayRuntimeState } from '../state/GameplayRuntimeState';
 import type { BlockState } from '../state/BlockState';
+import type { SpinnerRuntimeState } from '../state/SpinnerRuntimeState';
 
 const BLOCK_WIDTH = 64;
 const BLOCK_HEIGHT = 24;
@@ -64,5 +65,23 @@ export function createGameplayRuntimeFromStageDefinition(
     blocks,
     itemDrops: [],
     isStageCleared: false,
+    magnetRemainingTime: 0,
+    attachedBallIds: [],
+    laserCooldownRemaining: 0,
+    laserShots: [],
+    spinnerStates: buildSpinnerStates(def),
   };
+}
+
+function buildSpinnerStates(def: StageDefinition): readonly SpinnerRuntimeState[] {
+  if (!def.spinners || def.spinners.length === 0) {
+    return [];
+  }
+  return def.spinners.map((placement, index) => ({
+    id: `spinner_${index}`,
+    definitionId: placement.definitionId,
+    x: placement.x,
+    y: placement.y,
+    angleRad: placement.initialAngleRad ?? 0,
+  }));
 }

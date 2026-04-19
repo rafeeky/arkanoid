@@ -52,6 +52,11 @@ function makeState(overrides: Partial<GameplayRuntimeState> = {}): GameplayRunti
     blocks: [],
     itemDrops: [],
     isStageCleared: false,
+    magnetRemainingTime: 0,
+    attachedBallIds: [],
+    laserCooldownRemaining: 0,
+    laserShots: [],
+    spinnerStates: [],
     ...overrides,
   };
 }
