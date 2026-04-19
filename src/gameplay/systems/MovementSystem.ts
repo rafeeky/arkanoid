@@ -43,8 +43,13 @@ export function moveBall(ball: BallState, dt: number): BallState {
 /**
  * Maximum number of block-collision bounces per tick.
  * Prevents infinite loops in corner cases.
+ *
+ * Raised from 4 to 8: dense block grids and high-speed balls can require more
+ * than 4 bounces per tick.  At 8 the cap is only hit in truly extreme scenarios
+ * (e.g. speed > 5000 px/s with gap=0 blocks), and even then the free-advance
+ * guard below prevents tunnelling.
  */
-const MAX_BOUNCE_COUNT = 4;
+const MAX_BOUNCE_COUNT = 8;
 
 /**
  * Distance the ball is pushed away from a block face after reflection.
@@ -272,14 +277,63 @@ export function moveBallWithCollisions(
     }
   }
 
-  // If we hit the bounce cap and there is still time left, just free-advance
-  // to prevent the ball from freezing in place.
+  // If we hit the bounce cap (or exited the loop with remaining > 0 because
+  // all hits were skipped via hitBlockIds/hitWalls), guard against tunnelling:
+  //
+  // Before free-advancing, run one final sweep that ignores hitBlockIds and
+  // hitWalls filters.  If there is still a block in the ball's path we clamp
+  // the ball just outside that block's expanded AABB boundary and stop.
+  // No velocity reflection is applied here — the block will be hit again next
+  // tick and the normal swept loop will handle it.  This prevents the ball from
+  // silently passing through a block that was "seen" by the sweep but skipped
+  // because it was already in hitBlockIds.
   if (remaining > 0) {
-    current = {
-      ...current,
-      x: current.x + current.vx * remaining,
-      y: current.y + current.vy * remaining,
-    };
+    const guardHit = sweepBallVsBlocks(
+      current.x,
+      current.y,
+      current.vx,
+      current.vy,
+      remaining,
+      blocks,
+    );
+
+    if (guardHit !== null) {
+      // A block is in the path.  Advance only to the block boundary (do not
+      // pass through it).  No reflection — leave velocity unchanged so the
+      // next tick can resolve the collision normally.
+      const elapsed = guardHit.t * remaining;
+      let clampX = current.x + current.vx * elapsed;
+      let clampY = current.y + current.vy * elapsed;
+
+      // Push the ball strictly outside the expanded AABB boundary so the next
+      // tick's sweep does not see it as alreadyInside.
+      const gb = guardHit.expandedBounds;
+      if (!guardHit.alreadyInside) {
+        switch (guardHit.side) {
+          case 'top':    clampY = gb.top    - BLOCK_PUSH_OUT_EPSILON; break;
+          case 'bottom': clampY = gb.bottom + BLOCK_PUSH_OUT_EPSILON; break;
+          case 'left':   clampX = gb.left   - BLOCK_PUSH_OUT_EPSILON; break;
+          case 'right':  clampX = gb.right  + BLOCK_PUSH_OUT_EPSILON; break;
+        }
+      } else {
+        // Already inside: push to actual boundary face
+        switch (guardHit.side) {
+          case 'top':    clampY = gb.top    - BLOCK_PUSH_OUT_EPSILON; break;
+          case 'bottom': clampY = gb.bottom + BLOCK_PUSH_OUT_EPSILON; break;
+          case 'left':   clampX = gb.left   - BLOCK_PUSH_OUT_EPSILON; break;
+          case 'right':  clampX = gb.right  + BLOCK_PUSH_OUT_EPSILON; break;
+        }
+      }
+
+      current = { ...current, x: clampX, y: clampY };
+    } else {
+      // No block in path — free-advance is safe.
+      current = {
+        ...current,
+        x: current.x + current.vx * remaining,
+        y: current.y + current.vy * remaining,
+      };
+    }
   }
 
   // Final wall clamp — safety net ensuring the ball cannot escape the playfield
@@ -439,6 +493,20 @@ export type SanityCheckResult = {
  * because this check is a last-resort correction: if the ball centre itself
  * is inside the block geometry we have a confirmed tunnel.
  */
+/**
+ * Epsilon used for the sanity-check "ball centre inside block" boundary test.
+ *
+ * Using strict inequality (< and >) to detect overlap causes a miss when the
+ * ball centre lands *exactly* on a block edge (a common floating-point outcome
+ * after push-out with an epsilon nudge).  Adding a small tolerance here ensures
+ * that centre-on-edge is treated as "inside" and the push-out fires.
+ *
+ * Value must be smaller than BLOCK_PUSH_OUT_EPSILON so that a correctly
+ * pushed-out ball (offset by BLOCK_PUSH_OUT_EPSILON from the face) is NOT
+ * re-triggered on the same frame.
+ */
+const SANITY_CHECK_EPSILON = 0.1;
+
 function computeBallCenterBlockOverlap(
   ball: BallState,
   block: BlockState,
@@ -448,8 +516,11 @@ function computeBallCenterBlockOverlap(
   const bRight = bx + BLOCK_WIDTH;
   const bBottom = by + BLOCK_HEIGHT;
 
-  if (ball.x <= bx || ball.x >= bRight) return null;
-  if (ball.y <= by || ball.y >= bBottom) return null;
+  // Use epsilon-inclusive bounds so a ball centre sitting exactly on a block
+  // edge (common after push-out with BLOCK_PUSH_OUT_EPSILON nudge) is still
+  // classified as "inside" and the defensive push fires.
+  if (ball.x < bx - SANITY_CHECK_EPSILON || ball.x > bRight  + SANITY_CHECK_EPSILON) return null;
+  if (ball.y < by - SANITY_CHECK_EPSILON || ball.y > bBottom + SANITY_CHECK_EPSILON) return null;
 
   const cx = bx + BLOCK_WIDTH / 2;
   const cy = by + BLOCK_HEIGHT / 2;
