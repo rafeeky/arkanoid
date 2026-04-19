@@ -39,6 +39,18 @@ type ApplyOptions = {
   blockReflectionAlreadyApplied?: boolean;
 };
 
+// --- Playfield geometry constants (mirror of CollisionService to avoid cross-import) ---
+
+const CANVAS_WIDTH = 960;
+const BALL_RADIUS = 8;
+
+/**
+ * Epsilon used when snapping ball position to the playfield boundary after a
+ * wall reflection.  Matches the push-out value used in MovementSystem for block
+ * reflections so both behaviours are symmetric.
+ */
+const WALL_PUSH_OUT_EPSILON = 0.5;
+
 // --- Minimum angle enforcement ---
 
 const MIN_ANGLE_FROM_AXIS_DEG = 15;
@@ -87,14 +99,29 @@ export function enforceMinAngle(vx: number, vy: number): { vx: number; vy: numbe
 function reflectBallWall(ball: BallState, fact: BallHitWallFact): BallState {
   let vx = ball.vx;
   let vy = ball.vy;
-  if (fact.side === 'left' || fact.side === 'right') {
+
+  // Snap position to just inside the playfield boundary.
+  // High-speed balls can overshoot the wall in a single tick, leaving
+  // ball.x/y outside the boundary.  Without a snap the ball stays in an
+  // out-of-bounds position on the next tick and can skip block sweep checks.
+  // The epsilon matches the push-out used for block reflections (symmetric).
+  let x = ball.x;
+  let y = ball.y;
+
+  if (fact.side === 'left') {
     vx = -vx;
+    x = BALL_RADIUS + WALL_PUSH_OUT_EPSILON;
+  } else if (fact.side === 'right') {
+    vx = -vx;
+    x = CANVAS_WIDTH - BALL_RADIUS - WALL_PUSH_OUT_EPSILON;
   } else {
     // top
     vy = -vy;
+    y = BALL_RADIUS + WALL_PUSH_OUT_EPSILON;
   }
+
   const enforced = enforceMinAngle(vx, vy);
-  return { ...ball, vx: enforced.vx, vy: enforced.vy };
+  return { ...ball, x, y, vx: enforced.vx, vy: enforced.vy };
 }
 
 /**

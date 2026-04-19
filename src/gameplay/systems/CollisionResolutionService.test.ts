@@ -295,6 +295,61 @@ describe('ItemFellOffFloor resolution', () => {
 });
 
 // ============================================================
+// Bug C 재현 테스트: 벽 반사 후 위치 스냅 없음 (position snap missing)
+// ============================================================
+
+describe('Bug C regression: 벽 반사 후 공 위치 스냅', () => {
+  const BALL_RADIUS = 8;
+  const CANVAS_WIDTH = 960;
+  const WALL_PUSH_OUT_EPSILON = 0.5;
+
+  it('우측 벽 충돌 후 ball.x는 벽 안쪽으로 스냅된다', () => {
+    // 고속 이동으로 벽을 overshoot한 상태 (x > CANVAS_WIDTH - BALL_RADIUS)
+    const ball = activeBall({ x: 965, y: 300, vx: 400, vy: -200 });
+    const state = makeState({ balls: [ball] });
+    const facts: CollisionFact[] = [{ type: 'BallHitWall', ballId: 'ball_0', side: 'right' }];
+    const { nextState } = applyCollisions(state, facts, tables);
+    const result = firstBall(nextState);
+    expect(result.x).toBeLessThanOrEqual(CANVAS_WIDTH - BALL_RADIUS - WALL_PUSH_OUT_EPSILON + 0.001);
+    expect(result.vx).toBeLessThan(0);
+  });
+
+  it('좌측 벽 충돌 후 ball.x는 벽 안쪽으로 스냅된다', () => {
+    // 좌측 벽을 overshoot한 상태 (x < BALL_RADIUS)
+    const ball = activeBall({ x: -3, y: 300, vx: -400, vy: -200 });
+    const state = makeState({ balls: [ball] });
+    const facts: CollisionFact[] = [{ type: 'BallHitWall', ballId: 'ball_0', side: 'left' }];
+    const { nextState } = applyCollisions(state, facts, tables);
+    const result = firstBall(nextState);
+    expect(result.x).toBeGreaterThanOrEqual(BALL_RADIUS + WALL_PUSH_OUT_EPSILON - 0.001);
+    expect(result.vx).toBeGreaterThan(0);
+  });
+
+  it('상단 벽 충돌 후 ball.y는 벽 안쪽으로 스냅된다', () => {
+    // 상단 벽을 overshoot한 상태 (y < BALL_RADIUS)
+    const ball = activeBall({ x: 300, y: -2, vx: 200, vy: -400 });
+    const state = makeState({ balls: [ball] });
+    const facts: CollisionFact[] = [{ type: 'BallHitWall', ballId: 'ball_0', side: 'top' }];
+    const { nextState } = applyCollisions(state, facts, tables);
+    const result = firstBall(nextState);
+    expect(result.y).toBeGreaterThanOrEqual(BALL_RADIUS + WALL_PUSH_OUT_EPSILON - 0.001);
+    expect(result.vy).toBeGreaterThan(0);
+  });
+
+  it('벽 반사 후 스냅된 위치에서는 detectBallWallCollisions가 재감지하지 않는다', () => {
+    // 우측 벽 충돌 후 스냅 → 다음 틱 위치는 벽 안쪽이어야 함
+    // x = CANVAS_WIDTH - BALL_RADIUS - 0.5 → x + BALL_RADIUS = CANVAS_WIDTH - 0.5 < CANVAS_WIDTH
+    const ball = activeBall({ x: 965, y: 300, vx: 400, vy: -200 });
+    const state = makeState({ balls: [ball] });
+    const facts: CollisionFact[] = [{ type: 'BallHitWall', ballId: 'ball_0', side: 'right' }];
+    const { nextState } = applyCollisions(state, facts, tables);
+    const snappedBall = firstBall(nextState);
+    // 스냅 후: x + BALL_RADIUS < CANVAS_WIDTH이므로 우측 벽 재감지 안 됨
+    expect(snappedBall.x + BALL_RADIUS).toBeLessThan(CANVAS_WIDTH);
+  });
+});
+
+// ============================================================
 // Bug B 재현 테스트: 반사 후 수직 교착 (vx 최소값 보장 없음)
 // ============================================================
 
