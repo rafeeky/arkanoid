@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createAppContext } from './createAppContext';
+import { InMemorySaveRepository } from '../persistence/InMemorySaveRepository';
+import type { ISaveRepository } from '../persistence/ISaveRepository';
 import type { InputSnapshot } from '../input/InputSnapshot';
 import type { GameplayRuntimeState } from '../gameplay/state/GameplayRuntimeState';
 
@@ -22,13 +24,13 @@ const leftInput: InputSnapshot = {
 };
 
 describe('AppContext — Title 상태', () => {
-  it('초기 상태는 title', () => {
-    const ctx = createAppContext();
+  it('초기 상태는 title', async () => {
+    const ctx = await createAppContext();
     expect(ctx.getFlowState().kind).toBe('title');
   });
 
-  it('Title 상태에서 tick: leftDown=true 여도 바 이동 없음 (Gameplay 틱 비활성)', () => {
-    const ctx = createAppContext();
+  it('Title 상태에서 tick: leftDown=true 여도 바 이동 없음 (Gameplay 틱 비활성)', async () => {
+    const ctx = await createAppContext();
     const barXBefore = ctx.getGameplayState().bar.x;
     ctx.tick(leftInput, 1 / 60);
     expect(ctx.getGameplayState().bar.x).toBe(barXBefore);
@@ -36,20 +38,20 @@ describe('AppContext — Title 상태', () => {
 });
 
 describe('AppContext — Title → RoundIntro: Stage 1 로드', () => {
-  it('스페이스 입력 시 RoundIntro 로 전이', () => {
-    const ctx = createAppContext();
+  it('스페이스 입력 시 RoundIntro 로 전이', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60);
     expect(ctx.getFlowState().kind).toBe('roundIntro');
   });
 
-  it('스페이스 입력 후 블록 65개 로드됨', () => {
-    const ctx = createAppContext();
+  it('스페이스 입력 후 블록 65개 로드됨', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60);
     expect(ctx.getGameplayState().blocks).toHaveLength(65);
   });
 
-  it('스페이스 입력 후 score=0, lives=3', () => {
-    const ctx = createAppContext();
+  it('스페이스 입력 후 score=0, lives=3', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60);
     const state = ctx.getGameplayState();
     expect(state.session.score).toBe(0);
@@ -58,15 +60,15 @@ describe('AppContext — Title → RoundIntro: Stage 1 로드', () => {
 });
 
 describe('AppContext — RoundIntro → InGame → 바 이동', () => {
-  it('RoundIntroFinished 수신 후 inGame 으로 전이', () => {
-    const ctx = createAppContext();
+  it('RoundIntroFinished 수신 후 inGame 으로 전이', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60); // → roundIntro
     ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
     expect(ctx.getFlowState().kind).toBe('inGame');
   });
 
-  it('InGame 에서 leftDown=true tick 시 바 이동', () => {
-    const ctx = createAppContext();
+  it('InGame 에서 leftDown=true tick 시 바 이동', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60); // → roundIntro
     ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
     const barXBefore = ctx.getGameplayState().bar.x;
@@ -81,7 +83,7 @@ describe('AppContext — RoundIntro → InGame → 바 이동', () => {
  * 작은 dt(1/60)로 반복해 충돌 감지가 프레임 단위로 동작하도록 한다.
  */
 function tickUntilFlowChanges(
-  ctx: ReturnType<typeof createAppContext>,
+  ctx: Awaited<ReturnType<typeof createAppContext>>,
   fromKind: string,
   maxTicks = 600,
 ): void {
@@ -93,8 +95,8 @@ function tickUntilFlowChanges(
 }
 
 describe('AppContext — InGame 공 바닥 이탈 → LifeLost → RoundIntro → resetForRetry', () => {
-  it('LifeLost 게임플레이 이벤트가 Flow 에 전달되어 RoundIntro 전이', () => {
-    const ctx = createAppContext();
+  it('LifeLost 게임플레이 이벤트가 Flow 에 전달되어 RoundIntro 전이', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60); // → roundIntro
     ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
 
@@ -109,8 +111,8 @@ describe('AppContext — InGame 공 바닥 이탈 → LifeLost → RoundIntro �
     expect(kind === 'roundIntro' || kind === 'gameOver').toBe(true);
   });
 
-  it('LifeLost 후 RoundIntro 전이 시 블록 수 유지 (resetForRetry)', () => {
-    const ctx = createAppContext();
+  it('LifeLost 후 RoundIntro 전이 시 블록 수 유지 (resetForRetry)', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60); // → roundIntro
     ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
     ctx.tick(spaceInput, 1 / 60); // 공 발사
@@ -133,7 +135,7 @@ describe('AppContext — InGame 공 바닥 이탈 → LifeLost → RoundIntro �
  * RoundIntro 전이 시 자동으로 InGame 으로 다시 진입한다.
  * lives 를 전부 소진하면 gameOver 상태가 된다.
  */
-function drainAllLives(ctx: ReturnType<typeof createAppContext>): void {
+function drainAllLives(ctx: Awaited<ReturnType<typeof createAppContext>>): void {
   const moveLeft: InputSnapshot = { leftDown: true, rightDown: false, spaceJustPressed: false };
   const launchAndMoveLeft: InputSnapshot = { leftDown: true, rightDown: false, spaceJustPressed: true };
   const dt = 1 / 60;
@@ -155,15 +157,15 @@ function drainAllLives(ctx: ReturnType<typeof createAppContext>): void {
 }
 
 describe('AppContext — GameOver 시나리오', () => {
-  it('3번 바닥 이탈 후 GameOver', () => {
-    const ctx = createAppContext();
+  it('3번 바닥 이탈 후 GameOver', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60); // → roundIntro
     drainAllLives(ctx);
     expect(ctx.getFlowState().kind).toBe('gameOver');
   });
 
-  it('GameOver 에서 스페이스 입력으로 Title 복귀', () => {
-    const ctx = createAppContext();
+  it('GameOver 에서 스페이스 입력으로 Title 복귀', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60); // → roundIntro
     drainAllLives(ctx);
     expect(ctx.getFlowState().kind).toBe('gameOver');
@@ -174,8 +176,8 @@ describe('AppContext — GameOver 시나리오', () => {
 });
 
 describe('AppContext — Title 복귀 후 재시작 시 Stage 1 재로드', () => {
-  it('GameOver → Title → Space → blocks=65 (새 게임 초기화)', () => {
-    const ctx = createAppContext();
+  it('GameOver → Title → Space → blocks=65 (새 게임 초기화)', async () => {
+    const ctx = await createAppContext();
 
     ctx.tick(spaceInput, 1 / 60); // → roundIntro
     drainAllLives(ctx);
@@ -194,28 +196,28 @@ describe('AppContext — Title 복귀 후 재시작 시 Stage 1 재로드', () =
 });
 
 describe('AppContext — getScreenState 공개 API', () => {
-  it('초기 getScreenState().currentScreen = title', () => {
-    const ctx = createAppContext();
+  it('초기 getScreenState().currentScreen = title', async () => {
+    const ctx = await createAppContext();
     // tick 없이도 screenState 기본값 확인 가능
     // 단 ScreenDirector 는 tick 호출 시 갱신되므로 1 tick 수행
     ctx.tick(noInput, 1 / 60);
     expect(ctx.getScreenState().currentScreen).toBe('title');
   });
 
-  it('스페이스 입력 후 getScreenState().currentScreen = roundIntro', () => {
-    const ctx = createAppContext();
+  it('스페이스 입력 후 getScreenState().currentScreen = roundIntro', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60); // → roundIntro
     expect(ctx.getScreenState().currentScreen).toBe('roundIntro');
   });
 
-  it('초기 isBarBreaking = false', () => {
-    const ctx = createAppContext();
+  it('초기 isBarBreaking = false', async () => {
+    const ctx = await createAppContext();
     ctx.tick(noInput, 1 / 60);
     expect(ctx.getScreenState().isBarBreaking).toBe(false);
   });
 
-  it('초기 blockHitFlashBlockIds = []', () => {
-    const ctx = createAppContext();
+  it('초기 blockHitFlashBlockIds = []', async () => {
+    const ctx = await createAppContext();
     ctx.tick(noInput, 1 / 60);
     expect(ctx.getScreenState().blockHitFlashBlockIds).toEqual([]);
   });
@@ -230,8 +232,8 @@ describe('AppContext — LifeLost → isBarBreaking 연출 흐름', () => {
    *   RoundIntro 화면 위에서 재생되므로, 이벤트가 flowController.handlePresentationEvent 를
    *   통해 처리돼도 Flow 상태가 이미 roundIntro 여서 추가 전이가 없음.
    */
-  it('LifeLost 발생 직후 isBarBreaking = true', () => {
-    const ctx = createAppContext();
+  it('LifeLost 발생 직후 isBarBreaking = true', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60); // → roundIntro
     ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
     ctx.tick(spaceInput, 1 / 60); // 공 발사
@@ -252,8 +254,8 @@ describe('AppContext — LifeLost → isBarBreaking 연출 흐름', () => {
     }
   });
 
-  it('LifeLost 후 700ms 이상 tick 하면 isBarBreaking = false', () => {
-    const ctx = createAppContext();
+  it('LifeLost 후 700ms 이상 tick 하면 isBarBreaking = false', async () => {
+    const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60); // → roundIntro
     ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
     ctx.tick(spaceInput, 1 / 60); // 공 발사
@@ -280,7 +282,7 @@ describe('AppContext — LifeLost → isBarBreaking 연출 흐름', () => {
  * ctx 를 InGame 상태로 이동시키는 헬퍼.
  * Title → (space) → RoundIntro → (RoundIntroFinished) → InGame
  */
-function enterInGame(ctx: ReturnType<typeof createAppContext>): void {
+function enterInGame(ctx: Awaited<ReturnType<typeof createAppContext>>): void {
   ctx.tick(spaceInput, 1 / 60); // → roundIntro
   ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
 }
@@ -290,7 +292,7 @@ function enterInGame(ctx: ReturnType<typeof createAppContext>): void {
  * 현재 gameplayState를 기반으로 공을 블록 바로 아래에 위로 향하게 배치하고
  * itemDrops 를 비워서 spawn 조건을 보장한다.
  */
-function injectBallAboutToHitDropBlock(ctx: ReturnType<typeof createAppContext>): void {
+function injectBallAboutToHitDropBlock(ctx: Awaited<ReturnType<typeof createAppContext>>): void {
   const state = ctx.getGameplayState() as GameplayRuntimeState;
   // drop 블록(row=1, col=6) 의 계산된 좌표: x=448, y=108, center=(480, 120)
   // 공을 블록 바로 아래에서 위로 향하게 배치
@@ -318,8 +320,8 @@ function injectBallAboutToHitDropBlock(ctx: ReturnType<typeof createAppContext>)
 }
 
 describe('Phase 7 통합 — 드랍 블록 파괴 → ItemSpawned → 낙하 → 획득 → expand', () => {
-  it('드랍 블록 파괴 시 itemDrops 에 아이템이 추가된다 (ItemSpawned)', () => {
-    const ctx = createAppContext();
+  it('드랍 블록 파괴 시 itemDrops 에 아이템이 추가된다 (ItemSpawned)', async () => {
+    const ctx = await createAppContext();
     enterInGame(ctx);
     injectBallAboutToHitDropBlock(ctx);
 
@@ -336,8 +338,8 @@ describe('Phase 7 통합 — 드랍 블록 파괴 → ItemSpawned → 낙하 →
     expect(itemAppeared).toBe(true);
   });
 
-  it('아이템 획득 후 bar.width === baseBarWidth * 1.5 (= 180)', () => {
-    const ctx = createAppContext();
+  it('아이템 획득 후 bar.width === baseBarWidth * 1.5 (= 180)', async () => {
+    const ctx = await createAppContext();
     enterInGame(ctx);
     injectBallAboutToHitDropBlock(ctx);
 
@@ -380,8 +382,8 @@ describe('Phase 7 통합 — 드랍 블록 파괴 → ItemSpawned → 낙하 →
     expect(barAfter.activeEffect).toBe('expand');
   });
 
-  it('아이템 획득 후 bar.activeEffect === "expand"', () => {
-    const ctx = createAppContext();
+  it('아이템 획득 후 bar.activeEffect === "expand"', async () => {
+    const ctx = await createAppContext();
     enterInGame(ctx);
     injectBallAboutToHitDropBlock(ctx);
 
@@ -403,8 +405,8 @@ describe('Phase 7 통합 — 드랍 블록 파괴 → ItemSpawned → 낙하 →
     expect(ctx.getGameplayState().bar.activeEffect).toBe('expand');
   });
 
-  it('LifeLost 후 resetForRetry → bar.width === 120 (baseBarWidth) 복구', () => {
-    const ctx = createAppContext();
+  it('LifeLost 후 resetForRetry → bar.width === 120 (baseBarWidth) 복구', async () => {
+    const ctx = await createAppContext();
     enterInGame(ctx);
     injectBallAboutToHitDropBlock(ctx);
 
@@ -446,9 +448,9 @@ describe('Phase 7 통합 — 드랍 블록 파괴 → ItemSpawned → 낙하 →
     }
   });
 
-  it('아이템 낙하 중(itemDrops.length>0)이면 같은 드랍 블록 파괴 시 아이템 spawn 안 됨 — 1개 제약', () => {
+  it('아이템 낙하 중(itemDrops.length>0)이면 같은 드랍 블록 파괴 시 아이템 spawn 안 됨 — 1개 제약', async () => {
     // 이 테스트는 "itemDrops.length > 0 이면 spawn 차단" 정책을 검증한다.
-    const ctx = createAppContext();
+    const ctx = await createAppContext();
     enterInGame(ctx);
     injectBallAboutToHitDropBlock(ctx);
 
@@ -495,10 +497,10 @@ describe('Phase 7 통합 — 드랍 블록 파괴 → ItemSpawned → 낙하 →
     expect(itemCountAfter).toBeLessThanOrEqual(1);
   });
 
-  it('아이템 획득(effectActive) 후 새 드랍 블록 파괴 시 새 아이템 spawn 가능 — 효과 중 차단 아님', () => {
+  it('아이템 획득(effectActive) 후 새 드랍 블록 파괴 시 새 아이템 spawn 가능 — 효과 중 차단 아님', async () => {
     // "아이템 1개 제약"은 itemDrops.length === 0 조건이므로:
     // 이미 효과가 active(expand)이지만 화면에 아이템이 없으면 → spawn 허용
-    const ctx = createAppContext();
+    const ctx = await createAppContext();
     enterInGame(ctx);
     injectBallAboutToHitDropBlock(ctx);
 
@@ -554,5 +556,102 @@ describe('Phase 7 통합 — 드랍 블록 파괴 → ItemSpawned → 낙하 →
     }
     // 효과 중이지만 화면에 아이템이 없으므로 spawn 허용
     expect(newItemSpawned).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 8 — Persistence: saveRepository 주입 및 저장 시점 검증
+// ---------------------------------------------------------------------------
+
+describe('AppContext — Persistence: saveRepository 주입', () => {
+  it('saveRepository 주입 시 초기 highScore 로드됨', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 5000 });
+    const ctx = await createAppContext({ saveRepository: repo });
+    expect(ctx.getGameplayState().session.highScore).toBe(5000);
+  });
+
+  it('saveRepository 미제공 시 기본값 highScore=0', async () => {
+    const ctx = await createAppContext();
+    expect(ctx.getGameplayState().session.highScore).toBe(0);
+  });
+
+  it('새 게임 시작(RoundIntro 진입) 후에도 highScore 유지', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 3000 });
+    const ctx = await createAppContext({ saveRepository: repo });
+    ctx.tick(spaceInput, 1 / 60); // → roundIntro (initializeStage 호출됨)
+    expect(ctx.getGameplayState().session.highScore).toBe(3000);
+  });
+});
+
+describe('AppContext — Persistence: EnteredGameOver → save 호출', () => {
+  it('GameOver 진입 시 saveRepository.save 가 호출된다', async () => {
+    const repo = new InMemorySaveRepository();
+    const saveSpy = vi.spyOn(repo, 'save');
+
+    const ctx = await createAppContext({ saveRepository: repo });
+    ctx.tick(spaceInput, 1 / 60); // → roundIntro
+    drainAllLives(ctx);
+
+    expect(ctx.getFlowState().kind).toBe('gameOver');
+    // EnteredGameOver 이벤트 발행 → save 호출됨
+    expect(saveSpy).toHaveBeenCalled();
+  });
+
+  it('session.score > session.highScore 이면 새 highScore로 save 호출됨', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await createAppContext({ saveRepository: repo });
+
+    // 게임 시작
+    ctx.tick(spaceInput, 1 / 60); // → roundIntro
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
+
+    // score를 임의 값으로 올린다
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({
+      ...state,
+      session: { ...state.session, score: 1500 },
+    });
+
+    // 공을 바닥으로 보내 GameOver 유도
+    const stateWithScore = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({
+      ...stateWithScore,
+      session: { ...stateWithScore.session, score: 1500, lives: 1 },
+      balls: stateWithScore.balls.map((b, i) =>
+        i === 0 ? { ...b, isActive: true, x: 480, y: 700, vx: 0, vy: 300 } : b,
+      ),
+    });
+    tickUntilFlowChanges(ctx, 'inGame');
+
+    // GameOver 진입 확인
+    if (ctx.getFlowState().kind === 'gameOver') {
+      const saved = await repo.load();
+      expect(saved.highScore).toBe(1500);
+    }
+  });
+
+  it('session.score <= session.highScore 이면 기존 highScore 유지', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 9999 });
+    const ctx = await createAppContext({ saveRepository: repo });
+
+    // 게임 시작 (score=0, highScore=9999)
+    ctx.tick(spaceInput, 1 / 60); // → roundIntro
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
+
+    // 낮은 점수 상태에서 GameOver 유도
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({
+      ...state,
+      session: { ...state.session, score: 100, lives: 1 },
+      balls: state.balls.map((b, i) =>
+        i === 0 ? { ...b, isActive: true, x: 480, y: 700, vx: 0, vy: 300 } : b,
+      ),
+    });
+    tickUntilFlowChanges(ctx, 'inGame');
+
+    if (ctx.getFlowState().kind === 'gameOver') {
+      const saved = await repo.load();
+      expect(saved.highScore).toBe(9999);
+    }
   });
 });

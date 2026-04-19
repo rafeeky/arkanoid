@@ -10,11 +10,22 @@ import type { InputSnapshot } from '../input/InputSnapshot';
 import type { FlowEvent } from '../flow/events/flowEvents';
 import type { GameplayEvent } from '../gameplay/events/gameplayEvents';
 import type { PresentationEvent } from '../presentation/events/presentationEvents';
+import type { ISaveRepository } from '../persistence/ISaveRepository';
+import { InMemorySaveRepository } from '../persistence/InMemorySaveRepository';
 
 import { StageDefinitionTable } from '../definitions/tables/StageDefinitionTable';
 import { BlockDefinitionTable } from '../definitions/tables/BlockDefinitionTable';
 import { ItemDefinitionTable } from '../definitions/tables/ItemDefinitionTable';
 import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
+
+/**
+ * createAppContext 옵션.
+ *
+ * saveRepository: 저장소 구현체. 미제공 시 InMemorySaveRepository 사용.
+ */
+export type AppContextOptions = {
+  saveRepository?: ISaveRepository;
+};
 
 /**
  * AppContext: 모든 의존성의 조립 지점.
@@ -32,6 +43,7 @@ import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
  * - flowController 이벤트:
  *   - EnteredRoundIntro + from === 'title'  → lifecycleHandler.initializeStage (새 게임)
  *   - EnteredRoundIntro + from === 'inGame' → lifecycleHandler.resetForRetry (재시도)
+ *   - EnteredGameOver → saveRepository.save 호출 (highScore 갱신, fire-and-forget)
  * - VisualEffectController 가 LifeLostPresentationFinished 발행 → handlePresentationEvent 경유
  *
  * 틱 순서 (architecture §17):
@@ -51,20 +63,34 @@ export type AppContext = {
   _setGameplayState(state: GameplayRuntimeState): void;
 };
 
-export function createAppContext(): AppContext {
+/**
+ * AppContext를 비동기로 생성한다.
+ *
+ * async 이유:
+ * - 생성 시점에 saveRepository.load()를 await하여 초기 highScore를 로드.
+ * - Title 화면 진입 전에 이미 highScore가 세팅된 상태를 보장 (UX: 0→실제값 깜빡임 없음).
+ * - main.ts에서 Phaser 시작 전에 1회 await하면 된다.
+ */
+export async function createAppContext(options?: AppContextOptions): Promise<AppContext> {
+  const saveRepository: ISaveRepository = options?.saveRepository ?? new InMemorySaveRepository();
+
   const config = GameplayConfigTable;
   const stage1 = StageDefinitionTable[0]!;
 
   const lifecycleHandler = new GameplayLifecycleHandler(BlockDefinitionTable);
 
+  // 초기 highScore 로드: 생성 시점에 await하여 Title 화면 진입 전 세팅 보장
+  const initialSaveData = await saveRepository.load();
+  const initialHighScore = initialSaveData.highScore;
+
   // GameplayController 는 초기 상태가 필요하다.
   // Title 진입 시점에는 아직 게임이 시작되지 않았으므로,
   // 빈 placeholder 상태로 초기화하고 EnteredRoundIntro(from='title') 때 교체한다.
-  const placeholderState: GameplayRuntimeState = lifecycleHandler.initializeStage(
-    stage1,
-    config,
-    config.initialLives,
-  );
+  const baseState = lifecycleHandler.initializeStage(stage1, config, config.initialLives);
+  const placeholderState: GameplayRuntimeState = {
+    ...baseState,
+    session: { ...baseState.session, highScore: initialHighScore },
+  };
 
   const gameplayController = new GameplayController(placeholderState, {
     blockDefinitions: BlockDefinitionTable,
@@ -87,13 +113,13 @@ export function createAppContext(): AppContext {
   function onFlowEvent(event: FlowEvent): void {
     if (event.type === 'EnteredRoundIntro') {
       if (event.from === 'title') {
-        // 새 게임 시작: Stage 1 완전 초기화
-        const newState = lifecycleHandler.initializeStage(
-          stage1,
-          config,
-          config.initialLives,
-        );
-        gameplayController.setState(newState);
+        // 새 게임 시작: Stage 1 완전 초기화, 현재 highScore 유지
+        const currentHighScore = gameplayController.getState().session.highScore;
+        const newState = lifecycleHandler.initializeStage(stage1, config, config.initialLives);
+        gameplayController.setState({
+          ...newState,
+          session: { ...newState.session, highScore: currentHighScore },
+        });
       } else if (event.from === 'inGame') {
         // 라이프 손실 후 재시도: 블록/점수/라이프 유지, 위치만 리셋
         const currentState = gameplayController.getState();
@@ -104,6 +130,21 @@ export function createAppContext(): AppContext {
         );
         gameplayController.setState(resetState);
       }
+    } else if (event.type === 'EnteredGameOver') {
+      // 저장 시점: GameOver 진입 시 highScore 갱신 후 저장 (fire-and-forget)
+      const session = gameplayController.getState().session;
+      const newHighScore = Math.max(session.highScore, session.score);
+      if (newHighScore > session.highScore) {
+        // highScore 갱신
+        const updatedState = gameplayController.getState() as GameplayRuntimeState;
+        gameplayController.setState({
+          ...updatedState,
+          session: { ...updatedState.session, highScore: newHighScore },
+        });
+      }
+      saveRepository.save({ highScore: newHighScore }).catch((err: unknown) => {
+        console.warn('[AppContext] saveRepository.save 실패:', err);
+      });
     }
   }
 
