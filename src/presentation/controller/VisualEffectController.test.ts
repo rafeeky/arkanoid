@@ -218,7 +218,9 @@ describe('VisualEffectController — Intro 시퀀스: hold phase', () => {
     expect(ctrl.getIntroTypingProgress()).toBe(1);
   });
 
-  it('hold 200ms 경과 시 phase = erasing 으로 전환', () => {
+  // TODO(dev): 커밋 1417858에서 intro 지우기 연출 제거(hold→typing 직접 전이)로 일시 skip.
+  // erasing phase 복원 시 재활성화.
+  it.skip('hold 200ms 경과 시 phase = erasing 으로 전환', () => {
     const ctrl = makeIntroCtrl();
     ctrl.startIntroSequence();
     ctrl.update(100, noOp); // typing → hold
@@ -228,7 +230,9 @@ describe('VisualEffectController — Intro 시퀀스: hold phase', () => {
 });
 
 describe('VisualEffectController — Intro 시퀀스: erasing phase', () => {
-  it('erasing 시작 직후 progress ≈ 1 (아직 elapsed=0)', () => {
+  // TODO(dev): 커밋 1417858에서 intro 지우기 연출 제거(hold→typing 직접 전이)로 일시 skip.
+  // erasing phase 복원 시 재활성화.
+  it.skip('erasing 시작 직후 progress ≈ 1 (아직 elapsed=0)', () => {
     const ctrl = makeIntroCtrl();
     ctrl.startIntroSequence();
     ctrl.update(100, noOp); // typing → hold
@@ -237,7 +241,9 @@ describe('VisualEffectController — Intro 시퀀스: erasing phase', () => {
     expect(ctrl.getIntroTypingProgress()).toBeCloseTo(1);
   });
 
-  it('erasing 중간(25ms): progress ≈ 0.5 (eraseDuration=50ms)', () => {
+  // TODO(dev): 커밋 1417858에서 intro 지우기 연출 제거(hold→typing 직접 전이)로 일시 skip.
+  // erasing phase 복원 시 재활성화.
+  it.skip('erasing 중간(25ms): progress ≈ 0.5 (eraseDuration=50ms)', () => {
     const ctrl = makeIntroCtrl();
     ctrl.startIntroSequence();
     ctrl.update(100, noOp); // typing → hold
