@@ -509,24 +509,39 @@ export function sanityCheckBallBlockSeparation(
         // Ball centre is left of block centre → push left
         newX = block.x - BALL_RADIUS - BLOCK_PUSH_OUT_EPSILON;
         side = 'left';
+        // Only reflect if velocity is pointing INTO the block (toward positive x).
+        // If the ball is already moving away (vx < 0), keep the velocity as-is.
+        if (newVx > 0) {
+          newVx = -newVx;
+        }
       } else {
         // Push right
         newX = block.x + BLOCK_WIDTH + BALL_RADIUS + BLOCK_PUSH_OUT_EPSILON;
         side = 'right';
+        // Only reflect if velocity is pointing INTO the block (toward negative x).
+        if (newVx < 0) {
+          newVx = -newVx;
+        }
       }
-      newVx = -newVx;
     } else {
       // Push out along y-axis
       if (ball.y < cy) {
         // Ball centre is above block centre → push upward
         newY = block.y - BALL_RADIUS - BLOCK_PUSH_OUT_EPSILON;
         side = 'top';
+        // Only reflect if velocity is pointing INTO the block (toward positive y).
+        if (newVy > 0) {
+          newVy = -newVy;
+        }
       } else {
         // Push downward
         newY = block.y + BLOCK_HEIGHT + BALL_RADIUS + BLOCK_PUSH_OUT_EPSILON;
         side = 'bottom';
+        // Only reflect if velocity is pointing INTO the block (toward negative y).
+        if (newVy < 0) {
+          newVy = -newVy;
+        }
       }
-      newVy = -newVy;
     }
 
     const enforced = enforceMinAngle(newVx, newVy);
