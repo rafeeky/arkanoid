@@ -219,10 +219,14 @@ export function renderInGameScreen(
       .setVisible(true);
   }
 
-  // 공 (isActive 이고 바 파괴 연출 중이 아닐 때만 표시)
-  const activeBall = gameplayState.balls.find((b) => b.isActive);
-  if (activeBall && !screenState.isBarBreaking) {
-    objects.ball.setPosition(activeBall.x, activeBall.y).setAlpha(1).setVisible(true);
+  // 공 표시 (바 파괴 연출 중이 아니면 항상 표시)
+  // - 발사 전(isActive=false): moveAttachedBallToBar 가 바 위 좌표를 세팅
+  // - 자석 부착(isActive=false + attachedOffsetX): 바 이동에 동기 이동 중
+  // - 일반 플레이(isActive=true): ball.x/y 그대로
+  // 바 파괴 연출 중엔 공 숨김 (사망 연출)
+  const ballToRender = gameplayState.balls[0];
+  if (ballToRender && !screenState.isBarBreaking) {
+    objects.ball.setPosition(ballToRender.x, ballToRender.y).setAlpha(1).setVisible(true);
   } else {
     objects.ball.setVisible(false);
   }
