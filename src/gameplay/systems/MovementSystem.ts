@@ -497,10 +497,26 @@ export function moveItemDrop(item: ItemDropState, dt: number): ItemDropState {
   };
 }
 
+/**
+ * 비활성 공(자석 부착 포함)을 바에 동기화한다.
+ *
+ * - attachedOffsetX が定義されている場合: 바 중심 + 오프셋으로 x를 갱신 (자석 부착)
+ * - 그 외 비활성 공: 바 중심 상단 고정 (발사 대기 위치)
+ */
 export function moveAttachedBallToBar(ball: BallState, bar: BarState): BallState {
   if (ball.isActive) {
     return ball;
   }
+  if (ball.attachedOffsetX !== undefined) {
+    // 자석 부착 공: 바 중심 + 저장된 오프셋으로 x를 동기화
+    const attachY = bar.y - BAR_HEIGHT / 2 - BALL_RADIUS;
+    return {
+      ...ball,
+      x: bar.x + ball.attachedOffsetX,
+      y: attachY,
+    };
+  }
+  // 일반 비활성 공 (발사 대기)
   return {
     ...ball,
     x: bar.x,

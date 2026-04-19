@@ -1,6 +1,6 @@
 export type ItemDropState = {
   id: string;
-  itemType: 'expand';
+  itemType: 'expand' | 'magnet' | 'laser';
   x: number;
   y: number;
   fallSpeed: number;

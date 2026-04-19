@@ -997,3 +997,160 @@ describe('MVP2 §13-4 시나리오 E: GameClear → Title 복귀 → 새 게임 
     expect(ctx.getFlowState().currentStageIndex).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// MVP3 Phase 4 시나리오: 자석 효과 E2E
+// ---------------------------------------------------------------------------
+
+describe('MVP3 Phase4 — 자석 효과 E2E', () => {
+  const rightInput: InputSnapshot = { leftDown: false, rightDown: true, spaceJustPressed: false };
+
+  it('F-1. 자석 아이템 획득 → activeEffect=magnet, magnetRemainingTime=8000', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    // 자석 아이템 드랍 상태를 직접 주입
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    const magnetItem = {
+      id: 'item_magnet',
+      itemType: 'magnet' as const,
+      x: state.bar.x,
+      y: state.bar.y + 1, // 바로 위 (다음 틱 충돌)
+      fallSpeed: 0,
+      isCollected: false,
+    };
+    ctx._setGameplayState({ ...state, itemDrops: [magnetItem] });
+
+    // 1 tick → ItemPickedUp 충돌 처리
+    ctx.tick(noInput, 1 / 60);
+
+    const after = ctx.getGameplayState();
+    expect(after.bar.activeEffect).toBe('magnet');
+    expect(after.magnetRemainingTime).toBeGreaterThan(0);
+  });
+
+  it('F-2. 자석 상태에서 공이 바에 닿으면 부착 (isActive=false, attachedBallIds 포함)', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    // 자석 상태로 세팅, 공을 바 바로 위에 아래로 이동하도록
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    const barY = state.bar.y;
+    ctx._setGameplayState({
+      ...state,
+      bar: { ...state.bar, activeEffect: 'magnet' },
+      magnetRemainingTime: 8000,
+      balls: state.balls.map((b, i) =>
+        i === 0 ? { ...b, isActive: true, x: state.bar.x, y: barY - 14, vx: 0, vy: 300 } : b,
+      ),
+    });
+
+    // 1 tick → 공이 바에 충돌하여 부착
+    ctx.tick(noInput, 1 / 60);
+
+    const after = ctx.getGameplayState();
+    const ball = after.balls[0];
+    expect(ball?.isActive).toBe(false);
+    expect(after.attachedBallIds).toContain(after.balls[0]?.id);
+  });
+
+  it('F-3. 자석 부착 후 바 이동 시 부착 공도 함께 이동한다', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    const barY = state.bar.y;
+    const barX = state.bar.x;
+    const ballId = state.balls[0]?.id ?? 'ball_0';
+
+    // 자석 부착 상태로 직접 세팅
+    ctx._setGameplayState({
+      ...state,
+      bar: { ...state.bar, activeEffect: 'magnet' },
+      magnetRemainingTime: 8000,
+      attachedBallIds: [ballId],
+      balls: state.balls.map((b) =>
+        b.id === ballId
+          ? { ...b, isActive: false, x: barX, y: barY - 16, attachedOffsetX: 0 }
+          : b,
+      ),
+    });
+
+    const xBefore = barX;
+    // 바를 오른쪽으로 이동
+    ctx.tick(rightInput, 1 / 60);
+
+    const after = ctx.getGameplayState();
+    const movedBarX = after.bar.x;
+    const movedBallX = after.balls.find((b) => b.id === ballId)?.x ?? 0;
+
+    // 공 x = 바 x + 오프셋(0) 이어야 함
+    expect(movedBarX).toBeGreaterThan(xBefore);
+    expect(movedBallX).toBeCloseTo(movedBarX, 0);
+  });
+
+  it('F-4. 자석 부착 공을 space로 해제 → 공 활성화, attachedBallIds 빔', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    const barY = state.bar.y;
+    const barX = state.bar.x;
+    const ballId = state.balls[0]?.id ?? 'ball_0';
+
+    ctx._setGameplayState({
+      ...state,
+      bar: { ...state.bar, activeEffect: 'magnet' },
+      magnetRemainingTime: 8000,
+      attachedBallIds: [ballId],
+      balls: state.balls.map((b) =>
+        b.id === ballId
+          ? { ...b, isActive: false, x: barX, y: barY - 16, attachedOffsetX: 0 }
+          : b,
+      ),
+    });
+
+    // ctx.tick은 void 반환 — 상태로 검증
+    ctx.tick(spaceInput, 1 / 60);
+
+    const after = ctx.getGameplayState();
+    expect(after.attachedBallIds).toHaveLength(0);
+    const ball = after.balls.find((b) => b.id === ballId);
+    expect(ball?.isActive).toBe(true);
+    // bar.activeEffect가 space 해제로 none이 됨
+    expect(after.bar.activeEffect).toBe('none');
+  });
+
+  it('F-5. 자석 타임아웃(8s) → 자동 해제, activeEffect=none', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    const barY = state.bar.y;
+    const barX = state.bar.x;
+    const ballId = state.balls[0]?.id ?? 'ball_0';
+
+    // 잔여 시간 10ms로 설정
+    ctx._setGameplayState({
+      ...state,
+      bar: { ...state.bar, activeEffect: 'magnet' },
+      magnetRemainingTime: 10,
+      attachedBallIds: [ballId],
+      balls: state.balls.map((b) =>
+        b.id === ballId
+          ? { ...b, isActive: false, x: barX, y: barY - 16, attachedOffsetX: 0 }
+          : b,
+      ),
+    });
+
+    // dt=0.1s=100ms → 10ms 잔여가 소진됨
+    ctx.tick(noInput, 0.1);
+
+    const after = ctx.getGameplayState();
+    expect(after.bar.activeEffect).toBe('none');
+    expect(after.magnetRemainingTime).toBe(0);
+    expect(after.attachedBallIds).toHaveLength(0);
+    const ball = after.balls.find((b) => b.id === ballId);
+    expect(ball?.isActive).toBe(true);
+  });
+});

@@ -1,5 +1,16 @@
 export type BallLaunchedEvent = { type: 'BallLaunched' };
 
+export type BallAttachedEvent = {
+  type: 'BallAttached';
+  ballIds: readonly string[];
+};
+
+export type BallsReleasedEvent = {
+  type: 'BallsReleased';
+  ballIds: readonly string[];
+  releaseReason: 'space' | 'timeout' | 'replaced';
+};
+
 export type BlockHitEvent = {
   type: 'BlockHit';
   blockId: string;
@@ -20,13 +31,12 @@ export type ItemSpawnedEvent = {
   y: number;
 };
 
-/** バー効果の全種別。Phase 3/4/5 で itemType も拡張予定。 */
+/** 바 효과 전종별. */
 export type BarEffectKind = 'none' | 'expand' | 'magnet' | 'laser';
 
 export type ItemCollectedEvent = {
   type: 'ItemCollected';
-  // TODO(mvp3-phase3): itemType を 'expand' | 'magnet' | 'laser' に拡張する
-  itemType: 'expand';
+  itemType: 'expand' | 'magnet' | 'laser';
   replacedEffect: BarEffectKind;
   newEffect: BarEffectKind;
 };
@@ -42,6 +52,8 @@ export type GameOverConditionMetEvent = { type: 'GameOverConditionMet' };
 
 export type GameplayEvent =
   | BallLaunchedEvent
+  | BallAttachedEvent
+  | BallsReleasedEvent
   | BlockHitEvent
   | BlockDestroyedEvent
   | ItemSpawnedEvent

@@ -16,6 +16,7 @@ import type {
   ItemFellOffFloorFact,
 } from './CollisionService';
 import type { GameplayEvent } from '../events/gameplayEvents';
+import { BarEffectService } from './BarEffectService';
 
 type ApplyResult = {
   nextState: GameplayRuntimeState;
@@ -43,6 +44,7 @@ type ApplyOptions = {
 
 const CANVAS_WIDTH = 720;
 const BALL_RADIUS = 8;
+const BAR_HEIGHT = 16;
 
 /**
  * Epsilon used when snapping ball position to the playfield boundary after a
@@ -173,10 +175,47 @@ function resolveWall(
   return { state: { ...state, balls }, events: [] };
 }
 
+function attachBallToBar(ball: BallState, bar: BarState, fact: BallHitBarFact): BallState {
+  // 바 위 표면 바로 위에 공 중심을 놓는다
+  const attachY = bar.y - BAR_HEIGHT / 2 - BALL_RADIUS;
+  // 부착 시점의 x 오프셋을 기록한다 (바 중심 기준)
+  const offsetX = ball.x - bar.x;
+  return {
+    ...ball,
+    x: ball.x,        // x는 현재 공 위치 그대로 (오프셋으로 보존)
+    y: attachY,
+    vx: 0,
+    vy: 0,
+    isActive: false,
+    attachedOffsetX: offsetX,
+  };
+}
+
 function resolveBar(
   state: GameplayRuntimeState,
   fact: BallHitBarFact,
 ): { state: GameplayRuntimeState; events: GameplayEvent[] } {
+  // 자석 상태에서 활성 공이 바에 닿으면 반사 대신 부착
+  if (state.bar.activeEffect === 'magnet') {
+    const targetBall = state.balls.find((b) => b.id === fact.ballId);
+    if (targetBall && targetBall.isActive) {
+      const attachedBall = attachBallToBar(targetBall, state.bar, fact);
+      const balls = state.balls.map((b) => (b.id === fact.ballId ? attachedBall : b));
+      const newAttachedIds = [...state.attachedBallIds, fact.ballId];
+      const events: GameplayEvent[] = [
+        {
+          type: 'BallAttached',
+          ballIds: [fact.ballId],
+        },
+      ];
+      return {
+        state: { ...state, balls, attachedBallIds: newAttachedIds },
+        events,
+      };
+    }
+  }
+
+  // 일반 상태: 반사
   const balls = state.balls.map((b) =>
     b.id === fact.ballId ? reflectBallBar(b, fact) : b,
   );
@@ -287,29 +326,39 @@ function resolveItemPickedUp(
   const itemDrops = state.itemDrops.filter((i) => i.id !== fact.itemId);
 
   const replacedEffect = state.bar.activeEffect;
-  const itemDef = tables.itemDefinitions[item.itemType];
-  const expandMultiplier =
-    (itemDef?.expandMultiplier) ?? tables.config.expandMultiplier;
+  const itemType = item.itemType;
 
-  const newBar: BarState = {
-    ...state.bar,
-    activeEffect: 'expand',
-    width: tables.config.baseBarWidth * expandMultiplier,
-  };
+  // expand/magnet/laser 모두 BarEffectService로 처리한다
+  const barEffectService = new BarEffectService(tables.itemDefinitions);
+  const effectResult = barEffectService.applyEffect(
+    state.bar,
+    state.magnetRemainingTime,
+    state.laserCooldownRemaining,
+    state.attachedBallIds,
+    itemType,
+    tables.config.baseBarWidth,
+  );
 
   const events: GameplayEvent[] = [
+    ...effectResult.events,
     {
       type: 'ItemCollected',
-      itemType: 'expand',
+      itemType,
       replacedEffect,
-      newEffect: 'expand',
+      newEffect: effectResult.nextBar.activeEffect,
     },
   ];
 
-  return {
-    state: { ...state, bar: newBar, itemDrops },
-    events,
+  const nextState: GameplayRuntimeState = {
+    ...state,
+    bar: effectResult.nextBar,
+    itemDrops,
+    magnetRemainingTime: effectResult.nextMagnetRemaining,
+    laserCooldownRemaining: effectResult.nextLaserCooldown,
+    attachedBallIds: effectResult.nextAttachedBalls,
   };
+
+  return { state: nextState, events };
 }
 
 function resolveItemFellOff(

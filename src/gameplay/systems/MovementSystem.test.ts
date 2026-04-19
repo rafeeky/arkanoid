@@ -115,7 +115,7 @@ describe('moveItemDrop', () => {
 });
 
 describe('moveAttachedBallToBar', () => {
-  it('비활성 공은 바 위 중앙에 붙는다', () => {
+  it('비활성 공(attachedOffsetX 없음)은 바 위 중앙에 붙는다', () => {
     const inactiveBall: BallState = { ...baseBall, isActive: false };
     const result = moveAttachedBallToBar(inactiveBall, baseBar);
     expect(result.x).toBe(baseBar.x);
@@ -126,6 +126,54 @@ describe('moveAttachedBallToBar', () => {
     const result = moveAttachedBallToBar(baseBall, baseBar);
     expect(result.x).toBe(baseBall.x);
     expect(result.y).toBe(baseBall.y);
+  });
+
+  it('자석 부착 공(attachedOffsetX=30)은 바 이동 시 오프셋 유지', () => {
+    // 바가 x=480에서 시작, 공은 오프셋 +30 위치에 있음
+    const attachedBall: BallState = {
+      ...baseBall,
+      isActive: false,
+      x: 480 + 30,
+      attachedOffsetX: 30,
+    };
+    // 바를 x=500으로 이동
+    const movedBar: BarState = { ...baseBar, x: 500 };
+    const result = moveAttachedBallToBar(attachedBall, movedBar);
+    // 공의 x = 바 중심(500) + 오프셋(30) = 530
+    expect(result.x).toBe(530);
+  });
+
+  it('자석 부착 공의 y는 바 위쪽 표면에 고정됨', () => {
+    const BAR_HEIGHT_CONST = 16;
+    const BALL_RADIUS_CONST = 8;
+    const attachedBall: BallState = {
+      ...baseBall,
+      isActive: false,
+      attachedOffsetX: 0,
+    };
+    const result = moveAttachedBallToBar(attachedBall, baseBar);
+    const expectedY = baseBar.y - BAR_HEIGHT_CONST / 2 - BALL_RADIUS_CONST;
+    expect(result.y).toBe(expectedY);
+  });
+
+  it('자석 부착 공은 바가 x=100씩 이동할 때 오프셋 그대로 따라다닌다', () => {
+    const offsetX = -20;
+    const attachedBall: BallState = {
+      ...baseBall,
+      isActive: false,
+      x: baseBar.x + offsetX,
+      attachedOffsetX: offsetX,
+    };
+
+    // 바가 50px 이동
+    const step1Bar: BarState = { ...baseBar, x: baseBar.x + 50 };
+    const step1Ball = moveAttachedBallToBar(attachedBall, step1Bar);
+    expect(step1Ball.x).toBe(step1Bar.x + offsetX);
+
+    // 추가 50px 이동
+    const step2Bar: BarState = { ...baseBar, x: step1Bar.x + 50 };
+    const step2Ball = moveAttachedBallToBar(step1Ball, step2Bar);
+    expect(step2Ball.x).toBe(step2Bar.x + offsetX);
   });
 });
 

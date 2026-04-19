@@ -418,34 +418,75 @@ describe('터널링 회귀 테스트 — swept AABB 충돌', () => {
 // MVP3 Phase 3: 신규 커맨드 no-op 라우팅 테스트
 // ============================================================
 
-describe('GameplayController - ReleaseAttachedBalls no-op (Phase 4 전)', () => {
-  it('ReleaseAttachedBalls 커맨드 수신 시 상태 변화 없음', () => {
+describe('GameplayController - ReleaseAttachedBalls (Phase 4)', () => {
+  it('자석 상태에서 부착 공 있을 때 space 입력 → attachedBallIds 비워지고 공 활성화', () => {
     const initialState = createGameplayRuntimeFromStageDefinition(
       simpleStage,
       config,
       blockDefinitions,
       3,
     );
-    // magnet 상태 + 부착 공 설정
+    // magnet 상태 + ball_0을 비활성(부착) 상태로 설정
     const magnetState: GameplayRuntimeState = {
       ...initialState,
       bar: { ...initialState.bar, activeEffect: 'magnet' },
+      magnetRemainingTime: 8000,
       attachedBallIds: ['ball_0'],
+      balls: initialState.balls.map((b) =>
+        b.id === 'ball_0' ? { ...b, isActive: false } : b,
+      ),
     };
     const ctrl = new GameplayController(magnetState, deps);
-    const stateBefore = ctrl.getState();
 
-    // spaceJustPressed → ReleaseAttachedBalls 커맨드 생성됨
     const events = ctrl.tick(spaceInput, 1 / 60);
 
-    // no-op: attachedBallIds는 아직 변하지 않아야 한다 (Phase 4에서 구현)
-    expect(ctrl.getState().attachedBallIds).toEqual(stateBefore.attachedBallIds);
-    // 현재 이벤트에는 BallLaunched 또는 스테이지 관련 이벤트만 있어야 한다
-    // (ReleaseAttachedBalls 전용 이벤트는 Phase 4에서 추가 예정)
-    const nonMovementEvents = events.filter(
-      (e) => e.type !== 'LifeLost' && e.type !== 'StageCleared' && e.type !== 'GameOverConditionMet',
+    // attachedBallIds 비워졌는지
+    expect(ctrl.getState().attachedBallIds).toHaveLength(0);
+    // 공이 활성화됐는지
+    const ball = getBall(ctrl.getState());
+    expect(ball.isActive).toBe(true);
+    // BallsReleased 이벤트 발행됐는지
+    expect(events.some((e) => e.type === 'BallsReleased')).toBe(true);
+    const released = events.find((e) => e.type === 'BallsReleased');
+    expect(released).toBeDefined();
+    if (released?.type === 'BallsReleased') {
+      expect(released.releaseReason).toBe('space');
+      expect(released.ballIds).toContain('ball_0');
+    }
+  });
+
+  it('8초 경과 후 자동 해제: magnetRemainingTime=0, activeEffect=none, 공 활성화', () => {
+    const initialState = createGameplayRuntimeFromStageDefinition(
+      simpleStage,
+      config,
+      blockDefinitions,
+      3,
     );
-    expect(nonMovementEvents.some((e) => e.type === 'BallLaunched')).toBe(false);
+    // magnet 상태 + 잔여 시간 50ms (1 tick으로 소진)
+    const magnetState: GameplayRuntimeState = {
+      ...initialState,
+      bar: { ...initialState.bar, activeEffect: 'magnet' },
+      magnetRemainingTime: 50,
+      attachedBallIds: ['ball_0'],
+      balls: initialState.balls.map((b) =>
+        b.id === 'ball_0' ? { ...b, isActive: false } : b,
+      ),
+    };
+    const ctrl = new GameplayController(magnetState, deps);
+
+    // dt=0.1s = 100ms → 50ms 잔여가 0 이하로
+    const events = ctrl.tick(noInput, 0.1);
+
+    expect(ctrl.getState().bar.activeEffect).toBe('none');
+    expect(ctrl.getState().magnetRemainingTime).toBe(0);
+    expect(ctrl.getState().attachedBallIds).toHaveLength(0);
+    const ball = getBall(ctrl.getState());
+    expect(ball.isActive).toBe(true);
+    expect(events.some((e) => e.type === 'BallsReleased')).toBe(true);
+    const released = events.find((e) => e.type === 'BallsReleased');
+    if (released?.type === 'BallsReleased') {
+      expect(released.releaseReason).toBe('timeout');
+    }
   });
 });
 

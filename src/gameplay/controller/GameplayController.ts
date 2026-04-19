@@ -11,6 +11,7 @@ import { detectCollisions } from '../systems/CollisionService';
 import type { BallHitBlockFact, BallHitWallFact } from '../systems/CollisionService';
 import { applyCollisions } from '../systems/CollisionResolutionService';
 import { judgeStageOutcome } from '../systems/StageRuleService';
+import { BarEffectService } from '../systems/BarEffectService';
 
 type Dependencies = {
   blockDefinitions: Record<string, BlockDefinition>;
@@ -21,10 +22,12 @@ type Dependencies = {
 export class GameplayController {
   private state: GameplayRuntimeState;
   private readonly deps: Dependencies;
+  private readonly barEffectService: BarEffectService;
 
   constructor(initialState: GameplayRuntimeState, deps: Dependencies) {
     this.state = initialState;
     this.deps = deps;
+    this.barEffectService = new BarEffectService(deps.itemDefinitions);
   }
 
   getState(): Readonly<GameplayRuntimeState> {
@@ -70,7 +73,25 @@ export class GameplayController {
       } else if (cmd.type === 'MoveBar') {
         moveDirection = cmd.direction;
       } else if (cmd.type === 'ReleaseAttachedBalls') {
-        // TODO(mvp3 phase 4): ReleaseAttachedBalls 구현 예정
+        const releaseResult = this.barEffectService.releaseManually(
+          this.state.bar,
+          this.state.attachedBallIds,
+        );
+        const releasedIds = new Set(releaseResult.releasedBallIds);
+        const updatedBalls = this.state.balls.map((b) => {
+          if (!releasedIds.has(b.id)) return b;
+          return this.launchAttachedBall(b);
+        });
+        this.state = {
+          ...this.state,
+          bar: releaseResult.nextBar,
+          balls: updatedBalls,
+          attachedBallIds: [],
+          magnetRemainingTime: 0,
+        };
+        for (const e of releaseResult.events) {
+          allEvents.push(e);
+        }
       } else if (cmd.type === 'FireLaser') {
         // TODO(mvp3 phase 5): FireLaser 구현 예정
       }
@@ -163,6 +184,37 @@ export class GameplayController {
       allEvents.push(e);
     }
 
+    // 6.5. Magnet timer tick (dt를 ms로 변환)
+    const magnetTick = this.barEffectService.tickMagnet(
+      this.state.magnetRemainingTime,
+      this.state.attachedBallIds,
+      this.state.bar,
+      dt * 1000,
+    );
+    if (magnetTick.releasedBallIds.length > 0) {
+      const timedOutIds = new Set(magnetTick.releasedBallIds);
+      const updatedBallsOnTimeout = this.state.balls.map((b) => {
+        if (!timedOutIds.has(b.id)) return b;
+        return this.launchAttachedBall(b);
+      });
+      this.state = {
+        ...this.state,
+        bar: magnetTick.nextBar,
+        balls: updatedBallsOnTimeout,
+        attachedBallIds: [],
+        magnetRemainingTime: magnetTick.nextMagnetRemaining,
+      };
+    } else {
+      this.state = {
+        ...this.state,
+        bar: magnetTick.nextBar,
+        magnetRemainingTime: magnetTick.nextMagnetRemaining,
+      };
+    }
+    for (const e of magnetTick.events) {
+      allEvents.push(e);
+    }
+
     // 7. Judge stage outcome
     const outcome = judgeStageOutcome(this.state, collisionEvents);
 
@@ -237,6 +289,29 @@ export class GameplayController {
     const launchState: GameplayRuntimeState = { ...this.state, balls: updatedBalls };
     const launchEvent: GameplayEvent = { type: 'BallLaunched' };
     return { launchState, launchEvent };
+  }
+
+  /**
+   * 자석에서 해제된 공을 활성화하고 초기 속도를 부여한다.
+   * 각도와 속도는 config를 따른다.
+   * attachedOffsetX 필드를 제거해 발사 대기 상태로 복원한다.
+   */
+  private launchAttachedBall(ball: import('../state/BallState').BallState): import('../state/BallState').BallState {
+    const config = this.deps.config;
+    const angleDeg = config.ballInitialAngleDeg;
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const speed = config.ballInitialSpeed;
+    const vx = Math.cos(angleRad) * speed;
+    const vy = Math.sin(angleRad) * speed;
+    // exactOptionalPropertyTypes: undefined 직접 할당 불가 → 필드 제거
+    const { attachedOffsetX: _removed, ...rest } = ball;
+    void _removed;
+    return {
+      ...rest,
+      isActive: true,
+      vx,
+      vy,
+    };
   }
 
   /**

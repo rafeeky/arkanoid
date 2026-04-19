@@ -355,6 +355,94 @@ describe('Bug C regression: 벽 반사 후 공 위치 스냅', () => {
 });
 
 // ============================================================
+// 자석 상태 Ball↔Bar 충돌 예외 테스트
+// ============================================================
+
+describe('BallHitBar resolution — 자석 부착 예외', () => {
+  it('자석 상태에서 활성 공이 바에 닿으면 반사 대신 부착 (isActive=false, BallAttached 이벤트)', () => {
+    const ball = activeBall({ x: 480, y: 650, vx: 0, vy: 200 });
+    const state = makeState({
+      balls: [ball],
+      bar: { x: 480, y: 660, width: 120, moveSpeed: 420, activeEffect: 'magnet' },
+    });
+    const facts: CollisionFact[] = [{ type: 'BallHitBar', ballId: 'ball_0', barContactX: 0 }];
+    const { nextState, events } = applyCollisions(state, facts, tables);
+
+    // 공이 비활성화됐는지
+    expect(firstBall(nextState).isActive).toBe(false);
+    // 속도가 0인지
+    expect(firstBall(nextState).vx).toBe(0);
+    expect(firstBall(nextState).vy).toBe(0);
+    // attachedBallIds에 추가됐는지
+    expect(nextState.attachedBallIds).toContain('ball_0');
+    // BallAttached 이벤트 발행됐는지
+    expect(events.some((e) => e.type === 'BallAttached')).toBe(true);
+    const attached = events.find((e) => e.type === 'BallAttached');
+    if (attached?.type === 'BallAttached') {
+      expect(attached.ballIds).toContain('ball_0');
+    }
+  });
+
+  it('자석 상태에서 이미 비활성 공은 부착 처리하지 않음 (isActive=false → 무시)', () => {
+    const ball = activeBall({ x: 480, y: 650, vx: 0, vy: 0, isActive: false });
+    const state = makeState({
+      balls: [ball],
+      bar: { x: 480, y: 660, width: 120, moveSpeed: 420, activeEffect: 'magnet' },
+    });
+    const facts: CollisionFact[] = [{ type: 'BallHitBar', ballId: 'ball_0', barContactX: 0 }];
+    const { nextState, events } = applyCollisions(state, facts, tables);
+
+    // 비활성 공이므로 BallAttached 발행 안 됨
+    expect(events.some((e) => e.type === 'BallAttached')).toBe(false);
+    expect(nextState.attachedBallIds).not.toContain('ball_0');
+  });
+
+  it('자석 상태 아닐 때 (none) Ball↔Bar 충돌은 기존 반사 동작 유지', () => {
+    const ball = activeBall({ vx: 0, vy: 200 });
+    const state = makeState({ balls: [ball] }); // bar.activeEffect = 'none'
+    const facts: CollisionFact[] = [{ type: 'BallHitBar', ballId: 'ball_0', barContactX: 0 }];
+    const { nextState, events } = applyCollisions(state, facts, tables);
+
+    // 반사 → 공 여전히 활성
+    expect(firstBall(nextState).isActive).toBe(true);
+    // vy 음수(위쪽)
+    expect(firstBall(nextState).vy).toBeLessThan(0);
+    // BallAttached 발행 안 됨
+    expect(events.some((e) => e.type === 'BallAttached')).toBe(false);
+  });
+
+  it('자석 부착 시 부착 공 y 위치는 바 위쪽 표면 근처', () => {
+    const BAR_HEIGHT_CONST = 16;
+    const BALL_RADIUS_CONST = 8;
+    const barY = 660;
+    const ball = activeBall({ x: 480, y: barY - 20, vx: 0, vy: 200 });
+    const state = makeState({
+      balls: [ball],
+      bar: { x: 480, y: barY, width: 120, moveSpeed: 420, activeEffect: 'magnet' },
+    });
+    const facts: CollisionFact[] = [{ type: 'BallHitBar', ballId: 'ball_0', barContactX: 0 }];
+    const { nextState } = applyCollisions(state, facts, tables);
+
+    const expectedY = barY - BAR_HEIGHT_CONST / 2 - BALL_RADIUS_CONST;
+    expect(firstBall(nextState).y).toBeCloseTo(expectedY);
+  });
+
+  it('자석 부착 시 attachedOffsetX가 기록된다', () => {
+    const barX = 480;
+    const ballOffsetX = 30; // 바 중심에서 30px 오른쪽
+    const ball = activeBall({ x: barX + ballOffsetX, y: 640, vx: 0, vy: 200 });
+    const state = makeState({
+      balls: [ball],
+      bar: { x: barX, y: 660, width: 120, moveSpeed: 420, activeEffect: 'magnet' },
+    });
+    const facts: CollisionFact[] = [{ type: 'BallHitBar', ballId: 'ball_0', barContactX: 0.5 }];
+    const { nextState } = applyCollisions(state, facts, tables);
+
+    expect(firstBall(nextState).attachedOffsetX).toBeCloseTo(ballOffsetX);
+  });
+});
+
+// ============================================================
 // Bug B 재현 테스트: 반사 후 수직 교착 (vx 최소값 보장 없음)
 // ============================================================
 
