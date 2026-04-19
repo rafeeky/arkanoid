@@ -23,7 +23,7 @@ import { ItemDefinitionTable } from '../definitions/tables/ItemDefinitionTable';
 import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
 import { IntroSequenceTable } from '../definitions/tables/IntroSequenceTable';
 import type { DevContext } from './dev/DevContext';
-import type { CollisionLogEntry } from './dev/CollisionLog';
+import { FlowEventRouter } from './FlowEventRouter';
 
 /**
  * createAppContext 옵션.
@@ -50,15 +50,11 @@ export type AppContextOptions = {
  * - handlePresentationEvent: Presentation 이벤트를 FlowController 에 전달.
  * - setAudioPlayer: AudioPlayer를 교체한다. GameScene.create 후 PhaserAudioPlayer 주입에 사용.
  *
- * 이벤트 배선:
- * - gameplayController 이벤트 → flowController.handleGameplayEvent + visualEffectController.handleGameplayEvent + audioPlayer
- * - flowController 이벤트:
- *   - EnteredRoundIntro + from === 'title'  → lifecycleHandler.initializeStage (새 게임) + UiConfirm SFX
- *   - EnteredRoundIntro + from === 'inGame' → lifecycleHandler.resetForRetry (재시도) + jingle
- *   - EnteredTitle + from === 'gameOver'    → UiConfirm SFX
- *   - EnteredGameOver → saveRepository.save 호출 (highScore 갱신, fire-and-forget) + jingle
- *   - EnteredTitle → BGM
- * - VisualEffectController 가 LifeLostPresentationFinished 발행 → handlePresentationEvent 경유
+ * 이벤트 배선 (FlowEventRouter 위임):
+ * - gameplayController 이벤트 → FlowEventRouter.onGameplayEvent
+ *   └── flowController.handleGameplayEvent + visualEffectController.handleGameplayEvent + audioPlayer
+ * - flowController 이벤트 → FlowEventRouter.onFlowEvent
+ *   └── audio 라우팅 + save 트리거 + stage 로드 결정
  *
  * 틱 순서 (architecture §17):
  * 1. flowController.handleInput
@@ -131,104 +127,22 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
   // FlowController: Gameplay 이벤트를 받아 Flow 전이를 처리한다.
   // totalStageCount: StageDefinitionTable 배열 길이 기준 (mvp2 §11-3)
   const flowController = new GameFlowController((flowEvent: FlowEvent) => {
-    onFlowEvent(flowEvent);
+    flowEventRouter.onFlowEvent(flowEvent);
   }, { totalStageCount: StageDefinitionTable.length });
 
-  // Flow 이벤트 핸들러 (forward declaration 패턴)
-  function onFlowEvent(event: FlowEvent): void {
-    // Audio 라우팅: Flow 이벤트 → AudioCueResolver → AudioPlayer
-    // UiConfirm 특수 처리:
-    //   - EnteredRoundIntro(from='introStory'): 게임 시작 버튼 확인음 (Title→IntroStory→RoundIntro 흐름)
-    //   - EnteredTitle(from='gameOver' | 'gameClear'): 결과 화면에서 타이틀 복귀 확인음
-    if (event.type === 'EnteredRoundIntro' && event.from === 'introStory') {
-      // jingle(round_start) + UiConfirm 모두 재생
-      const roundCues = audioCueResolver.resolveCueIds('EnteredRoundIntro');
-      for (const cue of roundCues) {
-        audioPlayer.play(cue);
-      }
-      const confirmCues = audioCueResolver.resolveCueIds('UiConfirm');
-      for (const cue of confirmCues) {
-        audioPlayer.play(cue);
-      }
-    } else if (
-      event.type === 'EnteredTitle' &&
-      (event.from === 'gameOver' || event.from === 'gameClear')
-    ) {
-      // UiConfirm SFX
-      const confirmCues = audioCueResolver.resolveCueIds('UiConfirm');
-      for (const cue of confirmCues) {
-        audioPlayer.play(cue);
-      }
-      // 타이틀 BGM 재개
-      const titleCues = audioCueResolver.resolveCueIds('EnteredTitle');
-      for (const cue of titleCues) {
-        audioPlayer.play(cue);
-      }
-    } else {
-      // 그 외 Flow 이벤트는 eventType 기반 직접 매핑
-      const cues = audioCueResolver.resolveCueIds(event.type);
-      for (const cue of cues) {
-        audioPlayer.play(cue);
-      }
-    }
-
-    if (event.type === 'EnteredRoundIntro') {
-      if (event.from === 'introStory') {
-        // 인트로 종료 후 첫 스테이지 시작: Stage 0(index) 완전 초기화, 현재 highScore 유지
-        const currentHighScore = gameplayController.getState().session.highScore;
-        const stage0 = STAGE_DEFINITIONS[0]!;
-        const newState = lifecycleHandler.initializeStage(stage0, config, config.initialLives);
-        gameplayController.setState({
-          ...newState,
-          session: { ...newState.session, highScore: currentHighScore, currentStageIndex: 0 },
-        });
-      } else if (event.from === 'inGame') {
-        // inGame → RoundIntro: StageCleared(다음 스테이지) vs LifeLost(재시도) 구분
-        // Flow 가 이미 currentStageIndex 를 증가시킨 상태이므로 비교 가능
-        const currentGameplayState = gameplayController.getState() as GameplayRuntimeState;
-        const flowStageIndex = flowController.getState().currentStageIndex;
-        const gameplayStageIndex = currentGameplayState.session.currentStageIndex;
-
-        if (flowStageIndex !== gameplayStageIndex) {
-          // StageCleared 경로: 다음 스테이지 로드 (score/lives 유지, 블록 재구성)
-          const nextStage = STAGE_DEFINITIONS[flowStageIndex];
-          if (nextStage === undefined) {
-            // 스테이지 정의 없음 — 방어적 처리 (GameClear 가 이미 처리했어야 하는 케이스)
-            return;
-          }
-          const nextState = lifecycleHandler.loadNextStage(currentGameplayState, nextStage, config);
-          gameplayController.setState({
-            ...nextState,
-            session: { ...nextState.session, currentStageIndex: flowStageIndex },
-          });
-        } else {
-          // LifeLost 경로: 같은 스테이지 재시도 (블록/점수/라이프 유지, 위치만 리셋)
-          const currentStage = STAGE_DEFINITIONS[gameplayStageIndex] ?? STAGE_DEFINITIONS[0]!;
-          const resetState = lifecycleHandler.resetForRetry(
-            currentGameplayState,
-            currentStage,
-            config,
-          );
-          gameplayController.setState(resetState);
-        }
-      }
-    } else if (event.type === 'EnteredGameOver' || event.type === 'EnteredGameClear') {
-      // 저장 시점: GameOver / GameClear 진입 시 highScore 갱신 후 저장 (fire-and-forget)
-      const session = gameplayController.getState().session;
-      const newHighScore = Math.max(session.highScore, session.score);
-      if (newHighScore > session.highScore) {
-        // highScore 갱신
-        const updatedState = gameplayController.getState() as GameplayRuntimeState;
-        gameplayController.setState({
-          ...updatedState,
-          session: { ...updatedState.session, highScore: newHighScore },
-        });
-      }
-      saveRepository.save({ highScore: newHighScore }).catch((err: unknown) => {
-        console.warn('[AppContext] saveRepository.save 실패:', err);
-      });
-    }
-  }
+  // FlowEventRouter: Flow/Gameplay 이벤트 라우팅 책임을 단일 클래스로 분리
+  // audioPlayer는 교체 가능이므로 getter 콜백으로 전달
+  const flowEventRouter = new FlowEventRouter({
+    getAudioPlayer: () => audioPlayer,
+    audioCueResolver,
+    gameplayController,
+    flowController,
+    lifecycleHandler,
+    saveRepository,
+    config,
+    stageDefinitions: STAGE_DEFINITIONS,
+    ...(devContext !== undefined ? { devContext } : {}),
+  });
 
   // Presentation 이벤트 발행 콜백.
   // VisualEffectController 가 타이머 완료 시 이 콜백을 통해 이벤트를 발행한다.
@@ -247,54 +161,11 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     if (flowController.getState().kind === 'inGame') {
       const gameplayEvents: GameplayEvent[] = gameplayController.tick(input, dt);
       for (const event of gameplayEvents) {
-        // Flow 와 VisualEffectController 모두에 이벤트 전달
-        flowController.handleGameplayEvent(event);
+        // FlowEventRouter 에 위임: Flow 중계 + Audio + Dev 기록
+        flowEventRouter.onGameplayEvent(event, currentTick);
+        // VisualEffectController 는 createAppContext 에서 직접 연결 유지
+        // (Presentation 계층 의존 — FlowEventRouter 는 gameplay → presentation import 불가)
         visualEffectController.handleGameplayEvent(event);
-        // Audio 라우팅: Gameplay 이벤트 → AudioCueResolver → AudioPlayer
-        const audioCues = audioCueResolver.resolveCueIds(event.type);
-        for (const cue of audioCues) {
-          audioPlayer.play(cue);
-        }
-
-        // Dev: 충돌 이벤트를 CollisionLog에 기록
-        // devContext가 undefined이거나 isEnabled === false이면 완전 스킵
-        if (devContext?.isEnabled) {
-          const state = gameplayController.getState();
-          const ball = state.balls[0];
-          const ballSnapshot = ball
-            ? { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy }
-            : { x: 0, y: 0, vx: 0, vy: 0 };
-
-          let logEntry: CollisionLogEntry | undefined;
-
-          if (event.type === 'BlockHit') {
-            logEntry = {
-              tick: currentTick,
-              time: Date.now(),
-              ball: ballSnapshot,
-              target: { kind: 'block', id: event.blockId },
-            };
-          } else if (event.type === 'BlockDestroyed') {
-            logEntry = {
-              tick: currentTick,
-              time: Date.now(),
-              ball: ballSnapshot,
-              target: { kind: 'block', id: event.blockId },
-            };
-          } else if (event.type === 'LifeLost') {
-            // 공 바닥 통과 → floor
-            logEntry = {
-              tick: currentTick,
-              time: Date.now(),
-              ball: ballSnapshot,
-              target: { kind: 'floor' },
-            };
-          }
-
-          if (logEntry !== undefined) {
-            devContext.collisionLog.push(logEntry);
-          }
-        }
       }
 
       // Dev: 틱 후 invariant 검증 + ball trail + replay 녹화
