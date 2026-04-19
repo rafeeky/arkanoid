@@ -2,9 +2,16 @@
  * §15-5 통합 시나리오 테스트
  *
  * mvp1.md §15-5에서 명시한 두 가지 시나리오를 결정론적으로 검증한다.
+ * mvp2.md §13-4 / §15에서 명시한 다섯 가지 MVP2 통합 시나리오를 추가한다.
  *
  * 시나리오 1: 시작 → 플레이 → 라이프 손실 → 재시작
  * 시나리오 2: 시작 → 플레이 → 게임오버 → 타이틀 복귀 → highScore 교차 세션 로드
+ *
+ * MVP2 시나리오 A: Full clear (Title → Intro → Stage1 → Stage2 → Stage3 → GameClear)
+ * MVP2 시나리오 B: 중간 GameOver (LifeLost 3회 → GameOver → highScore 저장)
+ * MVP2 시나리오 C: Stage 2 LifeLost 후 재시도 (스테이지/점수/블록 유지)
+ * MVP2 시나리오 D: IntroStory 게이팅 (IntroSequenceFinished 전까지 gameplay 비활성)
+ * MVP2 시나리오 E: GameClear → Title 복귀 → 새 게임 리셋
  *
  * 원칙:
  * - Math.random 미사용. 상태 주입(_setGameplayState)으로 결정론적 재현.
@@ -422,5 +429,549 @@ describe('§15-5 edge case: StageRuntimeFactory — stage1.json 65개 블록 생
     const newBlocks = ctx.getGameplayState().blocks;
     expect(newBlocks).toHaveLength(65);
     expect(newBlocks.every((b) => !b.isDestroyed)).toBe(true);
+  });
+});
+
+// ===========================================================================
+// MVP2 통합 시나리오 — mvp2.md §13-4 / §15
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// 공통 헬퍼 (MVP2)
+// ---------------------------------------------------------------------------
+
+/**
+ * advanceToInGame: Title → IntroStory → RoundIntro → InGame 까지 진행.
+ * (기존 enterInGame 과 동일한 로직. MVP2 시나리오에서 가독성을 위해 별칭 제공.)
+ */
+function advanceToInGame(ctx: Awaited<ReturnType<typeof createAppContext>>): void {
+  ctx.tick(spaceInput, 1 / 60); // title → introStory
+  ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
+  ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // roundIntro → inGame
+}
+
+/**
+ * clearAllBlocks: 현재 InGame 상태의 모든 블록을 isDestroyed=true로 주입하고
+ * tick 1회를 실행해 StageCleared 이벤트를 발생시킨다.
+ *
+ * StageRuleService.judgeStageOutcome은 공 활성 여부와 무관하게
+ * 모든 블록이 isDestroyed면 'clear'를 판정한다.
+ */
+function clearAllBlocks(ctx: Awaited<ReturnType<typeof createAppContext>>): void {
+  const state = ctx.getGameplayState() as GameplayRuntimeState;
+  ctx._setGameplayState({
+    ...state,
+    blocks: state.blocks.map((b) => ({ ...b, isDestroyed: true, remainingHits: 0 })),
+  });
+  ctx.tick(noInput, 1 / 60); // StageCleared 발행 트리거
+}
+
+/**
+ * advanceToStage2InGame: Stage 1 클리어 후 Stage 2 InGame 진입.
+ * Stage 1 클리어 → RoundIntro(stage=1) → InGame
+ */
+function advanceToStage2InGame(ctx: Awaited<ReturnType<typeof createAppContext>>): void {
+  advanceToInGame(ctx);
+  clearAllBlocks(ctx); // Stage 1 클리어 → RoundIntro(stage=1)
+  ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // roundIntro → inGame(stage2)
+}
+
+// ---------------------------------------------------------------------------
+// MVP2 시나리오 A: Full clear
+// Title → Intro → Stage1 → Stage2 → Stage3 → GameClear
+// (mvp2.md §13-4 첫 번째 시나리오, §15 전체 흐름 성공 판정)
+// ---------------------------------------------------------------------------
+
+describe('MVP2 §13-4 시나리오 A: Full clear (Stage1 → Stage2 → Stage3 → GameClear)', () => {
+  it('A-1. Title 초기 상태 확인', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    expect(ctx.getFlowState().kind).toBe('title');
+    expect(ctx.getFlowState().currentStageIndex).toBe(0);
+  });
+
+  it('A-2. 스페이스 → introStory 전이', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    ctx.tick(spaceInput, 1 / 60);
+    expect(ctx.getFlowState().kind).toBe('introStory');
+  });
+
+  it('A-3. IntroSequenceFinished → roundIntro (stage=0), Stage 1 블록 65개 로드됨', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    ctx.tick(spaceInput, 1 / 60);
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' });
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getFlowState().currentStageIndex).toBe(0);
+    expect(ctx.getGameplayState().blocks).toHaveLength(65);
+  });
+
+  it('A-4. RoundIntroFinished → inGame 전이', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToInGame(ctx);
+    expect(ctx.getFlowState().kind).toBe('inGame');
+    expect(ctx.getFlowState().currentStageIndex).toBe(0);
+  });
+
+  it('A-5. Stage 1 전체 블록 파괴 후 tick → roundIntro (stage=1) 전이, Stage 2 블록 78개 로드됨', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToInGame(ctx);
+    clearAllBlocks(ctx); // Stage 1 클리어
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getFlowState().currentStageIndex).toBe(1);
+    expect(ctx.getGameplayState().blocks).toHaveLength(78);
+    expect(ctx.getGameplayState().session.currentStageIndex).toBe(1);
+  });
+
+  it('A-6. Stage 2 전체 블록 파괴 후 tick → roundIntro (stage=2) 전이, Stage 3 블록 91개 로드됨', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToStage2InGame(ctx);
+    clearAllBlocks(ctx); // Stage 2 클리어
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getFlowState().currentStageIndex).toBe(2);
+    expect(ctx.getGameplayState().blocks).toHaveLength(91);
+    expect(ctx.getGameplayState().session.currentStageIndex).toBe(2);
+  });
+
+  it('A-7. Stage 3 전체 블록 파괴 후 tick → gameClear 전이 (마지막 스테이지)', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    // Stage 1 클리어
+    advanceToInGame(ctx);
+    clearAllBlocks(ctx);
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // inGame(stage2)
+    // Stage 2 클리어
+    clearAllBlocks(ctx);
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // inGame(stage3)
+    // Stage 3 클리어
+    clearAllBlocks(ctx);
+    expect(ctx.getFlowState().kind).toBe('gameClear');
+  });
+
+  it('A-8. GameClear에서 스페이스 → title 복귀', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToInGame(ctx);
+    clearAllBlocks(ctx);
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
+    clearAllBlocks(ctx);
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
+    clearAllBlocks(ctx);
+    expect(ctx.getFlowState().kind).toBe('gameClear');
+
+    ctx.tick(spaceInput, 1 / 60);
+    expect(ctx.getFlowState().kind).toBe('title');
+  });
+
+  it('A-9. 점수가 클리어 전 주입한 값에서 누적된다 (score 유지)', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToInGame(ctx);
+
+    // Stage 1 진입 시 score 500 주입
+    const s1State = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({ ...s1State, session: { ...s1State.session, score: 500 } });
+
+    clearAllBlocks(ctx); // Stage 1 클리어 → roundIntro(stage=1)
+    // score는 500 이상 (클리어 후 점수 가산 없음 — 블록 파괴 없이 주입했으므로 500 유지)
+    expect(ctx.getGameplayState().session.score).toBeGreaterThanOrEqual(500);
+
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // inGame(stage2)
+    // Stage 2 진입 후에도 score 유지됨
+    expect(ctx.getGameplayState().session.score).toBeGreaterThanOrEqual(500);
+  });
+
+  it('A-10. GameClear 진입 시 highScore가 저장된다', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await createAppContext({ saveRepository: repo });
+    advanceToInGame(ctx);
+
+    const s1State = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({ ...s1State, session: { ...s1State.session, score: 3000 } });
+
+    clearAllBlocks(ctx);
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
+    clearAllBlocks(ctx);
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
+    clearAllBlocks(ctx);
+    expect(ctx.getFlowState().kind).toBe('gameClear');
+
+    const saved = await repo.load();
+    expect(saved.highScore).toBe(3000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MVP2 시나리오 B: 중간 GameOver
+// Title → IntroStory → Stage 1 진입 → LifeLost 3번 → GameOver → Title 복귀
+// (mvp2.md §13-4 두 번째 시나리오)
+// ---------------------------------------------------------------------------
+
+describe('MVP2 §13-4 시나리오 B: 중간 GameOver — LifeLost 3회 → GameOver → highScore 저장', () => {
+  it('B-1. lives=3 에서 LifeLost 1회 → roundIntro 전이, lives=2', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToInGame(ctx);
+    ctx.tick(spaceInput, 1 / 60); // 공 활성화
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getGameplayState().session.lives).toBe(2);
+  });
+
+  it('B-2. lives=2 에서 LifeLost 2회 → roundIntro 전이, lives=1', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToInGame(ctx);
+
+    // 1차 손실
+    ctx.tick(spaceInput, 1 / 60);
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+
+    // 2차 손실
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
+    ctx.tick(spaceInput, 1 / 60);
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getGameplayState().session.lives).toBe(1);
+  });
+
+  it('B-3. lives=1 에서 LifeLost → gameOver 전이 (remainingLives=0)', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await createAppContext({ saveRepository: repo });
+    advanceToInGame(ctx);
+
+    // 라이프를 1로 주입
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({ ...state, session: { ...state.session, lives: 1, score: 500 } });
+
+    ctx.tick(spaceInput, 1 / 60);
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+    expect(ctx.getFlowState().kind).toBe('gameOver');
+  });
+
+  it('B-4. GameOver 진입 시 highScore 저장됨 (score > 이전 highScore)', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await createAppContext({ saveRepository: repo });
+    advanceToInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({ ...state, session: { ...state.session, lives: 1, score: 750 } });
+
+    ctx.tick(spaceInput, 1 / 60);
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+    expect(ctx.getFlowState().kind).toBe('gameOver');
+
+    const saved = await repo.load();
+    expect(saved.highScore).toBe(750);
+  });
+
+  it('B-5. GameOver에서 스페이스 → title 복귀', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({ ...state, session: { ...state.session, lives: 1 } });
+
+    ctx.tick(spaceInput, 1 / 60);
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+    expect(ctx.getFlowState().kind).toBe('gameOver');
+
+    ctx.tick(spaceInput, 1 / 60);
+    expect(ctx.getFlowState().kind).toBe('title');
+  });
+
+  it('B-6. score < 이전 highScore 이면 highScore 유지됨', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 9999 });
+    const ctx = await createAppContext({ saveRepository: repo });
+    advanceToInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({ ...state, session: { ...state.session, lives: 1, score: 100 } });
+
+    ctx.tick(spaceInput, 1 / 60);
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+    expect(ctx.getFlowState().kind).toBe('gameOver');
+
+    const saved = await repo.load();
+    expect(saved.highScore).toBe(9999);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MVP2 시나리오 C: Stage 2 LifeLost 후 재시도 (스테이지 유지)
+// Title → Intro → Stage 1 클리어 → Stage 2 진입 → LifeLost → RoundIntro → 같은 Stage 2 재시작
+// (mvp2.md §13-4 — 다중 스테이지 중간 실패/재시도)
+// ---------------------------------------------------------------------------
+
+describe('MVP2 §13-4 시나리오 C: Stage 2 LifeLost 후 재시도 — 스테이지/점수/블록 유지', () => {
+  it('C-1. Stage 2 진입 후 currentStageIndex=1, blocks=78', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToStage2InGame(ctx);
+    expect(ctx.getFlowState().currentStageIndex).toBe(1);
+    expect(ctx.getGameplayState().blocks).toHaveLength(78);
+    expect(ctx.getGameplayState().session.currentStageIndex).toBe(1);
+  });
+
+  it('C-2. Stage 2에서 LifeLost (lives > 0) → roundIntro 전이, 같은 stageIndex=1 유지', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToStage2InGame(ctx);
+
+    ctx.tick(spaceInput, 1 / 60); // 공 활성화
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getFlowState().currentStageIndex).toBe(1);
+  });
+
+  it('C-3. Stage 2 LifeLost 후 재시도: blocks 78개 그대로 (블록 수 유지)', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToStage2InGame(ctx);
+
+    ctx.tick(spaceInput, 1 / 60);
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getGameplayState().blocks).toHaveLength(78);
+  });
+
+  it('C-4. Stage 2 LifeLost 후 재시도: score 유지됨', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToStage2InGame(ctx);
+
+    // 점수 주입
+    const s2State = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({ ...s2State, session: { ...s2State.session, score: 1200 } });
+
+    ctx.tick(spaceInput, 1 / 60);
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getGameplayState().session.score).toBe(1200);
+  });
+
+  it('C-5. Stage 2 LifeLost 후 RoundIntroFinished → 같은 Stage 2로 inGame 재진입', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToStage2InGame(ctx);
+
+    ctx.tick(spaceInput, 1 / 60);
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' });
+    expect(ctx.getFlowState().kind).toBe('inGame');
+    expect(ctx.getFlowState().currentStageIndex).toBe(1);
+    expect(ctx.getGameplayState().session.currentStageIndex).toBe(1);
+    expect(ctx.getGameplayState().blocks).toHaveLength(78);
+  });
+
+  it('C-6. Stage 2 LifeLost 후 재시도: 일부 파괴된 블록 상태가 그대로 유지됨', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    advanceToStage2InGame(ctx);
+
+    // 블록 5개를 파괴 상태로 주입
+    const s2State = ctx.getGameplayState() as GameplayRuntimeState;
+    const modifiedBlocks = s2State.blocks.map((b, i) =>
+      i < 5 ? { ...b, isDestroyed: true, remainingHits: 0 } : b,
+    );
+    ctx._setGameplayState({ ...s2State, blocks: modifiedBlocks });
+
+    ctx.tick(spaceInput, 1 / 60);
+    injectBallBelowFloor(ctx);
+    tickUntilFlowChanges(ctx, 'inGame');
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+
+    // 파괴된 블록 5개가 그대로 유지됨 (resetForRetry는 블록을 재초기화하지 않음)
+    const destroyedCount = ctx.getGameplayState().blocks.filter((b) => b.isDestroyed).length;
+    expect(destroyedCount).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MVP2 시나리오 D: IntroStory 게이팅
+// IntroSequenceFinished 전까지 gameplay tick 비활성, bar 입력 무시
+// (mvp2.md §7-2 — IntroStory 는 게임플레이 입력을 처리하지 않음)
+// ---------------------------------------------------------------------------
+
+describe('MVP2 §13-4 시나리오 D: IntroStory 게이팅 — gameplay tick 비활성', () => {
+  it('D-1. IntroStory 상태에서 여러 tick 후에도 bar.x 변화 없음 (gameplay 비활성)', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    expect(ctx.getFlowState().kind).toBe('introStory');
+
+    const barXBefore = ctx.getGameplayState().bar.x;
+    const leftInput: InputSnapshot = { leftDown: true, rightDown: false, spaceJustPressed: false };
+    for (let i = 0; i < 10; i++) {
+      ctx.tick(leftInput, 1 / 60);
+    }
+    // bar 이동 입력이 있더라도 introStory에서는 gameplay tick 비활성
+    expect(ctx.getGameplayState().bar.x).toBe(barXBefore);
+  });
+
+  it('D-2. IntroStory 상태에서 ball.isActive는 false (공 정지)', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    expect(ctx.getFlowState().kind).toBe('introStory');
+
+    for (let i = 0; i < 10; i++) {
+      ctx.tick(noInput, 1 / 60);
+    }
+    const balls = ctx.getGameplayState().balls;
+    expect(balls.length).toBeGreaterThan(0);
+    expect(balls[0]!.isActive).toBe(false);
+  });
+
+  it('D-3. IntroStory에서 스페이스 입력을 여러 번 눌러도 roundIntro로 가지 않음', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    expect(ctx.getFlowState().kind).toBe('introStory');
+
+    // 스페이스를 10번 눌러도 introStory 유지 (IntroSequenceFinished 전까지)
+    for (let i = 0; i < 10; i++) {
+      ctx.tick(spaceInput, 1 / 60);
+    }
+    expect(ctx.getFlowState().kind).toBe('introStory');
+  });
+
+  it('D-4. IntroSequenceFinished 발행 후에만 roundIntro 진입', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    expect(ctx.getFlowState().kind).toBe('introStory');
+
+    // 여러 tick 후에도 introStory 유지
+    for (let i = 0; i < 5; i++) {
+      ctx.tick(noInput, 1 / 60);
+    }
+    expect(ctx.getFlowState().kind).toBe('introStory');
+
+    // IntroSequenceFinished 발행 → roundIntro 전이
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' });
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MVP2 시나리오 E: GameClear → Title 복귀 → 새 게임 리셋
+// (mvp2.md §15 — GameClear와 GameOver 모두 Title 복귀 가능, 새 게임 리셋 확인)
+// ---------------------------------------------------------------------------
+
+describe('MVP2 §13-4 시나리오 E: GameClear → Title 복귀 → 새 게임 리셋', () => {
+  /**
+   * 전체 3스테이지를 클리어해 gameClear 상태에 도달하는 헬퍼.
+   * score 주입으로 highScore를 확인 가능하게 한다.
+   */
+  async function reachGameClear(
+    score: number,
+    repo: InstanceType<typeof InMemorySaveRepository>,
+  ): Promise<Awaited<ReturnType<typeof createAppContext>>> {
+    const ctx = await createAppContext({ saveRepository: repo });
+    advanceToInGame(ctx);
+
+    const s1State = ctx.getGameplayState() as GameplayRuntimeState;
+    ctx._setGameplayState({ ...s1State, session: { ...s1State.session, score } });
+
+    clearAllBlocks(ctx); // Stage 1 클리어
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // inGame(stage2)
+    clearAllBlocks(ctx); // Stage 2 클리어
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // inGame(stage3)
+    clearAllBlocks(ctx); // Stage 3 클리어 → gameClear
+    return ctx;
+  }
+
+  it('E-1. Stage 3 클리어 후 gameClear 상태 확인', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await reachGameClear(2000, repo);
+    expect(ctx.getFlowState().kind).toBe('gameClear');
+  });
+
+  it('E-2. GameClear 에서 스페이스 → title 복귀', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await reachGameClear(2000, repo);
+    ctx.tick(spaceInput, 1 / 60);
+    expect(ctx.getFlowState().kind).toBe('title');
+  });
+
+  it('E-3. Title 복귀 후 스페이스(StartGameRequested) 시 currentStageIndex=0 으로 리셋됨', async () => {
+    // GameClear → RetryRequested → Title 진입 시 currentStageIndex는
+    // FlowController에서 StartGameRequested 시 리셋된다 (mvp2.md §7-2).
+    // Title 화면 자체에서는 이전 값을 유지하지만, 다음 게임 시작 시 0이 된다.
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await reachGameClear(2000, repo);
+    ctx.tick(spaceInput, 1 / 60); // gameClear → title
+    expect(ctx.getFlowState().kind).toBe('title');
+
+    // 새 게임 시작(StartGameRequested) → introStory 전이 시 currentStageIndex=0
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    expect(ctx.getFlowState().kind).toBe('introStory');
+    expect(ctx.getFlowState().currentStageIndex).toBe(0);
+  });
+
+  it('E-4. Title 복귀 후 새 게임 시작 → introStory → roundIntro → score=0, currentStageIndex=0', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await reachGameClear(2000, repo);
+    ctx.tick(spaceInput, 1 / 60); // gameClear → title
+
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
+
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getFlowState().currentStageIndex).toBe(0);
+    expect(ctx.getGameplayState().session.score).toBe(0);
+    expect(ctx.getGameplayState().session.currentStageIndex).toBe(0);
+  });
+
+  it('E-5. Title 복귀 후 새 게임 시작 → Stage 1 블록 65개 로드됨 (블록 재초기화)', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await reachGameClear(2000, repo);
+    ctx.tick(spaceInput, 1 / 60); // gameClear → title
+
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
+
+    const blocks = ctx.getGameplayState().blocks;
+    expect(blocks).toHaveLength(65);
+    expect(blocks.every((b) => !b.isDestroyed)).toBe(true);
+  });
+
+  it('E-6. Title 복귀 후 새 게임 시작 → lives=3 으로 리셋됨', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await reachGameClear(2000, repo);
+    ctx.tick(spaceInput, 1 / 60); // gameClear → title
+
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
+
+    expect(ctx.getGameplayState().session.lives).toBe(3);
+  });
+
+  it('E-7. 이전 클리어 highScore는 새 게임 시작 후에도 유지됨', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await reachGameClear(5000, repo);
+    ctx.tick(spaceInput, 1 / 60); // gameClear → title
+
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
+
+    // 새 게임에서도 이전 highScore(5000) 유지
+    expect(ctx.getGameplayState().session.highScore).toBeGreaterThanOrEqual(5000);
+  });
+
+  it('E-8. 전체 사이클: GameClear → Title → 새 게임 → IntroStory → Stage1 inGame 진입 가능', async () => {
+    const repo = new InMemorySaveRepository({ highScore: 0 });
+    const ctx = await reachGameClear(1000, repo);
+    ctx.tick(spaceInput, 1 / 60); // gameClear → title
+
+    // 새 게임 사이클
+    ctx.tick(spaceInput, 1 / 60); // title → introStory
+    expect(ctx.getFlowState().kind).toBe('introStory');
+    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // roundIntro → inGame
+    expect(ctx.getFlowState().kind).toBe('inGame');
+    expect(ctx.getFlowState().currentStageIndex).toBe(0);
   });
 });
