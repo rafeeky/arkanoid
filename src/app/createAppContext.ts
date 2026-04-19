@@ -1,11 +1,15 @@
 import { GameFlowController } from '../flow/controller/GameFlowController';
 import { GameplayController } from '../gameplay/controller/GameplayController';
 import { GameplayLifecycleHandler } from '../gameplay/controller/GameplayLifecycleHandler';
+import { ScreenDirector } from '../presentation/controller/ScreenDirector';
+import { VisualEffectController } from '../presentation/controller/VisualEffectController';
 import type { GameFlowState } from '../flow/state/GameFlowState';
 import type { GameplayRuntimeState } from '../gameplay/state/GameplayRuntimeState';
+import type { ScreenState } from '../presentation/state/ScreenState';
 import type { InputSnapshot } from '../input/InputSnapshot';
 import type { FlowEvent } from '../flow/events/flowEvents';
 import type { GameplayEvent } from '../gameplay/events/gameplayEvents';
+import type { PresentationEvent } from '../presentation/events/presentationEvents';
 
 import { StageDefinitionTable } from '../definitions/tables/StageDefinitionTable';
 import { BlockDefinitionTable } from '../definitions/tables/BlockDefinitionTable';
@@ -20,19 +24,29 @@ import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
  *   flowState === 'inGame' 이면 gameplayController.tick 실행 (architecture §17).
  * - getFlowState(): 현재 FlowState 읽기 전용 조회.
  * - getGameplayState(): 현재 GameplayRuntimeState 읽기 전용 조회.
+ * - getScreenState(): 현재 ScreenState 읽기 전용 조회. GameScene 에서 렌더링에 사용.
  * - handlePresentationEvent: Presentation 이벤트를 FlowController 에 전달.
  *
  * 이벤트 배선:
- * - gameplayController 이벤트 → flowController.handleGameplayEvent
+ * - gameplayController 이벤트 → flowController.handleGameplayEvent + visualEffectController.handleGameplayEvent
  * - flowController 이벤트:
  *   - EnteredRoundIntro + from === 'title'  → lifecycleHandler.initializeStage (새 게임)
  *   - EnteredRoundIntro + from === 'inGame' → lifecycleHandler.resetForRetry (재시도)
+ * - VisualEffectController 가 LifeLostPresentationFinished 발행 → handlePresentationEvent 경유
+ *
+ * 틱 순서 (architecture §17):
+ * 1. flowController.handleInput
+ * 2. flowState === 'inGame' 이면 gameplayController.tick
+ * 3. screenDirector.update(flowState, deltaMs * 1000, emitPresentationEvent)
+ *    └── 내부에서 visualEffectController.update 호출
  */
 export type AppContext = {
   tick(input: InputSnapshot, dt: number): void;
   getFlowState(): Readonly<GameFlowState>;
   getGameplayState(): Readonly<GameplayRuntimeState>;
-  handlePresentationEvent(event: import('../presentation/events/presentationEvents').PresentationEvent): void;
+  getScreenState(): Readonly<ScreenState>;
+  handlePresentationEvent(event: PresentationEvent): void;
+  getVisualEffectController(): import('../presentation/controller/VisualEffectController').VisualEffectController;
 };
 
 export function createAppContext(): AppContext {
@@ -56,14 +70,16 @@ export function createAppContext(): AppContext {
     config,
   });
 
+  // VisualEffectController: Gameplay 이벤트를 받아 시각 연출 타이머 관리
+  const visualEffectController = new VisualEffectController(config);
+
+  // ScreenDirector: VisualEffectController 를 내부에서 update 호출
+  const screenDirector = new ScreenDirector(config.roundIntroDurationMs, visualEffectController);
+
   // FlowController: Gameplay 이벤트를 받아 Flow 전이를 처리한다.
   const flowController = new GameFlowController((flowEvent: FlowEvent) => {
     onFlowEvent(flowEvent);
   });
-
-  // Gameplay → Flow 배선
-  // GameplayController 는 tick 결과로 이벤트 배열을 반환하므로,
-  // tick wrapper 에서 라우팅한다 (subscribe 패턴 대신 반환값 사용).
 
   // Flow 이벤트 핸들러 (forward declaration 패턴)
   function onFlowEvent(event: FlowEvent): void {
@@ -89,6 +105,12 @@ export function createAppContext(): AppContext {
     }
   }
 
+  // Presentation 이벤트 발행 콜백.
+  // VisualEffectController 가 타이머 완료 시 이 콜백을 통해 이벤트를 발행한다.
+  function emitPresentationEvent(event: PresentationEvent): void {
+    handlePresentationEvent(event);
+  }
+
   function tick(input: InputSnapshot, dt: number): void {
     // Flow 입력 처리 (Title, GameOver 등 비인게임 상태에서의 입력)
     flowController.handleInput(input);
@@ -97,9 +119,15 @@ export function createAppContext(): AppContext {
     if (flowController.getState().kind === 'inGame') {
       const gameplayEvents: GameplayEvent[] = gameplayController.tick(input, dt);
       for (const event of gameplayEvents) {
+        // Flow 와 VisualEffectController 모두에 이벤트 전달
         flowController.handleGameplayEvent(event);
+        visualEffectController.handleGameplayEvent(event);
       }
     }
+
+    // ScreenDirector 갱신 — dt는 초 단위이므로 ms로 변환
+    const deltaMs = dt * 1000;
+    screenDirector.update(flowController.getState(), deltaMs, emitPresentationEvent);
   }
 
   function getFlowState(): Readonly<GameFlowState> {
@@ -110,16 +138,24 @@ export function createAppContext(): AppContext {
     return gameplayController.getState() as Readonly<GameplayRuntimeState>;
   }
 
-  function handlePresentationEvent(
-    event: import('../presentation/events/presentationEvents').PresentationEvent,
-  ): void {
+  function getScreenState(): Readonly<ScreenState> {
+    return screenDirector.getScreenState();
+  }
+
+  function handlePresentationEvent(event: PresentationEvent): void {
     flowController.handlePresentationEvent(event);
+  }
+
+  function getVisualEffectController(): VisualEffectController {
+    return visualEffectController;
   }
 
   return {
     tick,
     getFlowState,
     getGameplayState,
+    getScreenState,
     handlePresentationEvent,
+    getVisualEffectController,
   };
 }

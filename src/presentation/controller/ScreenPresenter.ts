@@ -26,12 +26,23 @@ export class ScreenPresenter {
   buildRoundIntroViewModel(
     session: Readonly<GameSessionState>,
     uiTexts: readonly UITextEntry[],
+    roundIntroRemainingTime: number = 0,
+    roundIntroDurationMs: number = 1500,
   ): RoundIntroViewModel {
     const roundLabel = this.lookupText(uiTexts, 'txt_round_01');
     const readyLabel = this.lookupText(uiTexts, 'txt_ready');
+    // introProgress: 0.0(시작) ~ 1.0(종료). 남은 시간이 줄어들수록 1에 가까워짐.
+    const elapsed = roundIntroDurationMs - roundIntroRemainingTime;
+    const introProgress =
+      roundIntroDurationMs > 0
+        ? Math.max(0, Math.min(1, elapsed / roundIntroDurationMs))
+        : 1;
+    // session 은 현재 미사용. 향후 스테이지 번호 표시 시 사용.
+    void session;
     return {
       roundLabel,
       readyLabel,
+      introProgress,
     };
   }
 

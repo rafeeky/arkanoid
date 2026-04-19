@@ -4,6 +4,7 @@ import type { GameplayRuntimeState } from '../../gameplay/state/GameplayRuntimeS
 import type { ScreenState } from '../state/ScreenState';
 import type { UITextEntry } from '../../definitions/types/UITextEntry';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
+import type { VisualEffectController } from '../controller/VisualEffectController';
 
 import { ScreenPresenter } from '../controller/ScreenPresenter';
 import { HUDPresenter } from '../controller/HUDPresenter';
@@ -39,6 +40,8 @@ import {
  * create() 단계에서 모든 Phaser 오브젝트를 1회 생성하고,
  * render() 에서 매 프레임 visible/position/text만 갱신한다.
  *
+ * Phase 6: VisualEffectController 를 주입받아 barBreakProgress 를 렌더러에 전달한다.
+ *
  * Unity 매핑: ScreenViewRoot MonoBehaviour. 각 sub-renderer는 자식 MonoBehaviour로 분리된다.
  */
 export class SceneRenderer {
@@ -47,6 +50,8 @@ export class SceneRenderer {
   private readonly hudPresenter: HUDPresenter;
   private readonly uiTexts: readonly UITextEntry[];
   private readonly blockDefinitions: Readonly<Record<string, BlockDefinition>>;
+  private readonly visualEffectController: VisualEffectController;
+  private readonly roundIntroDurationMs: number;
 
   private titleObjects!: TitleScreenObjects;
   private roundIntroObjects!: RoundIntroScreenObjects;
@@ -57,10 +62,14 @@ export class SceneRenderer {
     scene: Phaser.Scene,
     uiTexts: readonly UITextEntry[],
     blockDefinitions: Readonly<Record<string, BlockDefinition>>,
+    visualEffectController: VisualEffectController,
+    roundIntroDurationMs: number = 1500,
   ) {
     this.scene = scene;
     this.uiTexts = uiTexts;
     this.blockDefinitions = blockDefinitions;
+    this.visualEffectController = visualEffectController;
+    this.roundIntroDurationMs = roundIntroDurationMs;
     this.presenter = new ScreenPresenter();
     this.hudPresenter = new HUDPresenter();
   }
@@ -100,6 +109,8 @@ export class SceneRenderer {
       const vm = this.presenter.buildRoundIntroViewModel(
         gameplayState.session,
         this.uiTexts,
+        screenState.roundIntroRemainingTime,
+        this.roundIntroDurationMs,
       );
       renderRoundIntroScreen(this.roundIntroObjects, vm);
       hideInGameScreen(this.inGameObjects);
@@ -108,12 +119,15 @@ export class SceneRenderer {
       hideTitleScreen(this.titleObjects);
       hideRoundIntroScreen(this.roundIntroObjects);
       const hudVm = this.hudPresenter.buildHudViewModel(gameplayState.session);
+      const barBreakProgress = this.visualEffectController.getBarBreakProgress();
       renderInGameScreen(
         this.scene,
         this.inGameObjects,
         gameplayState,
         hudVm,
         this.blockDefinitions,
+        screenState,
+        barBreakProgress,
       );
       hideGameOverScreen(this.gameOverObjects);
     } else if (screen === 'gameOver') {

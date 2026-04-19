@@ -50,6 +50,21 @@ describe('ScreenPresenter', () => {
       expect(vm.roundLabel).toBe('ROUND 1');
       expect(vm.readyLabel).toBe('READY');
     });
+
+    it('roundIntroRemainingTime = duration(1500) 이면 introProgress = 0.0 (시작)', () => {
+      const vm = presenter.buildRoundIntroViewModel(makeSession(), uiTexts, 1500, 1500);
+      expect(vm.introProgress).toBeCloseTo(0.0);
+    });
+
+    it('roundIntroRemainingTime = 750 이면 introProgress ≈ 0.5 (중간)', () => {
+      const vm = presenter.buildRoundIntroViewModel(makeSession(), uiTexts, 750, 1500);
+      expect(vm.introProgress).toBeCloseTo(0.5);
+    });
+
+    it('roundIntroRemainingTime = 0 이면 introProgress = 1.0 (종료)', () => {
+      const vm = presenter.buildRoundIntroViewModel(makeSession(), uiTexts, 0, 1500);
+      expect(vm.introProgress).toBeCloseTo(1.0);
+    });
   });
 
   describe('buildGameOverViewModel', () => {

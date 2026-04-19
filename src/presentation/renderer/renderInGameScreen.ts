@@ -2,15 +2,23 @@ import type Phaser from 'phaser';
 import type { GameplayRuntimeState } from '../../gameplay/state/GameplayRuntimeState';
 import type { HudViewModel } from '../view-models/HudViewModel';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
+import type { ScreenState } from '../state/ScreenState';
 
-// 블록 시각 ID → 색상 매핑
+// 블록 시각 ID → 기본 색상 매핑
 // Phaser API 없이 순수 값 매핑. Unity 포팅 시 Material/Sprite 참조로 교체된다.
 const BLOCK_COLOR_MAP: Record<string, number> = {
   block_basic: 0x888888,
   block_basic_drop: 0xdddd00,
   block_tough: 0x4488ff,
 };
+// 블록 피격 플래시 색상 매핑 — 기본 색보다 밝은 색으로 강조
+const BLOCK_FLASH_COLOR_MAP: Record<string, number> = {
+  block_basic: 0xffffff,       // 회색 → 흰색
+  block_basic_drop: 0xffffcc,  // 노랑 → 연한 흰노랑
+  block_tough: 0xaaccff,       // 파랑 → 연한 하늘색
+};
 const BLOCK_COLOR_DEFAULT = 0x888888;
+const BLOCK_FLASH_COLOR_DEFAULT = 0xffffff;
 
 // 아이템 색상
 const ITEM_COLOR = 0xffdd00;
@@ -103,6 +111,13 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
 /**
  * renderInGameScreen — InGame 화면 오브젝트를 gameplayState / hudViewModel에 맞게 갱신한다.
  * 매 프레임 visible/position/text 갱신만 수행. 오브젝트 신규 생성은 최소화.
+ *
+ * screenState.blockHitFlashBlockIds: 플래시 중인 블록은 밝은 색으로 그린다.
+ * screenState.isBarBreaking: true 이면 바를 opacity/scale 감소 애니메이션으로 표현.
+ *   barBreakProgress 가 없으므로 SceneRenderer 에서 VisualEffectController.getBarBreakProgress()
+ *   를 별도로 전달받거나, screenState 에 progress 를 포함시켜야 한다.
+ *   현재는 barBreakProgress 를 추가 인자로 받는다.
+ *
  * Unity 매핑: BarView.Refresh(), BallView.Refresh(), BlockViewPool.Refresh() 형태.
  */
 export function renderInGameScreen(
@@ -111,6 +126,8 @@ export function renderInGameScreen(
   gameplayState: Readonly<GameplayRuntimeState>,
   hudViewModel: HudViewModel,
   blockDefinitions: Readonly<Record<string, BlockDefinition>>,
+  screenState: Readonly<ScreenState>,
+  barBreakProgress: number,
 ): void {
   // HUD 표시
   objects.hudDivider.setVisible(true);
@@ -118,17 +135,31 @@ export function renderInGameScreen(
   objects.hudLives.setText(`LIVES  ${hudViewModel.lives}`).setVisible(true);
   objects.hudRound.setText(`RD ${hudViewModel.round}`).setVisible(true);
 
-  // 바
-  const bar = gameplayState.bar;
-  objects.bar
-    .setPosition(bar.x, bar.y)
-    .setSize(bar.width, BAR_HEIGHT)
-    .setVisible(true);
+  const flashBlockIdSet = new Set(screenState.blockHitFlashBlockIds);
 
-  // 공 (isActive인 것만 표시. MVP1은 공 1개)
+  // 바 — 파괴 연출: progress(1.0→0.0) 기반으로 alpha/scaleX 선형 감소
+  const bar = gameplayState.bar;
+  if (screenState.isBarBreaking) {
+    // barBreakProgress: 1.0 = 연출 시작, 0.0 = 연출 종료
+    const alpha = barBreakProgress;                      // 1.0 → 0.0
+    const scaleX = 0.5 + barBreakProgress * 0.5;         // 1.0 → 0.5
+    objects.bar
+      .setPosition(bar.x, bar.y)
+      .setSize(bar.width * scaleX, BAR_HEIGHT)
+      .setAlpha(alpha)
+      .setVisible(true);
+  } else {
+    objects.bar
+      .setPosition(bar.x, bar.y)
+      .setSize(bar.width, BAR_HEIGHT)
+      .setAlpha(1)
+      .setVisible(true);
+  }
+
+  // 공 (isActive 이고 바 파괴 연출 중이 아닐 때만 표시)
   const activeBall = gameplayState.balls.find((b) => b.isActive);
-  if (activeBall) {
-    objects.ball.setPosition(activeBall.x, activeBall.y).setVisible(true);
+  if (activeBall && !screenState.isBarBreaking) {
+    objects.ball.setPosition(activeBall.x, activeBall.y).setAlpha(1).setVisible(true);
   } else {
     objects.ball.setVisible(false);
   }
@@ -139,10 +170,12 @@ export function renderInGameScreen(
     if (block.isDestroyed) continue;
     activeBlockIds.add(block.id);
 
+    const def = blockDefinitions[block.definitionId];
+    const isFlashing = flashBlockIdSet.has(block.id);
+
     let rect = objects.blockMap.get(block.id);
     if (!rect) {
-      // 최초 등장 시 1회 생성
-      const def = blockDefinitions[block.definitionId];
+      // 최초 등장 시 1회 생성 (기본 색으로 생성)
       const color = def
         ? (BLOCK_COLOR_MAP[def.visualId] ?? BLOCK_COLOR_DEFAULT)
         : BLOCK_COLOR_DEFAULT;
@@ -156,7 +189,18 @@ export function renderInGameScreen(
       objects.blockMap.set(block.id, rect);
     }
 
-    rect.setPosition(block.x, block.y).setVisible(true);
+    // 플래시 중이면 밝은 색으로, 아니면 기본 색으로
+    const normalColor = def
+      ? (BLOCK_COLOR_MAP[def.visualId] ?? BLOCK_COLOR_DEFAULT)
+      : BLOCK_COLOR_DEFAULT;
+    const flashColor = def
+      ? (BLOCK_FLASH_COLOR_MAP[def.visualId] ?? BLOCK_FLASH_COLOR_DEFAULT)
+      : BLOCK_FLASH_COLOR_DEFAULT;
+
+    rect
+      .setFillStyle(isFlashing ? flashColor : normalColor)
+      .setPosition(block.x, block.y)
+      .setVisible(true);
   }
 
   // 파괴된 블록 숨기기
@@ -187,6 +231,9 @@ export function renderInGameScreen(
       rect.setVisible(false);
     }
   }
+
+  // scene 파라미터는 블록/아이템 생성에만 사용됨. 명시적 void 처리 불필요.
+  void scene;
 }
 
 /**

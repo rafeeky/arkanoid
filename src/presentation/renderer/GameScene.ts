@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import type { AppContext } from '../../app/createAppContext';
 import type { KeyboardInputSource } from '../../input/KeyboardInputSource';
-import { ScreenDirector } from '../controller/ScreenDirector';
 import { SceneRenderer } from './SceneRenderer';
 import type { UITextEntry } from '../../definitions/types/UITextEntry';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
@@ -17,13 +16,17 @@ export type GameSceneInitData = {
 /**
  * GameScene — 단일 Phaser.Scene. ScreenState에 따라 요소를 show/hide.
  *
+ * Phase 6 리팩토링:
+ * - ScreenDirector 를 AppContext 로 이전했으므로 GameScene 에서 제거.
+ * - appContext.getScreenState() 로 현재 ScreenState 를 읽는다.
+ * - SceneRenderer 에 VisualEffectController 를 주입해 barBreakProgress 를 얻는다.
+ *
  * 여러 Phaser Scene 분리 금지 (Unity 포팅 관점에서 UI 패널 전환 구조가 적합).
  * Unity 매핑: GameplayRunner MonoBehaviour. Update() 진입점에 해당.
  */
 export class GameScene extends Phaser.Scene {
   private appContext!: AppContext;
   private keyboardInputSource!: KeyboardInputSource;
-  private screenDirector!: ScreenDirector;
   private sceneRenderer!: SceneRenderer;
 
   // RoundIntro 완료 발행 중복 방지 플래그
@@ -36,11 +39,12 @@ export class GameScene extends Phaser.Scene {
   init(data: GameSceneInitData): void {
     this.appContext = data.appContext;
     this.keyboardInputSource = data.keyboardInputSource;
-    this.screenDirector = new ScreenDirector(data.roundIntroDurationMs);
     this.sceneRenderer = new SceneRenderer(
       this,
       data.uiTexts,
       data.blockDefinitions,
+      data.appContext.getVisualEffectController(),
+      data.roundIntroDurationMs,
     );
   }
 
@@ -52,12 +56,11 @@ export class GameScene extends Phaser.Scene {
     const dt = deltaMs / 1000;
     const input = this.keyboardInputSource.readSnapshot();
 
+    // AppContext.tick() 내부에서 ScreenDirector.update 도 호출됨
     this.appContext.tick(input, dt);
 
     const flowState = this.appContext.getFlowState();
-    this.screenDirector.update(flowState, deltaMs);
-
-    const screenState = this.screenDirector.getScreenState();
+    const screenState = this.appContext.getScreenState();
 
     // roundIntroRemainingTime 이 0 이하로 내려가면 RoundIntroFinished 를 1회만 발행
     if (
