@@ -27,7 +27,10 @@ export type ItemCollectedEvent = {
   newEffect: 'none' | 'expand';
 };
 
-export type LifeLostEvent = { type: 'LifeLost' };
+export type LifeLostEvent = {
+  type: 'LifeLost';
+  remainingLives: number;
+};
 
 export type StageClearedEvent = { type: 'StageCleared' };
 
