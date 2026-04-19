@@ -17,4 +17,5 @@ export const UITextTable: UITextEntry[] = [
   { textId: 'txt_gameclear',         value: 'CONGRATULATIONS' },
   { textId: 'txt_gameclear_final_score', value: 'FINAL SCORE {0}' },
   { textId: 'txt_gameclear_retry',   value: 'PRESS SPACE TO RETRY' },
+  { textId: 'txt_gameover_final_score', value: 'FINAL SCORE {0}' },
 ];

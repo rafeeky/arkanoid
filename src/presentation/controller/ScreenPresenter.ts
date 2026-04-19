@@ -59,11 +59,18 @@ export class ScreenPresenter {
     uiTexts: readonly UITextEntry[],
   ): GameOverViewModel {
     const gameOverLabel = this.lookupText(uiTexts, 'txt_gameover');
+    const finalScoreTemplate = this.lookupText(uiTexts, 'txt_gameover_final_score');
+    const highScoreTemplate = this.lookupText(uiTexts, 'txt_title_highscore');
     const retryText = this.lookupText(uiTexts, 'txt_retry');
+
+    const finalScoreLabel = finalScoreTemplate.replace('{0}', String(session.score));
+    const highScoreLabel = highScoreTemplate.replace('{0}', String(session.highScore));
     const isNewHighScore = session.score > 0 && session.score >= session.highScore;
+
     return {
       gameOverLabel,
-      finalScore: session.score,
+      finalScoreLabel,
+      highScoreLabel,
       retryText,
       isNewHighScore,
     };

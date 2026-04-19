@@ -13,6 +13,7 @@ const uiTexts: UITextEntry[] = [
   { textId: 'txt_ready', value: 'READY' },
   { textId: 'txt_gameover', value: 'GAME OVER' },
   { textId: 'txt_retry', value: 'PRESS SPACE TO RETRY' },
+  { textId: 'txt_gameover_final_score', value: 'FINAL SCORE {0}' },
   { textId: 'txt_gameclear', value: 'CONGRATULATIONS' },
   { textId: 'txt_gameclear_final_score', value: 'FINAL SCORE {0}' },
   { textId: 'txt_gameclear_retry', value: 'PRESS SPACE TO RETRY' },
@@ -93,10 +94,16 @@ describe('ScreenPresenter', () => {
   });
 
   describe('buildGameOverViewModel', () => {
-    it('finalScore 를 session.score 에서 주입한다', () => {
+    it('finalScoreLabel 에 점수가 치환된다', () => {
       const session = makeSession({ score: 1234 });
       const vm = presenter.buildGameOverViewModel(session, uiTexts);
-      expect(vm.finalScore).toBe(1234);
+      expect(vm.finalScoreLabel).toBe('FINAL SCORE 1234');
+    });
+
+    it('highScoreLabel 에 highScore 가 치환된다', () => {
+      const session = makeSession({ score: 100, highScore: 9999 });
+      const vm = presenter.buildGameOverViewModel(session, uiTexts);
+      expect(vm.highScoreLabel).toBe('HIGH SCORE 9999');
     });
 
     it('gameOverLabel 과 retryText 는 UITextTable 에서 조회한다', () => {
@@ -111,6 +118,12 @@ describe('ScreenPresenter', () => {
       expect(vm.isNewHighScore).toBe(true);
     });
 
+    it('isNewHighScore: score > 0 && score > highScore 이면 true (신규 갱신)', () => {
+      const session = makeSession({ score: 1200, highScore: 1000 });
+      const vm = presenter.buildGameOverViewModel(session, uiTexts);
+      expect(vm.isNewHighScore).toBe(true);
+    });
+
     it('isNewHighScore: score = 0 이면 false', () => {
       const session = makeSession({ score: 0, highScore: 0 });
       const vm = presenter.buildGameOverViewModel(session, uiTexts);
@@ -121,6 +134,14 @@ describe('ScreenPresenter', () => {
       const session = makeSession({ score: 300, highScore: 500 });
       const vm = presenter.buildGameOverViewModel(session, uiTexts);
       expect(vm.isNewHighScore).toBe(false);
+    });
+
+    it('일반 기록: highScoreLabel 색상 판단을 위해 isNewHighScore=false', () => {
+      const session = makeSession({ score: 200, highScore: 500 });
+      const vm = presenter.buildGameOverViewModel(session, uiTexts);
+      expect(vm.isNewHighScore).toBe(false);
+      expect(vm.highScoreLabel).toBe('HIGH SCORE 500');
+      expect(vm.finalScoreLabel).toBe('FINAL SCORE 200');
     });
   });
 
