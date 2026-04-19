@@ -6,7 +6,7 @@ import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
 import type { GameplayEvent } from '../events/gameplayEvents';
 
 import { resolveGameplayCommands } from './InputCommandResolver';
-import { moveBar, moveBallWithCollisions, moveItemDrop, moveAttachedBallToBar } from '../systems/MovementSystem';
+import { moveBar, moveBallWithCollisions, moveItemDrop, moveAttachedBallToBar, sanityCheckBallBlockSeparation } from '../systems/MovementSystem';
 import { detectCollisions } from '../systems/CollisionService';
 import type { BallHitBlockFact } from '../systems/CollisionService';
 import { applyCollisions } from '../systems/CollisionResolutionService';
@@ -80,13 +80,31 @@ export class GameplayController {
 
     // Block collisions are resolved inside moveBallWithCollisions (swept AABB).
     // Wall / Bar collisions remain in the detectCollisions pipeline below.
+    // After swept movement, a post-tick sanity check pushes the ball out of any
+    // block it may have entered due to floating-point drift or extreme dt.
     const accumulatedBlockFacts: BallHitBlockFact[] = [];
     const newBalls = this.state.balls.map((ball) => {
       const result = moveBallWithCollisions(ball, dt, currentBlocks);
       for (const f of result.blockFacts) {
         accumulatedBlockFacts.push(f);
       }
-      return moveAttachedBallToBar(result.ball, newBar);
+
+      // Layer 2: post-tick sanity check — defensive last-resort separation.
+      // This runs AFTER swept collision so it only fires when swept AABB misses.
+      // If the ball centre is inside a block, push it out and add a collision
+      // fact so block hit/destroy logic still fires for that block.
+      const sanity = sanityCheckBallBlockSeparation(result.ball, currentBlocks);
+      if (sanity.wasInside && sanity.collisionFact) {
+        // Only add the fact if this block has not already been processed this tick
+        const alreadyHit = accumulatedBlockFacts.some(
+          (f) => f.blockId === sanity.collisionFact!.blockId,
+        );
+        if (!alreadyHit) {
+          accumulatedBlockFacts.push(sanity.collisionFact);
+        }
+      }
+
+      return moveAttachedBallToBar(sanity.ball, newBar);
     });
     const newItemDrops = this.state.itemDrops.map((item) => moveItemDrop(item, dt));
 

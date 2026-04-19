@@ -9,6 +9,9 @@ import { enforceMinAngle } from './CollisionResolutionService';
 
 const CANVAS_WIDTH = 960;
 const BAR_HEIGHT = 16;
+const BALL_RADIUS = 8;
+const BLOCK_WIDTH = 64;
+const BLOCK_HEIGHT = 24;
 
 export function moveBar(
   bar: BarState,
@@ -239,6 +242,145 @@ export function moveBallSubSteps(
   }
 
   return current;
+}
+
+// ---------------------------------------------------------------------------
+// Post-tick sanity check: ball-block separation
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of sanityCheckBallBlockSeparation.
+ */
+export type SanityCheckResult = {
+  ball: BallState;
+  /** True if the ball was found inside one or more blocks and was corrected. */
+  wasInside: boolean;
+  /**
+   * A BallHitBlockFact for the first block the ball was pushed out of.
+   * Present only when wasInside=true. This fact can be injected into the
+   * collision pipeline so block hit/destroy logic still runs.
+   */
+  collisionFact?: BallHitBlockFact;
+};
+
+/**
+ * Computes the overlap rectangle between the ball centre and a block AABB.
+ * The "overlap" here is the penetration depth on each axis (positive = overlap).
+ * Returns null when the ball centre is outside the block AABB.
+ *
+ * We compare the ball centre (not the expanded AABB) against the block AABB
+ * because this check is a last-resort correction: if the ball centre itself
+ * is inside the block geometry we have a confirmed tunnel.
+ */
+function computeBallCenterBlockOverlap(
+  ball: BallState,
+  block: BlockState,
+): { overlapX: number; overlapY: number; cx: number; cy: number } | null {
+  const bx = block.x;
+  const by = block.y;
+  const bRight = bx + BLOCK_WIDTH;
+  const bBottom = by + BLOCK_HEIGHT;
+
+  if (ball.x <= bx || ball.x >= bRight) return null;
+  if (ball.y <= by || ball.y >= bBottom) return null;
+
+  const cx = bx + BLOCK_WIDTH / 2;
+  const cy = by + BLOCK_HEIGHT / 2;
+  // Penetration depths on each axis (distance to nearest face)
+  const overlapX = BLOCK_WIDTH / 2 - Math.abs(ball.x - cx);
+  const overlapY = BLOCK_HEIGHT / 2 - Math.abs(ball.y - cy);
+
+  return { overlapX, overlapY, cx, cy };
+}
+
+/**
+ * Post-tick defensive check.
+ *
+ * After all movement and swept collision have been applied, this function
+ * verifies that the ball centre does not lie inside any active block's AABB.
+ * If it does (which should be rare but can happen due to floating-point
+ * accumulation or extreme dt), the ball is pushed out along the shallowest
+ * overlap axis and its velocity is reflected on that axis.
+ *
+ * This is intentionally a last-resort safety net, not the primary collision
+ * system. It does NOT replace sweepBallVsBlocks.
+ *
+ * Returns the (possibly corrected) ball state and a flag indicating whether
+ * a correction was needed. If corrected, a BallHitBlockFact is also returned
+ * so the caller can run normal block hit/destroy logic for the affected block.
+ *
+ * Only the first overlapping block is corrected per call. If the correction
+ * causes an overlap with a second block that will be resolved on the next tick.
+ */
+export function sanityCheckBallBlockSeparation(
+  ball: BallState,
+  blocks: readonly BlockState[],
+): SanityCheckResult {
+  if (!ball.isActive) {
+    return { ball, wasInside: false };
+  }
+
+  for (const block of blocks) {
+    if (block.isDestroyed) continue;
+
+    const overlap = computeBallCenterBlockOverlap(ball, block);
+    if (overlap === null) continue;
+
+    // Ball centre is inside the block. Determine push-out direction from the
+    // shallowest penetration axis.
+    const { overlapX, overlapY, cx, cy } = overlap;
+
+    let newVx = ball.vx;
+    let newVy = ball.vy;
+    let newX = ball.x;
+    let newY = ball.y;
+    let side: 'left' | 'right' | 'top' | 'bottom';
+
+    if (overlapX <= overlapY) {
+      // Push out along x-axis
+      if (ball.x < cx) {
+        // Ball centre is left of block centre → push left
+        newX = block.x - BALL_RADIUS - BLOCK_PUSH_OUT_EPSILON;
+        side = 'left';
+      } else {
+        // Push right
+        newX = block.x + BLOCK_WIDTH + BALL_RADIUS + BLOCK_PUSH_OUT_EPSILON;
+        side = 'right';
+      }
+      newVx = -newVx;
+    } else {
+      // Push out along y-axis
+      if (ball.y < cy) {
+        // Ball centre is above block centre → push upward
+        newY = block.y - BALL_RADIUS - BLOCK_PUSH_OUT_EPSILON;
+        side = 'top';
+      } else {
+        // Push downward
+        newY = block.y + BLOCK_HEIGHT + BALL_RADIUS + BLOCK_PUSH_OUT_EPSILON;
+        side = 'bottom';
+      }
+      newVy = -newVy;
+    }
+
+    const enforced = enforceMinAngle(newVx, newVy);
+    const correctedBall: BallState = {
+      ...ball,
+      x: newX,
+      y: newY,
+      vx: enforced.vx,
+      vy: enforced.vy,
+    };
+    const collisionFact: BallHitBlockFact = {
+      type: 'BallHitBlock',
+      ballId: ball.id,
+      blockId: block.id,
+      side,
+    };
+
+    return { ball: correctedBall, wasInside: true, collisionFact };
+  }
+
+  return { ball, wasInside: false };
 }
 
 export function moveItemDrop(item: ItemDropState, dt: number): ItemDropState {
