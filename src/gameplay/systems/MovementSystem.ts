@@ -43,6 +43,20 @@ export function moveBall(ball: BallState, dt: number): BallState {
 const MAX_BOUNCE_COUNT = 4;
 
 /**
+ * Distance the ball is pushed away from a block face after reflection.
+ *
+ * After a swept collision the ball's centre lands exactly on the expanded
+ * AABB boundary.  That is numerically on the edge — the next sweep iteration
+ * (or the next frame) may see tExit > 0 again and produce a spurious second
+ * hit that flips the velocity back, causing the ball to stall inside the
+ * block.  Nudging by this epsilon guarantees strict separation so the
+ * subsequent sweep returns null for the same face.
+ *
+ * Value is intentionally tiny (< 0.5px) so it is imperceptible during play.
+ */
+const BLOCK_PUSH_OUT_EPSILON = 0.5;
+
+/**
  * Result of moveBallWithCollisions.
  */
 export type BallMoveResult = {
@@ -81,6 +95,9 @@ export function moveBallWithCollisions(
   }
 
   const blockFacts: BallHitBlockFact[] = [];
+  // Track which blocks have already been reflected this tick to prevent the
+  // same block from flipping the velocity more than once (sign-flip bug).
+  const hitBlockIds = new Set<string>();
   let current = ball;
   let remaining = dt;
 
@@ -107,6 +124,20 @@ export function moveBallWithCollisions(
       break;
     }
 
+    // Skip this block if we have already bounced off it this tick.
+    // This prevents the t=0 re-entry loop where the same block flips the
+    // velocity twice and restores the original direction.
+    if (hitBlockIds.has(hit.block.id)) {
+      // Advance freely for remaining time (treat as if no hit)
+      current = {
+        ...current,
+        x: current.x + current.vx * remaining,
+        y: current.y + current.vy * remaining,
+      };
+      remaining = 0;
+      break;
+    }
+
     // Advance ball to the exact contact point
     const elapsed = hit.t * remaining;
     const contactX = current.x + current.vx * elapsed;
@@ -124,6 +155,19 @@ export function moveBallWithCollisions(
     newVx = enforced.vx;
     newVy = enforced.vy;
 
+    // Position correction: push the ball out by epsilon along the collision
+    // normal so the centre is strictly outside the expanded AABB boundary.
+    // Without this nudge, the centre lands exactly on the boundary and the
+    // very next sweep iteration sees tExit > 0 → spurious second hit.
+    let pushX = contactX;
+    let pushY = contactY;
+    switch (hit.side) {
+      case 'top':    pushY = contactY - BLOCK_PUSH_OUT_EPSILON; break;
+      case 'bottom': pushY = contactY + BLOCK_PUSH_OUT_EPSILON; break;
+      case 'left':   pushX = contactX - BLOCK_PUSH_OUT_EPSILON; break;
+      case 'right':  pushX = contactX + BLOCK_PUSH_OUT_EPSILON; break;
+    }
+
     blockFacts.push({
       type: 'BallHitBlock',
       ballId: ball.id,
@@ -131,8 +175,9 @@ export function moveBallWithCollisions(
       side: hit.side,
     });
 
+    hitBlockIds.add(hit.block.id);
     remaining -= elapsed;
-    current = { ...current, x: contactX, y: contactY, vx: newVx, vy: newVy };
+    current = { ...current, x: pushX, y: pushY, vx: newVx, vy: newVy };
   }
 
   // If we hit the bounce cap and there is still time left, just free-advance
