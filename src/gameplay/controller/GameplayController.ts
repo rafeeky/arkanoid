@@ -130,9 +130,12 @@ export class GameplayController {
       if (f.type === 'BallHitWall' && sweptWallBallIds.has(f.ballId)) return false; // already swept
       return true;
     });
-    // Wall facts from swept movement need to be included so applyCollisions can
-    // run any side-effects (currently none for walls, but keeps the pipeline consistent).
-    const collisions = [...accumulatedBlockFacts, ...accumulatedSweptWallFacts, ...barItemCollisions];
+    // accumulatedSweptWallFacts are intentionally NOT included here.
+    // moveBallWithCollisions has already applied the velocity reflection for those
+    // wall hits inside the swept loop. Passing them to applyCollisions would cause
+    // reflectBallWall to flip vx a second time, restoring the pre-collision direction
+    // and making the ball continue into the wall (or oscillate / stall).
+    const collisions = [...accumulatedBlockFacts, ...barItemCollisions];
 
     // 6. Apply collision results
     // Block facts from moveBallWithCollisions have already had their velocity
