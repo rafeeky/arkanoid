@@ -4,6 +4,7 @@ import type { GameplayRuntimeState } from '../../gameplay/state/GameplayRuntimeS
 import type { ScreenState } from '../state/ScreenState';
 import type { UITextEntry } from '../../definitions/types/UITextEntry';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
+import type { SpinnerDefinition } from '../../definitions/types/SpinnerDefinition';
 import type { IntroSequenceEntry } from '../../definitions/types/IntroSequenceEntry';
 import type { VisualEffectController } from '../controller/VisualEffectController';
 
@@ -61,6 +62,7 @@ export class SceneRenderer {
   private readonly hudPresenter: HUDPresenter;
   private readonly uiTexts: readonly UITextEntry[];
   private readonly blockDefinitions: Readonly<Record<string, BlockDefinition>>;
+  private readonly spinnerDefinitions: Readonly<Record<string, SpinnerDefinition>>;
   private readonly introPages: readonly IntroSequenceEntry[];
   private readonly visualEffectController: VisualEffectController;
   private readonly roundIntroDurationMs: number;
@@ -76,6 +78,7 @@ export class SceneRenderer {
     scene: Phaser.Scene,
     uiTexts: readonly UITextEntry[],
     blockDefinitions: Readonly<Record<string, BlockDefinition>>,
+    spinnerDefinitions: Readonly<Record<string, SpinnerDefinition>>,
     visualEffectController: VisualEffectController,
     roundIntroDurationMs: number = 1500,
     introPages: readonly IntroSequenceEntry[] = [],
@@ -83,6 +86,7 @@ export class SceneRenderer {
     this.scene = scene;
     this.uiTexts = uiTexts;
     this.blockDefinitions = blockDefinitions;
+    this.spinnerDefinitions = spinnerDefinitions;
     this.visualEffectController = visualEffectController;
     this.roundIntroDurationMs = roundIntroDurationMs;
     this.introPages = introPages;
@@ -162,6 +166,7 @@ export class SceneRenderer {
         gameplayState,
         hudVm,
         this.blockDefinitions,
+        this.spinnerDefinitions,
         screenState,
         barBreakProgress,
       );

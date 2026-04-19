@@ -11,6 +11,7 @@ import { PhaserAudioPlayer } from '../audio/PhaserAudioPlayer';
 import { AssetResolver } from '../assets/AssetResolver';
 import { AudioCueTable } from '../definitions/tables/AudioCueTable';
 import { IntroSequenceTable } from '../definitions/tables/IntroSequenceTable';
+import { SpinnerDefinitionTable } from '../definitions/tables/SpinnerDefinitionTable';
 import type { DevContext } from './dev/DevContext';
 import { createDevContext } from './dev/DevContext';
 
@@ -65,6 +66,7 @@ function createGame(appContext: AppContext, devContext: DevContext | undefined):
         keyboardInputSource: kbSource,
         uiTexts: UITextTable,
         blockDefinitions: BlockDefinitionTable,
+        spinnerDefinitions: SpinnerDefinitionTable,
         introPages: IntroSequenceTable,
         roundIntroDurationMs: GameplayConfigTable.roundIntroDurationMs,
         devContext,

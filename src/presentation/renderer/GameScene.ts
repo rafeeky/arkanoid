@@ -4,6 +4,7 @@ import type { KeyboardInputSource } from '../../input/KeyboardInputSource';
 import { SceneRenderer } from './SceneRenderer';
 import type { UITextEntry } from '../../definitions/types/UITextEntry';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
+import type { SpinnerDefinition } from '../../definitions/types/SpinnerDefinition';
 import type { IntroSequenceEntry } from '../../definitions/types/IntroSequenceEntry';
 import type { DevContext } from '../../app/dev/DevContext';
 import { DevOverlayRenderer } from './DevOverlayRenderer';
@@ -14,6 +15,7 @@ export type GameSceneInitData = {
   keyboardInputSource: KeyboardInputSource;
   uiTexts: readonly UITextEntry[];
   blockDefinitions: Readonly<Record<string, BlockDefinition>>;
+  spinnerDefinitions: Readonly<Record<string, SpinnerDefinition>>;
   introPages: readonly IntroSequenceEntry[];
   roundIntroDurationMs: number;
   /** Dev 모드 전용. production 빌드에서는 undefined.
@@ -57,6 +59,7 @@ export class GameScene extends Phaser.Scene {
       this,
       data.uiTexts,
       data.blockDefinitions,
+      data.spinnerDefinitions,
       data.appContext.getVisualEffectController(),
       data.roundIntroDurationMs,
       data.introPages,

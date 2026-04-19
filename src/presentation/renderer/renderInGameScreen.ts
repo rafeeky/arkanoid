@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import type { GameplayRuntimeState } from '../../gameplay/state/GameplayRuntimeState';
 import type { HudViewModel } from '../view-models/HudViewModel';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
+import type { SpinnerDefinition } from '../../definitions/types/SpinnerDefinition';
 import type { ScreenState } from '../state/ScreenState';
 
 // 블록 시각 ID → 기본 색상 매핑
@@ -23,6 +24,9 @@ const BLOCK_FLASH_COLOR_DEFAULT = 0xffffff;
 // 아이템 색상
 const ITEM_COLOR = 0xffdd00;
 
+// 회전체 색상
+const SPINNER_COLOR = 0xaa88ff; // 보라 계열 임시 색상
+
 // 바 색상 — activeEffect 별
 const BAR_COLOR_NORMAL = 0xffffff;
 const BAR_COLOR_EXPAND = 0xffee99; // 연한 노랑 틴트: 확장 효과 중임을 표시
@@ -39,6 +43,10 @@ export type InGameObjects = {
   // 레이저 발사체 풀: shotId → Rectangle
   // 매 프레임 laserShots 배열과 id 기준으로 add/remove 동기화
   laserMap: Map<string, Phaser.GameObjects.Rectangle>;
+  // 회전체 풀: spinnerId → Rectangle(cube) | Graphics(triangle)
+  // 매 프레임 spinnerStates 배열과 id 기준으로 add/remove 동기화
+  // Unity 포팅 시: SpinnerView MonoBehaviour + ObjectPool 형태로 대응.
+  spinnerMap: Map<string, Phaser.GameObjects.Rectangle | Phaser.GameObjects.Graphics>;
   // HUD
   hudScore: Phaser.GameObjects.Text;
   hudLives: Phaser.GameObjects.Text;
@@ -124,6 +132,7 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
     blockMap: new Map(),
     itemMap: new Map(),
     laserMap: new Map(),
+    spinnerMap: new Map(),
     hudScore,
     hudLives,
     hudRound,
@@ -150,6 +159,7 @@ export function renderInGameScreen(
   gameplayState: Readonly<GameplayRuntimeState>,
   hudViewModel: HudViewModel,
   blockDefinitions: Readonly<Record<string, BlockDefinition>>,
+  spinnerDefinitions: Readonly<Record<string, SpinnerDefinition>>,
   screenState: Readonly<ScreenState>,
   barBreakProgress: number,
 ): void {
@@ -296,6 +306,77 @@ export function renderInGameScreen(
     }
   }
 
+  // 회전체 렌더링
+  // spinnerStates 배열과 spinnerMap을 id 기준으로 add/remove 동기화.
+  // cube: Rectangle + setRotation(angleRad). 한 변 = size.
+  // triangle: Graphics로 매 틱 재그림. 정삼각형, 한 변 = size.
+  //   정삼각형의 3 vertex를 angleRad 기준으로 계산: 외접원 반지름 = size / sqrt(3).
+  // Unity 포팅 시: SpinnerView MonoBehaviour + ObjectPool 형태로 대응.
+  const activeSpinnerIds = new Set<string>();
+  for (const spinner of gameplayState.spinnerStates) {
+    activeSpinnerIds.add(spinner.id);
+    const def = spinnerDefinitions[spinner.definitionId];
+    if (def === undefined) continue;
+
+    if (def.kind === 'cube') {
+      // cube: Rectangle. setRotation(angleRad)으로 회전 반영.
+      // kind는 런타임에 변경되지 않으므로 동일 id에 항상 Rectangle이 들어온다.
+      const existingCube = objects.spinnerMap.get(spinner.id);
+      let rect: Phaser.GameObjects.Rectangle;
+      if (existingCube === undefined) {
+        rect = scene.add.rectangle(
+          spinner.x,
+          spinner.y,
+          def.size,
+          def.size,
+          SPINNER_COLOR,
+        );
+        objects.spinnerMap.set(spinner.id, rect);
+      } else {
+        rect = existingCube as Phaser.GameObjects.Rectangle;
+      }
+      rect
+        .setPosition(spinner.x, spinner.y)
+        .setRotation(spinner.angleRad)
+        .setVisible(true);
+    } else {
+      // triangle: Graphics. 매 틱 재그림.
+      // 정삼각형: 한 변 = size. 외접원 반지름 R = size / sqrt(3).
+      // vertex i = (x + R * cos(angleRad + i * 2π/3), y + R * sin(angleRad + i * 2π/3))
+      // kind는 런타임에 변경되지 않으므로 동일 id에 항상 Graphics가 들어온다.
+      const existingTriangle = objects.spinnerMap.get(spinner.id);
+      let gfx: Phaser.GameObjects.Graphics;
+      if (existingTriangle === undefined) {
+        gfx = scene.add.graphics();
+        objects.spinnerMap.set(spinner.id, gfx);
+      } else {
+        gfx = existingTriangle as Phaser.GameObjects.Graphics;
+      }
+
+      const R = def.size / Math.sqrt(3);
+      const TWO_PI_OVER_3 = (2 * Math.PI) / 3;
+      const x0 = spinner.x + R * Math.cos(spinner.angleRad);
+      const y0 = spinner.y + R * Math.sin(spinner.angleRad);
+      const x1 = spinner.x + R * Math.cos(spinner.angleRad + TWO_PI_OVER_3);
+      const y1 = spinner.y + R * Math.sin(spinner.angleRad + TWO_PI_OVER_3);
+      const x2 = spinner.x + R * Math.cos(spinner.angleRad + 2 * TWO_PI_OVER_3);
+      const y2 = spinner.y + R * Math.sin(spinner.angleRad + 2 * TWO_PI_OVER_3);
+
+      gfx
+        .clear()
+        .fillStyle(SPINNER_COLOR, 1)
+        .fillTriangle(x0, y0, x1, y1, x2, y2)
+        .setVisible(true);
+    }
+  }
+
+  // 소멸된 회전체 숨기기
+  for (const [id, obj] of objects.spinnerMap) {
+    if (!activeSpinnerIds.has(id)) {
+      obj.setVisible(false);
+    }
+  }
+
   // 바 효과 타이머 HUD
   // magnet 활성: "MAGNET X.Xs" 형태로 표시. laser는 Phase 5에서 추가 예정.
   if (hudViewModel.activeEffect === 'magnet' && hudViewModel.magnetRemainingMs > 0) {
@@ -339,5 +420,8 @@ export function hideInGameScreen(objects: InGameObjects): void {
   }
   for (const rect of objects.laserMap.values()) {
     rect.setVisible(false);
+  }
+  for (const obj of objects.spinnerMap.values()) {
+    obj.setVisible(false);
   }
 }
