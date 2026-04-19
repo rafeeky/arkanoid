@@ -62,18 +62,30 @@ module.exports = {
     },
     // node_modules(Phaser 등 엔진 API) 사용은 presentation/, audio/, input/KeyboardInputSource.ts, app/에서만 허용
     // 다른 레이어에서의 node_modules 직접 import는 error
-    // 단, *.test.ts 파일은 예외
+    // 단, *.test.ts 파일과 src/editor/ (독립 dev 도구)는 예외
     {
       name: 'no-engine-api-outside-adapter-layers',
       severity: 'error',
       comment:
-        'node_modules imports are only allowed in presentation/, audio/, input/KeyboardInputSource.ts, and app/ (architecture §Unity 매핑 원칙)',
+        'node_modules imports are only allowed in presentation/, audio/, input/KeyboardInputSource.ts, app/, and editor/ (architecture §Unity 매핑 원칙)',
       from: {
         path: '^src/(flow|gameplay|persistence|definitions|assets|shared)/',
         pathNot: '\\.test\\.ts$',
       },
       to: {
         dependencyTypes: ['npm', 'npm-dev', 'npm-optional', 'npm-peer'],
+      },
+    },
+    // editor/ → gameplay/flow/presentation 역방향 import 금지
+    // editor는 definitions 타입만 참조 가능 (읽기 전용)
+    {
+      name: 'no-editor-to-runtime-layers',
+      severity: 'error',
+      comment:
+        'editor must not import gameplay, flow, presentation, audio, or persistence layers',
+      from: { path: '^src/editor/' },
+      to: {
+        path: '^src/(gameplay|flow|presentation|audio|persistence)/',
       },
     },
   ],
