@@ -10,6 +10,8 @@ import { LocalSaveRepository } from '../persistence/LocalSaveRepository';
 import { PhaserAudioPlayer } from '../audio/PhaserAudioPlayer';
 import { AssetResolver } from '../assets/AssetResolver';
 import { AudioCueTable } from '../definitions/tables/AudioCueTable';
+import type { DevContext } from './dev/DevContext';
+import { createDevContext } from './dev/DevContext';
 
 /**
  * main.ts — Phaser.Game 인스턴스 생성 및 AppContext 조립.
@@ -22,9 +24,24 @@ import { AudioCueTable } from '../definitions/tables/AudioCueTable';
  */
 
 /**
+ * isDevMode — dev 모드 판정.
+ *
+ * 다음 조건 중 하나라도 참이면 dev 모드:
+ *   1. Vite 개발 서버 실행 중 (import.meta.env.DEV)
+ *   2. URL 쿼리 파라미터 ?dev=1
+ *
+ * production 빌드에서는 import.meta.env.DEV 가 false 로 tree-shake 되므로
+ * dev 코드가 번들에 포함되지 않는다.
+ */
+function isDevMode(): boolean {
+  if (import.meta.env.DEV) return true;
+  return new URLSearchParams(window.location.search).get('dev') === '1';
+}
+
+/**
  * createGame — Phaser.Game 인스턴스를 생성한다.
  */
-function createGame(appContext: AppContext): Phaser.Game {
+function createGame(appContext: AppContext, devContext: DevContext | undefined): Phaser.Game {
   const assetResolver = new AssetResolver();
   const phaserAudioPlayer = new PhaserAudioPlayer(assetResolver);
 
@@ -48,6 +65,7 @@ function createGame(appContext: AppContext): Phaser.Game {
         uiTexts: UITextTable,
         blockDefinitions: BlockDefinitionTable,
         roundIntroDurationMs: GameplayConfigTable.roundIntroDurationMs,
+        devContext,
       });
     }
 
@@ -82,7 +100,12 @@ function createGame(appContext: AppContext): Phaser.Game {
 // AppContext를 await한 후 Phaser 시작 — 초기 highScore 로드 완료 보장
 const saveRepo = new LocalSaveRepository('arkanoid.save.v1');
 createAppContext({ saveRepository: saveRepo }).then((appContext) => {
-  createGame(appContext);
+  // Dev 모드: DevContext 생성 (production 빌드에서는 undefined)
+  // seed는 Date.now() — 세션별 고유. stageIndex는 0부터 시작.
+  const devContext: DevContext | undefined = isDevMode()
+    ? createDevContext(Date.now(), 0)
+    : undefined;
+  createGame(appContext, devContext);
 
   // JSON Hot-Reload (Vite HMR)
   // stage1.json 변경 시, Flow 상태가 title 또는 roundIntro 이면 즉시 반영.

@@ -4,6 +4,9 @@ import type { KeyboardInputSource } from '../../input/KeyboardInputSource';
 import { SceneRenderer } from './SceneRenderer';
 import type { UITextEntry } from '../../definitions/types/UITextEntry';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
+import type { DevContext } from '../../app/dev/DevContext';
+import { DevOverlayRenderer } from './DevOverlayRenderer';
+import { DevInputSource } from '../../input/DevInputSource';
 
 export type GameSceneInitData = {
   appContext: AppContext;
@@ -11,6 +14,9 @@ export type GameSceneInitData = {
   uiTexts: readonly UITextEntry[];
   blockDefinitions: Readonly<Record<string, BlockDefinition>>;
   roundIntroDurationMs: number;
+  /** Dev 모드 전용. production 빌드에서는 undefined.
+   * exactOptionalPropertyTypes: true 이므로 명시적으로 | undefined 포함. */
+  devContext?: DevContext | undefined;
 };
 
 /**
@@ -29,6 +35,11 @@ export class GameScene extends Phaser.Scene {
   private keyboardInputSource!: KeyboardInputSource;
   private sceneRenderer!: SceneRenderer;
 
+  // Dev 전용 — production 빌드에서는 undefined
+  private devContext: DevContext | undefined;
+  private devOverlayRenderer: DevOverlayRenderer | undefined;
+  private devInputSource: DevInputSource | undefined;
+
   // RoundIntro 완료 발행 중복 방지 플래그
   private roundIntroFinishedFired = false;
 
@@ -39,6 +50,7 @@ export class GameScene extends Phaser.Scene {
   init(data: GameSceneInitData): void {
     this.appContext = data.appContext;
     this.keyboardInputSource = data.keyboardInputSource;
+    this.devContext = data.devContext;
     this.sceneRenderer = new SceneRenderer(
       this,
       data.uiTexts,
@@ -55,6 +67,13 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.sceneRenderer.create();
+
+    // Dev 모드: DevOverlayRenderer, DevInputSource 인스턴스화
+    // production 빌드에서는 devContext === undefined 이므로 이 블록 진입 안 함
+    if (this.devContext !== undefined) {
+      this.devOverlayRenderer = new DevOverlayRenderer(this);
+      this.devInputSource = new DevInputSource(this);
+    }
   }
 
   update(_time: number, deltaMs: number): void {
@@ -84,5 +103,33 @@ export class GameScene extends Phaser.Scene {
 
     const gameplayState = this.appContext.getGameplayState();
     this.sceneRenderer.render(flowState, gameplayState, screenState);
+
+    // Dev 모드 처리 — devContext/devOverlayRenderer/devInputSource 는 함께 초기화되므로
+    // devContext の存在チェックのみで十分だが、型安全のために個別チェックする。
+    if (this.devContext !== undefined && this.devInputSource !== undefined && this.devOverlayRenderer !== undefined) {
+      // F1: 오버레이 토글
+      if (this.devInputSource.isToggleOverlayPressed()) {
+        this.devContext.isEnabled = !this.devContext.isEnabled;
+      }
+
+      // F2: Replay JSON export → 콘솔 + 클립보드
+      if (this.devInputSource.isExportReplayPressed()) {
+        const json = this.devContext.replayRecorder.exportJson();
+        console.log('REPLAY:', json);
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(json).catch((err: unknown) => {
+            console.warn('[Dev] 클립보드 복사 실패:', err);
+          });
+        }
+      }
+
+      // F3: 충돌 로그 초기화
+      if (this.devInputSource.isClearLogPressed()) {
+        this.devContext.collisionLog.clear();
+      }
+
+      // 오버레이 렌더링
+      this.devOverlayRenderer.render(gameplayState, flowState, this.devContext);
+    }
   }
 }

@@ -21,16 +21,20 @@ import { StageDefinitionTable } from '../definitions/tables/StageDefinitionTable
 import { BlockDefinitionTable } from '../definitions/tables/BlockDefinitionTable';
 import { ItemDefinitionTable } from '../definitions/tables/ItemDefinitionTable';
 import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
+import type { DevContext } from './dev/DevContext';
+import type { CollisionLogEntry } from './dev/CollisionLog';
 
 /**
  * createAppContext 옵션.
  *
  * saveRepository: 저장소 구현체. 미제공 시 InMemorySaveRepository 사용.
  * audioPlayer: 오디오 플레이어 구현체. 미제공 시 NoopAudioPlayer 사용.
+ * devContext: Dev 관측 도구 묶음. 미제공 시 dev hooks 완전 스킵 (production 오버헤드 0).
  */
 export type AppContextOptions = {
   saveRepository?: ISaveRepository;
   audioPlayer?: IAudioPlayer;
+  devContext?: DevContext;
 };
 
 /**
@@ -84,6 +88,7 @@ export type AppContext = {
  */
 export async function createAppContext(options?: AppContextOptions): Promise<AppContext> {
   const saveRepository: ISaveRepository = options?.saveRepository ?? new InMemorySaveRepository();
+  const devContext: DevContext | undefined = options?.devContext;
 
   // AudioCueResolver는 항상 AudioCueTable 기반으로 초기화
   const audioCueResolver = new AudioCueResolver(AudioCueTable);
@@ -203,6 +208,9 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     handlePresentationEvent(event);
   }
 
+  /** 틱 번호 카운터 (dev CollisionLog에서 tick 필드로 사용) */
+  let currentTick = 0;
+
   function tick(input: InputSnapshot, dt: number): void {
     // Flow 입력 처리 (Title, GameOver 등 비인게임 상태에서의 입력)
     flowController.handleInput(input);
@@ -219,8 +227,70 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
         for (const cue of audioCues) {
           audioPlayer.play(cue);
         }
+
+        // Dev: 충돌 이벤트를 CollisionLog에 기록
+        // devContext가 undefined이거나 isEnabled === false이면 완전 스킵
+        if (devContext?.isEnabled) {
+          const state = gameplayController.getState();
+          const ball = state.balls[0];
+          const ballSnapshot = ball
+            ? { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy }
+            : { x: 0, y: 0, vx: 0, vy: 0 };
+
+          let logEntry: CollisionLogEntry | undefined;
+
+          if (event.type === 'BlockHit') {
+            logEntry = {
+              tick: currentTick,
+              time: Date.now(),
+              ball: ballSnapshot,
+              target: { kind: 'block', id: event.blockId },
+            };
+          } else if (event.type === 'BlockDestroyed') {
+            logEntry = {
+              tick: currentTick,
+              time: Date.now(),
+              ball: ballSnapshot,
+              target: { kind: 'block', id: event.blockId },
+            };
+          } else if (event.type === 'LifeLost') {
+            // 공 바닥 통과 → floor
+            logEntry = {
+              tick: currentTick,
+              time: Date.now(),
+              ball: ballSnapshot,
+              target: { kind: 'floor' },
+            };
+          }
+
+          if (logEntry !== undefined) {
+            devContext.collisionLog.push(logEntry);
+          }
+        }
+      }
+
+      // Dev: 틱 후 invariant 검증 + ball trail + replay 녹화
+      if (devContext?.isEnabled) {
+        const state = gameplayController.getState();
+
+        // Invariant 검증 — 위반 시 console.warn
+        const violations = devContext.invariantChecker.check(state);
+        for (const v of violations) {
+          console.warn(`[InvariantChecker] ${v.type}: ${v.message}`, v.context);
+        }
+
+        // Ball trail: 활성 공의 첫 번째 좌표 기록
+        const activeBall = state.balls.find((b) => b.isActive);
+        if (activeBall !== undefined) {
+          devContext.ballTrail.push(activeBall.x, activeBall.y);
+        }
+
+        // Replay 녹화
+        devContext.replayRecorder.record(input, dt);
       }
     }
+
+    currentTick++;
 
     // ScreenDirector 갱신 — dt는 초 단위이므로 ms로 변환
     const deltaMs = dt * 1000;
