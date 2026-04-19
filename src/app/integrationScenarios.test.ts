@@ -1154,3 +1154,103 @@ describe('MVP3 Phase4 — 자석 효과 E2E', () => {
     expect(ball?.isActive).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// MVP3 Phase 6 시나리오: 효과 교체 정책 통합 검증
+// expand ↔ magnet ↔ laser 3효과의 6가지 교체 조합 E2E
+// ---------------------------------------------------------------------------
+
+describe('MVP3 Phase6 — 효과 교체 정책 통합 (6조합)', () => {
+  /**
+   * 아이템 드랍을 바 위치에 주입하고 1 tick 실행해 ItemPickedUp 충돌을 발생시킨다.
+   */
+  function injectItemAndTick(
+    ctx: Awaited<ReturnType<typeof createAppContext>>,
+    itemType: 'expand' | 'magnet' | 'laser',
+  ): void {
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    const item = {
+      id: `item_${itemType}_test`,
+      itemType,
+      x: state.bar.x,
+      y: state.bar.y + 1,
+      fallSpeed: 0,
+      isCollected: false,
+    };
+    ctx._setGameplayState({ ...state, itemDrops: [item] });
+    ctx.tick(noInput, 1 / 60);
+  }
+
+  it('G-1. expand 획득 후 magnet 획득 → activeEffect=magnet, magnetRemainingTime=8000, bar.width=120', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    // Step 1: expand 획득
+    injectItemAndTick(ctx, 'expand');
+    const afterExpand = ctx.getGameplayState();
+    expect(afterExpand.bar.activeEffect).toBe('expand');
+
+    // Step 2: magnet 획득 (expand → magnet 교체)
+    injectItemAndTick(ctx, 'magnet');
+    const after = ctx.getGameplayState();
+    expect(after.bar.activeEffect).toBe('magnet');
+    expect(after.magnetRemainingTime).toBeGreaterThan(0);
+    expect(after.bar.width).toBe(120); // baseBarWidth 복구
+  });
+
+  it('G-2. magnet 중 공 부착 후 laser 획득 → 공 release, activeEffect=laser', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    const barY = state.bar.y;
+    const barX = state.bar.x;
+    const ballId = state.balls[0]?.id ?? 'ball_0';
+
+    // 자석 상태 + 공 부착 직접 주입
+    ctx._setGameplayState({
+      ...state,
+      bar: { ...state.bar, activeEffect: 'magnet' },
+      magnetRemainingTime: 8000,
+      attachedBallIds: [ballId],
+      balls: state.balls.map((b) =>
+        b.id === ballId
+          ? { ...b, isActive: false, x: barX, y: barY - 16, attachedOffsetX: 0 }
+          : b,
+      ),
+    });
+
+    // laser 아이템 획득 → magnet→laser 교체, 부착 공 release
+    injectItemAndTick(ctx, 'laser');
+
+    const after = ctx.getGameplayState();
+    expect(after.bar.activeEffect).toBe('laser');
+    expect(after.attachedBallIds).toHaveLength(0);
+    // 공이 release되어 활성화됨
+    const ball = after.balls.find((b) => b.id === ballId);
+    expect(ball?.isActive).toBe(true);
+  });
+
+  it('G-3. laser 중 cooldown 있을 때 expand 획득 → activeEffect=expand, laserCooldown=0, laserShots=[]', async () => {
+    const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository({ highScore: 0 }) });
+    enterInGame(ctx);
+
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    // laser 상태 + 쿨다운 주입
+    ctx._setGameplayState({
+      ...state,
+      bar: { ...state.bar, activeEffect: 'laser' },
+      laserCooldownRemaining: 300,
+      laserShots: [], // 샷은 없지만 쿨다운은 있는 상태
+    });
+
+    // expand 아이템 획득 → laser→expand 교체
+    injectItemAndTick(ctx, 'expand');
+
+    const after = ctx.getGameplayState();
+    expect(after.bar.activeEffect).toBe('expand');
+    expect(after.laserCooldownRemaining).toBe(0);
+    expect(after.laserShots).toHaveLength(0);
+    expect(after.bar.width).toBeCloseTo(120 * 1.5); // expand 적용
+  });
+});

@@ -20,6 +20,8 @@ export type BarEffectApplyResult = {
   nextBar: BarState;
   nextMagnetRemaining: number;
   nextLaserCooldown: number;
+  /** laser → 타 효과 전환 시 true. 호출 측은 laserShots 배열을 비워야 한다. */
+  clearLaserShots: boolean;
   nextAttachedBalls: readonly string[];
   releasedBallIds: readonly string[];
   events: GameplayEvent[];
@@ -84,6 +86,7 @@ export class BarEffectService {
     let nextMagnetRemaining = currentMagnetRemaining;
     let nextLaserCooldown = currentLaserCooldown;
     let nextAttachedBalls: readonly string[] = currentAttachedBalls;
+    let clearLaserShots = false;
 
     // --- 1. 기존 효과 정리 ---
     const prevEffect = currentBar.activeEffect;
@@ -101,7 +104,9 @@ export class BarEffectService {
     } else if (prevEffect === 'magnet') {
       nextMagnetRemaining = 0;
     } else if (prevEffect === 'laser') {
+      // laser → 다른 효과: 쿨다운과 비행 중인 샷을 모두 정리한다.
       nextLaserCooldown = 0;
+      clearLaserShots = true;
     }
 
     // --- 2. 새 효과 적용 ---
@@ -133,6 +138,9 @@ export class BarEffectService {
       }
 
       case 'laser': {
+        // 새 laser 시작: prevEffect 가 laser 여부와 무관하게 쿨다운을 항상 0으로 시작한다.
+        // (prevEffect='laser' 였던 경우는 위 else if 분기에서 이미 처리됐지만
+        //  none/expand/magnet → laser 첫 획득 시에도 쿨다운을 초기화한다.)
         nextLaserCooldown = 0;
         nextBar = {
           ...currentBar,
@@ -147,6 +155,7 @@ export class BarEffectService {
       nextBar,
       nextMagnetRemaining,
       nextLaserCooldown,
+      clearLaserShots,
       nextAttachedBalls,
       releasedBallIds,
       events,

@@ -355,6 +355,8 @@ function resolveItemPickedUp(
     itemDrops,
     magnetRemainingTime: effectResult.nextMagnetRemaining,
     laserCooldownRemaining: effectResult.nextLaserCooldown,
+    // laser → 타 효과 전환 시 비행 중인 샷도 함께 제거한다.
+    laserShots: effectResult.clearLaserShots ? [] : state.laserShots,
     attachedBallIds: effectResult.nextAttachedBalls,
   };
 

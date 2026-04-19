@@ -94,24 +94,6 @@ describe('BarEffectService.applyEffect', () => {
     expect(result.events).toHaveLength(0);
   });
 
-  it('magnet → laser: 부착 공 있으면 BallsReleased(replaced) 발행', () => {
-    const bar = makeBar({ activeEffect: 'magnet' });
-    const attachedBalls = ['ball_0', 'ball_1'];
-    const result = svc.applyEffect(bar, 5000, 0, attachedBalls, 'laser', baseBarWidth);
-
-    expect(result.nextBar.activeEffect).toBe('laser');
-    expect(result.nextMagnetRemaining).toBe(0);
-    expect(result.nextAttachedBalls).toHaveLength(0);
-    expect(result.releasedBallIds).toEqual(attachedBalls);
-    expect(result.events).toHaveLength(1);
-    const evt = result.events[0];
-    expect(evt?.type).toBe('BallsReleased');
-    if (evt?.type === 'BallsReleased') {
-      expect(evt.releaseReason).toBe('replaced');
-      expect(evt.ballIds).toEqual(attachedBalls);
-    }
-  });
-
   it('magnet → expand: 부착 공 없으면 BallsReleased 발행 안 함', () => {
     const bar = makeBar({ activeEffect: 'magnet' });
     const result = svc.applyEffect(bar, 3000, 0, [], 'expand', baseBarWidth);
@@ -121,11 +103,92 @@ describe('BarEffectService.applyEffect', () => {
     expect(result.releasedBallIds).toHaveLength(0);
   });
 
-  it('laser → magnet: laserCooldown 리셋', () => {
+  it('expand → laser: bar.width 복구, activeEffect=laser, laserCooldown=0, clearLaserShots=false', () => {
+    const bar = makeBar({ activeEffect: 'expand', width: baseBarWidth * 1.5 });
+    const result = svc.applyEffect(bar, 0, 0, [], 'laser', baseBarWidth);
+    expect(result.nextBar.activeEffect).toBe('laser');
+    expect(result.nextBar.width).toBe(baseBarWidth);
+    expect(result.nextLaserCooldown).toBe(0);
+    expect(result.clearLaserShots).toBe(false);
+    expect(result.releasedBallIds).toHaveLength(0);
+    expect(result.events).toHaveLength(0);
+  });
+
+  it('magnet (공 부착) → expand: 부착 공 release + bar.width*1.5, BallsReleased(replaced), clearLaserShots=false', () => {
+    const bar = makeBar({ activeEffect: 'magnet' });
+    const attachedBalls = ['ball_0'];
+    const result = svc.applyEffect(bar, 5000, 0, attachedBalls, 'expand', baseBarWidth);
+    expect(result.nextBar.activeEffect).toBe('expand');
+    expect(result.nextBar.width).toBeCloseTo(baseBarWidth * 1.5);
+    expect(result.releasedBallIds).toEqual(attachedBalls);
+    expect(result.clearLaserShots).toBe(false);
+    expect(result.events).toHaveLength(1);
+    const evt = result.events[0];
+    expect(evt?.type).toBe('BallsReleased');
+    if (evt?.type === 'BallsReleased') {
+      expect(evt.releaseReason).toBe('replaced');
+    }
+  });
+
+  it('laser (cooldown 중) → expand: laserCooldown=0, clearLaserShots=true, bar.width*1.5', () => {
+    const bar = makeBar({ activeEffect: 'laser' });
+    const result = svc.applyEffect(bar, 0, 300, [], 'expand', baseBarWidth);
+    expect(result.nextBar.activeEffect).toBe('expand');
+    expect(result.nextBar.width).toBeCloseTo(baseBarWidth * 1.5);
+    expect(result.nextLaserCooldown).toBe(0);
+    expect(result.clearLaserShots).toBe(true);
+    expect(result.releasedBallIds).toHaveLength(0);
+    expect(result.events).toHaveLength(0);
+  });
+
+  it('laser (cooldown 중) → magnet: laserCooldown=0, clearLaserShots=true, magnetRemaining=8000', () => {
     const bar = makeBar({ activeEffect: 'laser' });
     const result = svc.applyEffect(bar, 0, 300, [], 'magnet', baseBarWidth);
     expect(result.nextBar.activeEffect).toBe('magnet');
     expect(result.nextLaserCooldown).toBe(0);
+    expect(result.clearLaserShots).toBe(true);
+    expect(result.nextMagnetRemaining).toBe(8000);
+    expect(result.releasedBallIds).toHaveLength(0);
+    expect(result.events).toHaveLength(0);
+  });
+
+  it('laser (cooldown 중) → laser: clearLaserShots=true (기존 샷 제거 후 새 시작)', () => {
+    const bar = makeBar({ activeEffect: 'laser' });
+    const result = svc.applyEffect(bar, 0, 300, [], 'laser', baseBarWidth);
+    expect(result.nextBar.activeEffect).toBe('laser');
+    expect(result.nextLaserCooldown).toBe(0);
+    expect(result.clearLaserShots).toBe(true);
+  });
+
+  it('expand → magnet 교체: clearLaserShots=false (레이저 미사용)', () => {
+    const bar = makeBar({ activeEffect: 'expand', width: baseBarWidth * 1.5 });
+    const result = svc.applyEffect(bar, 0, 0, [], 'magnet', baseBarWidth);
+    expect(result.clearLaserShots).toBe(false);
+    expect(result.nextBar.activeEffect).toBe('magnet');
+    expect(result.nextBar.width).toBe(baseBarWidth);
+    expect(result.nextMagnetRemaining).toBe(8000);
+  });
+
+  it('magnet → laser: 부착 공 있으면 BallsReleased(replaced), clearLaserShots=false', () => {
+    const bar = makeBar({ activeEffect: 'magnet' });
+    const attachedBalls = ['ball_0', 'ball_1'];
+    const result = svc.applyEffect(bar, 5000, 0, attachedBalls, 'laser', baseBarWidth);
+    expect(result.nextBar.activeEffect).toBe('laser');
+    expect(result.clearLaserShots).toBe(false);
+    expect(result.releasedBallIds).toEqual(attachedBalls);
+    expect(result.events).toHaveLength(1);
+    const evt = result.events[0];
+    if (evt?.type === 'BallsReleased') {
+      expect(evt.releaseReason).toBe('replaced');
+    }
+  });
+
+  it('laser → magnet: laserCooldown 리셋, clearLaserShots=true', () => {
+    const bar = makeBar({ activeEffect: 'laser' });
+    const result = svc.applyEffect(bar, 0, 300, [], 'magnet', baseBarWidth);
+    expect(result.nextBar.activeEffect).toBe('magnet');
+    expect(result.nextLaserCooldown).toBe(0);
+    expect(result.clearLaserShots).toBe(true);
     expect(result.nextMagnetRemaining).toBe(8000);
   });
 
@@ -134,6 +197,7 @@ describe('BarEffectService.applyEffect', () => {
     const result = svc.applyEffect(bar, 3000, 0, [], 'magnet', baseBarWidth);
     expect(result.nextMagnetRemaining).toBe(8000);
     expect(result.nextBar.activeEffect).toBe('magnet');
+    expect(result.clearLaserShots).toBe(false);
   });
 });
 

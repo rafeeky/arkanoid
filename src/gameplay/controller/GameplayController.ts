@@ -197,6 +197,23 @@ export class GameplayController {
       { blockReflectionAlreadyApplied: true },
     );
     this.state = nextState;
+
+    // 6a. 효과 교체로 인해 부착 공이 release된 경우 공을 활성화한다.
+    // BarEffectService.applyEffect 가 BallsReleased(replaced)를 발행하면
+    // CollisionResolutionService 는 attachedBallIds 만 비우지만 공 자체는 그대로다.
+    // GameplayController 가 여기서 launchAttachedBall 을 통해 공을 활성화한다.
+    for (const e of collisionEvents) {
+      if (e.type === 'BallsReleased' && e.releaseReason === 'replaced' && e.ballIds.length > 0) {
+        const replacedIds = new Set(e.ballIds);
+        this.state = {
+          ...this.state,
+          balls: this.state.balls.map((b) =>
+            replacedIds.has(b.id) ? this.launchAttachedBall(b) : b,
+          ),
+        };
+      }
+    }
+
     for (const e of collisionEvents) {
       allEvents.push(e);
     }
