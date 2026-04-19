@@ -12,6 +12,10 @@ import type { GameplayEvent } from '../gameplay/events/gameplayEvents';
 import type { PresentationEvent } from '../presentation/events/presentationEvents';
 import type { ISaveRepository } from '../persistence/ISaveRepository';
 import { InMemorySaveRepository } from '../persistence/InMemorySaveRepository';
+import type { IAudioPlayer } from '../audio/IAudioPlayer';
+import { NoopAudioPlayer } from '../audio/NoopAudioPlayer';
+import { AudioCueResolver } from '../audio/AudioCueResolver';
+import { AudioCueTable } from '../definitions/tables/AudioCueTable';
 
 import { StageDefinitionTable } from '../definitions/tables/StageDefinitionTable';
 import { BlockDefinitionTable } from '../definitions/tables/BlockDefinitionTable';
@@ -22,9 +26,11 @@ import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
  * createAppContext 옵션.
  *
  * saveRepository: 저장소 구현체. 미제공 시 InMemorySaveRepository 사용.
+ * audioPlayer: 오디오 플레이어 구현체. 미제공 시 NoopAudioPlayer 사용.
  */
 export type AppContextOptions = {
   saveRepository?: ISaveRepository;
+  audioPlayer?: IAudioPlayer;
 };
 
 /**
@@ -37,13 +43,16 @@ export type AppContextOptions = {
  * - getGameplayState(): 현재 GameplayRuntimeState 읽기 전용 조회.
  * - getScreenState(): 현재 ScreenState 읽기 전용 조회. GameScene 에서 렌더링에 사용.
  * - handlePresentationEvent: Presentation 이벤트를 FlowController 에 전달.
+ * - setAudioPlayer: AudioPlayer를 교체한다. GameScene.create 후 PhaserAudioPlayer 주입에 사용.
  *
  * 이벤트 배선:
- * - gameplayController 이벤트 → flowController.handleGameplayEvent + visualEffectController.handleGameplayEvent
+ * - gameplayController 이벤트 → flowController.handleGameplayEvent + visualEffectController.handleGameplayEvent + audioPlayer
  * - flowController 이벤트:
- *   - EnteredRoundIntro + from === 'title'  → lifecycleHandler.initializeStage (새 게임)
- *   - EnteredRoundIntro + from === 'inGame' → lifecycleHandler.resetForRetry (재시도)
- *   - EnteredGameOver → saveRepository.save 호출 (highScore 갱신, fire-and-forget)
+ *   - EnteredRoundIntro + from === 'title'  → lifecycleHandler.initializeStage (새 게임) + UiConfirm SFX
+ *   - EnteredRoundIntro + from === 'inGame' → lifecycleHandler.resetForRetry (재시도) + jingle
+ *   - EnteredTitle + from === 'gameOver'    → UiConfirm SFX
+ *   - EnteredGameOver → saveRepository.save 호출 (highScore 갱신, fire-and-forget) + jingle
+ *   - EnteredTitle → BGM
  * - VisualEffectController 가 LifeLostPresentationFinished 발행 → handlePresentationEvent 경유
  *
  * 틱 순서 (architecture §17):
@@ -59,6 +68,8 @@ export type AppContext = {
   getScreenState(): Readonly<ScreenState>;
   handlePresentationEvent(event: PresentationEvent): void;
   getVisualEffectController(): import('../presentation/controller/VisualEffectController').VisualEffectController;
+  /** AudioPlayer를 교체한다. GameScene.create 후 PhaserAudioPlayer 주입에 사용. */
+  setAudioPlayer(player: IAudioPlayer): void;
   /** 테스트 전용: GameplayController 상태를 직접 교체한다. 프로덕션 코드에서 호출 금지. */
   _setGameplayState(state: GameplayRuntimeState): void;
 };
@@ -73,6 +84,11 @@ export type AppContext = {
  */
 export async function createAppContext(options?: AppContextOptions): Promise<AppContext> {
   const saveRepository: ISaveRepository = options?.saveRepository ?? new InMemorySaveRepository();
+
+  // AudioCueResolver는 항상 AudioCueTable 기반으로 초기화
+  const audioCueResolver = new AudioCueResolver(AudioCueTable);
+  // audioPlayer는 교체 가능 — 기본값은 NoopAudioPlayer (Phaser 없는 환경 대응)
+  let audioPlayer: IAudioPlayer = options?.audioPlayer ?? new NoopAudioPlayer();
 
   const config = GameplayConfigTable;
   const stage1 = StageDefinitionTable[0]!;
@@ -111,6 +127,39 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
 
   // Flow 이벤트 핸들러 (forward declaration 패턴)
   function onFlowEvent(event: FlowEvent): void {
+    // Audio 라우팅: Flow 이벤트 → AudioCueResolver → AudioPlayer
+    // UiConfirm 특수 처리:
+    //   - EnteredRoundIntro(from='title'): 게임 시작 버튼 확인음
+    //   - EnteredTitle(from='gameOver'): 게임오버 화면에서 타이틀 복귀 확인음
+    if (event.type === 'EnteredRoundIntro' && event.from === 'title') {
+      // jingle(round_start) + UiConfirm 모두 재생
+      const roundCues = audioCueResolver.resolveCueIds('EnteredRoundIntro');
+      for (const cue of roundCues) {
+        audioPlayer.play(cue);
+      }
+      const confirmCues = audioCueResolver.resolveCueIds('UiConfirm');
+      for (const cue of confirmCues) {
+        audioPlayer.play(cue);
+      }
+    } else if (event.type === 'EnteredTitle' && event.from === 'gameOver') {
+      // UiConfirm SFX
+      const confirmCues = audioCueResolver.resolveCueIds('UiConfirm');
+      for (const cue of confirmCues) {
+        audioPlayer.play(cue);
+      }
+      // 타이틀 BGM 재개
+      const titleCues = audioCueResolver.resolveCueIds('EnteredTitle');
+      for (const cue of titleCues) {
+        audioPlayer.play(cue);
+      }
+    } else {
+      // 그 외 Flow 이벤트는 eventType 기반 직접 매핑
+      const cues = audioCueResolver.resolveCueIds(event.type);
+      for (const cue of cues) {
+        audioPlayer.play(cue);
+      }
+    }
+
     if (event.type === 'EnteredRoundIntro') {
       if (event.from === 'title') {
         // 새 게임 시작: Stage 1 완전 초기화, 현재 highScore 유지
@@ -165,6 +214,11 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
         // Flow 와 VisualEffectController 모두에 이벤트 전달
         flowController.handleGameplayEvent(event);
         visualEffectController.handleGameplayEvent(event);
+        // Audio 라우팅: Gameplay 이벤트 → AudioCueResolver → AudioPlayer
+        const audioCues = audioCueResolver.resolveCueIds(event.type);
+        for (const cue of audioCues) {
+          audioPlayer.play(cue);
+        }
       }
     }
 
@@ -193,6 +247,10 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     return visualEffectController;
   }
 
+  function setAudioPlayer(player: IAudioPlayer): void {
+    audioPlayer = player;
+  }
+
   function _setGameplayState(state: GameplayRuntimeState): void {
     gameplayController.setState(state);
   }
@@ -204,6 +262,7 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     getScreenState,
     handlePresentationEvent,
     getVisualEffectController,
+    setAudioPlayer,
     _setGameplayState,
   };
 }

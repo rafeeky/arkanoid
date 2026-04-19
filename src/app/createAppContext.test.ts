@@ -4,6 +4,8 @@ import { InMemorySaveRepository } from '../persistence/InMemorySaveRepository';
 import type { ISaveRepository } from '../persistence/ISaveRepository';
 import type { InputSnapshot } from '../input/InputSnapshot';
 import type { GameplayRuntimeState } from '../gameplay/state/GameplayRuntimeState';
+import type { IAudioPlayer } from '../audio/IAudioPlayer';
+import type { AudioCueEntry } from '../definitions/types/AudioCueEntry';
 
 const noInput: InputSnapshot = {
   leftDown: false,
@@ -652,6 +654,172 @@ describe('AppContext — Persistence: EnteredGameOver → save 호출', () => {
     if (ctx.getFlowState().kind === 'gameOver') {
       const saved = await repo.load();
       expect(saved.highScore).toBe(9999);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9 — Audio: AudioCueResolver + IAudioPlayer 이벤트 라우팅 통합 테스트
+// ---------------------------------------------------------------------------
+
+/**
+ * 테스트용 Mock AudioPlayer.
+ * play() 호출 기록을 저장해 검증에 사용한다.
+ */
+function createMockAudioPlayer(): IAudioPlayer & { calls: AudioCueEntry[] } {
+  const calls: AudioCueEntry[] = [];
+  return {
+    calls,
+    play(cue: AudioCueEntry): void {
+      calls.push(cue);
+    },
+    stopAll(): void {
+      // noop
+    },
+  };
+}
+
+describe('AppContext — Audio: Flow 이벤트 → audioPlayer.play 라우팅', () => {
+  it('EnteredTitle(초기 진입) 시 bgm_title cue 재생', async () => {
+    const mockAudio = createMockAudioPlayer();
+    const ctx = await createAppContext({ audioPlayer: mockAudio });
+
+    // 초기 상태는 title — EnteredTitle 이벤트는 AppContext 생성 시 아직 발행되지 않음
+    // tick(noInput) → Flow 상태 유지. 직접 스페이스로 전환 후 Title 재진입으로 검증
+    // GameOver → Title 전이 시 EnteredTitle 발행됨 — drainAllLives 후 space
+    ctx.tick(spaceInput, 1 / 60); // → roundIntro
+    drainAllLives(ctx);
+    expect(ctx.getFlowState().kind).toBe('gameOver');
+
+    mockAudio.calls.length = 0; // 이전 호출 초기화
+    ctx.tick(spaceInput, 1 / 60); // gameOver → title (EnteredTitle 발행)
+
+    const titleCues = mockAudio.calls.filter((c) => c.resourceId === 'bgm_title');
+    expect(titleCues.length).toBeGreaterThan(0);
+  });
+
+  it('EnteredRoundIntro(from=title) 시 jingle_round_start 및 sfx_ui_confirm 재생', async () => {
+    const mockAudio = createMockAudioPlayer();
+    const ctx = await createAppContext({ audioPlayer: mockAudio });
+
+    ctx.tick(spaceInput, 1 / 60); // title → roundIntro
+
+    const roundCues = mockAudio.calls.filter((c) => c.resourceId === 'jingle_round_start');
+    const confirmCues = mockAudio.calls.filter((c) => c.resourceId === 'sfx_ui_confirm');
+    expect(roundCues.length).toBeGreaterThan(0);
+    expect(confirmCues.length).toBeGreaterThan(0);
+  });
+
+  it('EnteredGameOver 시 jingle_gameover cue 재생', async () => {
+    const mockAudio = createMockAudioPlayer();
+    const ctx = await createAppContext({ audioPlayer: mockAudio });
+
+    ctx.tick(spaceInput, 1 / 60); // → roundIntro
+    drainAllLives(ctx);
+
+    const gameoverCues = mockAudio.calls.filter((c) => c.resourceId === 'jingle_gameover');
+    expect(gameoverCues.length).toBeGreaterThan(0);
+  });
+
+  it('BlockHit/BlockDestroyed 이벤트 시 해당 sfx cue 재생', async () => {
+    // basic_drop 블록(maxHits=1)에 충돌하면 BlockDestroyed 이벤트가 발행된다.
+    // BlockHit (remainingHits>0) 검증을 위해 해당 블록의 remainingHits를 2로 주입한다.
+    const mockAudio = createMockAudioPlayer();
+    const ctx = await createAppContext({ audioPlayer: mockAudio });
+
+    ctx.tick(spaceInput, 1 / 60); // → roundIntro
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
+
+    // row=1, col=6 블록 (index=19, basic_drop)을 remainingHits=2로 변경
+    // → 충돌 시 BlockHit 이벤트 발행 (remainingHits=1 남음)
+    const state = ctx.getGameplayState() as GameplayRuntimeState;
+    // row=1, col=6: x=448, y=108, center=(480, 120)
+    const BLOCK_DROP_CENTER_X = 480;
+    const BLOCK_DROP_CENTER_Y = 108 + 12; // 120
+
+    const blockIndex = state.blocks.findIndex(
+      (b) => b.x === 448 && b.y === 108 && !b.isDestroyed,
+    );
+
+    ctx._setGameplayState({
+      ...state,
+      blocks: state.blocks.map((b, i) =>
+        i === blockIndex ? { ...b, remainingHits: 2 } : b,
+      ),
+      balls: state.balls.map((b, i) =>
+        i === 0
+          ? { ...b, isActive: true, x: BLOCK_DROP_CENTER_X, y: BLOCK_DROP_CENTER_Y, vx: 0, vy: -300 }
+          : b,
+      ),
+      itemDrops: [],
+    });
+
+    // 몇 틱 안에 블록 충돌 → sfx_block_hit 재생
+    let blockHitFired = false;
+    for (let i = 0; i < 30; i++) {
+      mockAudio.calls.length = 0;
+      ctx.tick(noInput, 1 / 60);
+      const hits = mockAudio.calls.filter((c) => c.resourceId === 'sfx_block_hit');
+      if (hits.length > 0) {
+        blockHitFired = true;
+        break;
+      }
+    }
+    expect(blockHitFired).toBe(true);
+  });
+
+  it('LifeLost 이벤트 시 sfx_life_lost cue 재생', async () => {
+    const mockAudio = createMockAudioPlayer();
+    const ctx = await createAppContext({ audioPlayer: mockAudio });
+
+    ctx.tick(spaceInput, 1 / 60); // → roundIntro
+    ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
+    ctx.tick(spaceInput, 1 / 60); // 공 발사
+
+    tickUntilFlowChanges(ctx, 'inGame');
+
+    const lifeLostCues = mockAudio.calls.filter((c) => c.resourceId === 'sfx_life_lost');
+    expect(lifeLostCues.length).toBeGreaterThan(0);
+  });
+
+  it('setAudioPlayer로 교체 후 새 player에게 이벤트 전달', async () => {
+    const originalMock = createMockAudioPlayer();
+    const ctx = await createAppContext({ audioPlayer: originalMock });
+
+    const newMock = createMockAudioPlayer();
+    ctx.setAudioPlayer(newMock);
+
+    ctx.tick(spaceInput, 1 / 60); // → roundIntro (EnteredRoundIntro 발행)
+
+    // 교체 후 이벤트는 newMock에만 가야 함
+    expect(newMock.calls.length).toBeGreaterThan(0);
+    // 교체 시점 이후 originalMock에는 추가 호출 없어야 함
+    const originalCallCount = originalMock.calls.length;
+    ctx.tick(noInput, 1 / 60);
+    expect(originalMock.calls.length).toBe(originalCallCount);
+  });
+});
+
+describe('AppContext — Audio: 8개 필수 매핑 통합 검증', () => {
+  it('AudioCueTable 8개 매핑 전부 resolveCueIds 로 반환됨', async () => {
+    const { AudioCueResolver } = await import('../audio/AudioCueResolver');
+    const { AudioCueTable } = await import('../definitions/tables/AudioCueTable');
+    const resolver = new AudioCueResolver(AudioCueTable);
+
+    const requiredEventTypes = [
+      'EnteredTitle',
+      'EnteredRoundIntro',
+      'BlockHit',
+      'BlockDestroyed',
+      'ItemCollected',
+      'LifeLost',
+      'EnteredGameOver',
+      'UiConfirm',
+    ];
+
+    for (const eventType of requiredEventTypes) {
+      const cues = resolver.resolveCueIds(eventType);
+      expect(cues.length, `${eventType}에 대한 cue 매핑이 없음`).toBeGreaterThan(0);
     }
   });
 });

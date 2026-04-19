@@ -48,6 +48,11 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  preload(): void {
+    // 기본 구현: 아무 동작 없음. 서브클래스에서 override 가능.
+  }
+
   create(): void {
     this.sceneRenderer.create();
   }

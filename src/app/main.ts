@@ -7,6 +7,9 @@ import { UITextTable } from '../definitions/tables/UITextTable';
 import { BlockDefinitionTable } from '../definitions/tables/BlockDefinitionTable';
 import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
 import { LocalSaveRepository } from '../persistence/LocalSaveRepository';
+import { PhaserAudioPlayer } from '../audio/PhaserAudioPlayer';
+import { AssetResolver } from '../assets/AssetResolver';
+import { AudioCueTable } from '../definitions/tables/AudioCueTable';
 
 /**
  * main.ts — Phaser.Game 인스턴스 생성 및 AppContext 조립.
@@ -22,10 +25,19 @@ import { LocalSaveRepository } from '../persistence/LocalSaveRepository';
  * createGame — Phaser.Game 인스턴스를 생성한다.
  */
 function createGame(appContext: AppContext): Phaser.Game {
+  const assetResolver = new AssetResolver();
+  const phaserAudioPlayer = new PhaserAudioPlayer(assetResolver);
+
   /**
-   * GameSceneBootstrap — GameScene을 상속하여 init() 에서 KeyboardInputSource 를 생성 주입한다.
-   * KeyboardInputSource 는 Phaser.Scene 참조가 필요하므로 Scene 내부에서 생성한다.
-   * Unity 매핑: 동일한 MonoBehaviour 가 Awake() 에서 컴포넌트를 조립하는 것에 해당.
+   * GameSceneBootstrap — GameScene을 상속하여 init()/preload()/create() 에서
+   * KeyboardInputSource, PhaserAudioPlayer 를 초기화하고 AppContext 에 주입한다.
+   *
+   * 초기화 순서:
+   * 1. init(): KeyboardInputSource 생성
+   * 2. preload(): PhaserAudioPlayer.preload() — audio 파일 등록
+   * 3. create(): PhaserAudioPlayer.create() — sound 인스턴스 생성 후 AppContext에 swap
+   *
+   * Unity 매핑: 동일한 MonoBehaviour 가 Awake()/Start() 에서 컴포넌트를 조립하는 것에 해당.
    */
   class GameSceneBootstrap extends GameScene {
     override init(_data: unknown): void {
@@ -37,6 +49,18 @@ function createGame(appContext: AppContext): Phaser.Game {
         blockDefinitions: BlockDefinitionTable,
         roundIntroDurationMs: GameplayConfigTable.roundIntroDurationMs,
       });
+    }
+
+    override preload(): void {
+      super.preload();
+      phaserAudioPlayer.preload(this, AudioCueTable);
+    }
+
+    override create(): void {
+      super.create();
+      phaserAudioPlayer.create(this, AudioCueTable);
+      // Phaser가 준비된 시점에 AppContext에 실제 AudioPlayer swap
+      appContext.setAudioPlayer(phaserAudioPlayer);
     }
   }
 
