@@ -774,6 +774,15 @@ describe('AppContext — Audio: Flow 이벤트 → audioPlayer.play 라우팅', 
     expect(lifeLostCues.length).toBeGreaterThan(0);
   });
 
+  it('EnteredGameClear 이벤트 시 jingle_gameclear cue 재생 (AudioCueResolver 직접 검증)', async () => {
+    const { AudioCueResolver } = await import('../audio/AudioCueResolver');
+    const { AudioCueTable } = await import('../definitions/tables/AudioCueTable');
+    const resolver = new AudioCueResolver(AudioCueTable);
+    const cues = resolver.resolveCueIds('EnteredGameClear');
+    expect(cues.length).toBeGreaterThan(0);
+    expect(cues.some((c) => c.resourceId === 'jingle_gameclear')).toBe(true);
+  });
+
   it('setAudioPlayer로 교체 후 새 player에게 이벤트 전달', async () => {
     const originalMock = createMockAudioPlayer();
     const ctx = await createAppContext({ audioPlayer: originalMock });
