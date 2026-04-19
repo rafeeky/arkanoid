@@ -4,6 +4,7 @@ import type { KeyboardInputSource } from '../../input/KeyboardInputSource';
 import { SceneRenderer } from './SceneRenderer';
 import type { UITextEntry } from '../../definitions/types/UITextEntry';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
+import type { IntroSequenceEntry } from '../../definitions/types/IntroSequenceEntry';
 import type { DevContext } from '../../app/dev/DevContext';
 import { DevOverlayRenderer } from './DevOverlayRenderer';
 import { DevInputSource } from '../../input/DevInputSource';
@@ -13,6 +14,7 @@ export type GameSceneInitData = {
   keyboardInputSource: KeyboardInputSource;
   uiTexts: readonly UITextEntry[];
   blockDefinitions: Readonly<Record<string, BlockDefinition>>;
+  introPages: readonly IntroSequenceEntry[];
   roundIntroDurationMs: number;
   /** Dev 모드 전용. production 빌드에서는 undefined.
    * exactOptionalPropertyTypes: true 이므로 명시적으로 | undefined 포함. */
@@ -57,6 +59,7 @@ export class GameScene extends Phaser.Scene {
       data.blockDefinitions,
       data.appContext.getVisualEffectController(),
       data.roundIntroDurationMs,
+      data.introPages,
     );
   }
 
