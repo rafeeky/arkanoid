@@ -88,37 +88,72 @@ function circleOverlapsBlock(cx: number, cy: number, block: BlockState): boolean
 // ---------------------------------------------------------------------------
 
 /**
+ * Computes the swept entry time of the ball into the block's expanded AABB
+ * along the prev→curr segment.  Returns the MAX of txEntry and tyEntry,
+ * matching the "last-axis-to-cross" semantics of slab-based swept collision.
+ *
+ * Larger value = ball entered this block's AABB more recently.
+ * Used as a tie-breaker when multiple blocks overlap simultaneously:
+ * the block the ball JUST entered is the one we should reflect off of.
+ */
+function computeEntryTime(
+  prevX: number,
+  prevY: number,
+  currX: number,
+  currY: number,
+  block: BlockState,
+): number {
+  const dx = currX - prevX;
+  const dy = currY - prevY;
+  const exLeft   = block.x - BALL_RADIUS;
+  const exRight  = block.x + BLOCK_WIDTH  + BALL_RADIUS;
+  const exTop    = block.y - BALL_RADIUS;
+  const exBottom = block.y + BLOCK_HEIGHT + BALL_RADIUS;
+
+  let tx = -Infinity;
+  if (dx > 0)       tx = (exLeft   - prevX) / dx;
+  else if (dx < 0)  tx = (exRight  - prevX) / dx;
+
+  let ty = -Infinity;
+  if (dy > 0)       ty = (exTop    - prevY) / dy;
+  else if (dy < 0)  ty = (exBottom - prevY) / dy;
+
+  return Math.max(tx, ty);
+}
+
+/**
  * Returns the BEST overlapping non-destroyed block for the ball, or null.
  *
- * "Best" = the block whose body centre is closest to the ball centre.
- * This matters at the 4px inter-block gap, where the ball (radius 8) can
- * overlap two or more adjacent blocks simultaneously.  Iterating in array
- * order and returning the first match destroyed whichever block happened
- * to appear first in stage data — almost never the block the player saw
- * the ball land on.  Choosing by centre-distance picks the block the ball
- * is most deeply inside, which matches user perception and keeps the
- * subsequent entry-side / push-out logic pointed at the correct face.
+ * "Best" = the block with the latest entry time along the prev→curr segment.
+ * Rationale: at 4px inter-block gaps the ball (radius 8) often overlaps two
+ * or more adjacent blocks simultaneously.  Neither array order nor
+ * centre-distance correctly identifies the block the ball is actually
+ * hitting — both fail in symmetric cases (e.g. ball exactly between two
+ * vertically-stacked rows).  Entry time is the only metric that captures
+ * the *direction of motion*: the block whose boundary the ball just
+ * crossed has the largest entry t, regardless of geometric symmetry.
+ *
+ * This resolves both the 'wrong adjacent block destroyed' report and the
+ * cascading tunneling symptoms caused by wrong-block reflection.
  */
 function findOverlappingBlock(
-  cx: number,
-  cy: number,
+  prevX: number,
+  prevY: number,
+  currX: number,
+  currY: number,
   blocks: readonly BlockState[],
   skipIds: ReadonlySet<string>,
 ): BlockState | null {
   let best: BlockState | null = null;
-  let bestDistSq = Infinity;
+  let bestEntryT = -Infinity;
   for (const block of blocks) {
     if (block.isDestroyed) continue;
     if (skipIds.has(block.id)) continue;
-    if (!circleOverlapsBlock(cx, cy, block)) continue;
+    if (!circleOverlapsBlock(currX, currY, block)) continue;
 
-    const bcx = block.x + BLOCK_WIDTH / 2;
-    const bcy = block.y + BLOCK_HEIGHT / 2;
-    const dx = cx - bcx;
-    const dy = cy - bcy;
-    const distSq = dx * dx + dy * dy;
-    if (distSq < bestDistSq) {
-      bestDistSq = distSq;
+    const t = computeEntryTime(prevX, prevY, currX, currY, block);
+    if (t > bestEntryT) {
+      bestEntryT = t;
       best = block;
     }
   }
@@ -289,7 +324,7 @@ export function moveBallWithCollisions(
     // hitThisSubstep prevents the same block from triggering twice within
     // the same substep (e.g. after push-out lands the ball back in overlap).
     const hitThisSubstep = new Set<string>();
-    const hitBlock = findOverlappingBlock(current.x, current.y, blocks, hitThisSubstep);
+    const hitBlock = findOverlappingBlock(prev.x, prev.y, current.x, current.y, blocks, hitThisSubstep);
     if (hitBlock !== null) {
       hitThisSubstep.add(hitBlock.id);
 
