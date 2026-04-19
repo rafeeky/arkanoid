@@ -6,8 +6,8 @@ import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
 import type { GameplayEvent } from '../events/gameplayEvents';
 
 import { resolveGameplayCommands } from './InputCommandResolver';
-import { moveBar, moveBall, moveItemDrop, moveAttachedBallToBar } from '../systems/MovementSystem';
-import { detectCollisions } from '../systems/CollisionService';
+import { moveBar, moveBallSubSteps, moveItemDrop, moveAttachedBallToBar } from '../systems/MovementSystem';
+import { detectCollisions, probeSubStepCollision } from '../systems/CollisionService';
 import { applyCollisions } from '../systems/CollisionResolutionService';
 import { judgeStageOutcome } from '../systems/StageRuleService';
 
@@ -75,8 +75,19 @@ export class GameplayController {
     const prevState = this.state;
 
     const newBar = moveBar(this.state.bar, moveDirection, dt, this.deps.config);
+    const currentBlocks = this.state.blocks;
     const newBalls = this.state.balls.map((ball) => {
-      const moved = moveBall(ball, dt);
+      const moved = moveBallSubSteps(ball, dt, (candidate) =>
+        probeSubStepCollision(
+          candidate.x,
+          candidate.y,
+          candidate.vx,
+          candidate.vy,
+          currentBlocks,
+          newBar,
+          ball.vy,
+        ),
+      );
       return moveAttachedBallToBar(moved, newBar);
     });
     const newItemDrops = this.state.itemDrops.map((item) => moveItemDrop(item, dt));

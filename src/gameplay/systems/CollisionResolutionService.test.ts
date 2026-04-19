@@ -100,15 +100,17 @@ describe('BallHitWall resolution', () => {
 // --- Bar reflection tests ---
 
 describe('BallHitBar resolution', () => {
-  it('바 중앙 충돌 → vy 음수(위쪽), vx 0에 가까움', () => {
+  it('바 중앙 충돌 → vy 음수(위쪽), enforceMinAngle에 의해 |vx| >= speed * sin(15°)', () => {
     const speed = 420;
     const ball = activeBall({ vx: 0, vy: speed });
     const state = makeState({ balls: [ball] });
     const facts: CollisionFact[] = [{ type: 'BallHitBar', ballId: 'ball_0', barContactX: 0 }];
     const { nextState } = applyCollisions(state, facts, tables);
     const result = firstBall(nextState);
+    const minVx = speed * Math.sin((15 * Math.PI) / 180); // ≈ 108.7
     expect(result.vy).toBeLessThan(0);
-    expect(Math.abs(result.vx)).toBeLessThan(speed * 0.1); // near 0
+    // enforceMinAngle guarantees vx is at least sin(15°)*speed — no longer near 0
+    expect(Math.abs(result.vx)).toBeGreaterThanOrEqual(minVx - 0.01);
   });
 
   it('바 좌단 충돌 → vy 음수, vx 음수(왼쪽)', () => {
@@ -289,5 +291,106 @@ describe('ItemFellOffFloor resolution', () => {
     const { nextState, events } = applyCollisions(state, facts, tables);
     expect(nextState.itemDrops.length).toBe(0);
     expect(events.length).toBe(0);
+  });
+});
+
+// ============================================================
+// Bug B 재현 테스트: 반사 후 수직 교착 (vx 최소값 보장 없음)
+// ============================================================
+
+describe('Bug B regression: 반사 후 최소 각도 보장 (enforceMinAngle)', () => {
+  /**
+   * vx가 거의 0에 가까울 때 블록 top 충돌 후 vy만 반전되면
+   * 이후 공이 순수 수직 이동을 반복하는 교착 상태가 된다.
+   * 반사 결과 |vx| / speed 가 sin(15°) ≈ 0.259 이상이어야 한다.
+   */
+  it('블록 top 충돌 후 vx가 거의 0일 때 반사 후 |vx| >= speed * sin(15°)', () => {
+    // speed ≈ 420, vx = 0.5 (거의 수직), vy = -419.99
+    const speed = 420;
+    const ball = activeBall({ vx: 0.5, vy: -speed + 0.001 });
+    const state = makeState({ balls: [ball] });
+    const facts: CollisionFact[] = [
+      { type: 'BallHitBlock', ballId: 'ball_0', blockId: 'block_0', side: 'top' },
+    ];
+    const block: BlockState = {
+      id: 'block_0',
+      x: 460,
+      y: 200,
+      remainingHits: 2,
+      isDestroyed: false,
+      definitionId: 'tough',
+    };
+    const stateWithBlock = makeState({ balls: [ball], blocks: [block] });
+    const { nextState } = applyCollisions(stateWithBlock, facts, tables);
+    const result = firstBall(nextState);
+    const resultSpeed = Math.sqrt(result.vx * result.vx + result.vy * result.vy);
+    const minVx = resultSpeed * Math.sin((15 * Math.PI) / 180);
+    // 반사 후 |vx|는 최소 sin(15°) * speed 이상이어야 함
+    expect(Math.abs(result.vx)).toBeGreaterThanOrEqual(minVx - 0.01);
+  });
+
+  it('벽 좌측 충돌 후 vy가 거의 0일 때 반사 후 |vy| >= speed * sin(15°)', () => {
+    // 수평 교착 방지: vx = -speed, vy = 0.5
+    const speed = 420;
+    const ball = activeBall({ vx: -speed + 0.001, vy: 0.5 });
+    const state = makeState({ balls: [ball] });
+    const facts: CollisionFact[] = [
+      { type: 'BallHitWall', ballId: 'ball_0', side: 'left' },
+    ];
+    const { nextState } = applyCollisions(state, facts, tables);
+    const result = firstBall(nextState);
+    const resultSpeed = Math.sqrt(result.vx * result.vx + result.vy * result.vy);
+    const minVy = resultSpeed * Math.sin((15 * Math.PI) / 180);
+    expect(Math.abs(result.vy)).toBeGreaterThanOrEqual(minVy - 0.01);
+  });
+
+  it('enforceMinAngle은 정상 각도(45도)에서 벡터를 변경하지 않는다', () => {
+    const speed = 420;
+    const vx = speed * Math.cos((45 * Math.PI) / 180); // ~297
+    const vy = -speed * Math.sin((45 * Math.PI) / 180); // ~-297
+    const ball = activeBall({ vx, vy });
+    const state = makeState({ balls: [ball] });
+    const facts: CollisionFact[] = [
+      { type: 'BallHitWall', ballId: 'ball_0', side: 'top' },
+    ];
+    const { nextState } = applyCollisions(state, facts, tables);
+    const result = firstBall(nextState);
+    // 45도 반사이므로 vx는 그대로, vy는 부호 반전
+    expect(result.vx).toBeCloseTo(vx, 1);
+    expect(result.vy).toBeCloseTo(-vy, 1);
+  });
+
+  it('바 중앙 충돌 (contactX=0): barContactX=0이어도 enforceMinAngle에 의해 |vx|가 최소값 이상', () => {
+    const speed = 420;
+    const ball = activeBall({ vx: 0, vy: speed });
+    const state = makeState({ balls: [ball] });
+    const facts: CollisionFact[] = [{ type: 'BallHitBar', ballId: 'ball_0', barContactX: 0 }];
+    const { nextState } = applyCollisions(state, facts, tables);
+    const result = firstBall(nextState);
+    const resultSpeed = Math.sqrt(result.vx * result.vx + result.vy * result.vy);
+    const minVx = resultSpeed * Math.sin((15 * Math.PI) / 180);
+    // 바 중앙이라도 enforceMinAngle 이후 최소 vx 보장
+    expect(Math.abs(result.vx)).toBeGreaterThanOrEqual(minVx - 0.01);
+  });
+
+  it('반사 후 속도 크기가 유지된다', () => {
+    const speed = 420;
+    const ball = activeBall({ vx: 0.5, vy: -speed + 0.001 });
+    const block: BlockState = {
+      id: 'block_0',
+      x: 460,
+      y: 200,
+      remainingHits: 2,
+      isDestroyed: false,
+      definitionId: 'tough',
+    };
+    const state = makeState({ balls: [ball], blocks: [block] });
+    const facts: CollisionFact[] = [
+      { type: 'BallHitBlock', ballId: 'ball_0', blockId: 'block_0', side: 'top' },
+    ];
+    const { nextState } = applyCollisions(state, facts, tables);
+    const result = firstBall(nextState);
+    const resultSpeed = Math.sqrt(result.vx * result.vx + result.vy * result.vy);
+    expect(resultSpeed).toBeCloseTo(speed, 0);
   });
 });

@@ -28,14 +28,59 @@ type Tables = {
   config: GameplayConfig;
 };
 
+// --- Minimum angle enforcement ---
+
+const MIN_ANGLE_FROM_AXIS_DEG = 15;
+const MIN_SIN = Math.sin((MIN_ANGLE_FROM_AXIS_DEG * Math.PI) / 180); // ≈ 0.259
+
+/**
+ * Ensures the velocity vector is never closer than MIN_ANGLE_FROM_AXIS_DEG
+ * to either axis (horizontal or vertical).
+ *
+ * - If |vx|/speed < sin(15°), vx is clamped to ±(speed * sin(15°)) and vy is
+ *   recalculated to preserve the speed magnitude and the sign of vy.
+ * - Likewise, if |vy|/speed < sin(15°), vy is clamped and vx is recalculated.
+ * - Speed magnitude is always preserved.
+ * - Normal angles (>15° from both axes) are not modified.
+ */
+function enforceMinAngle(vx: number, vy: number): { vx: number; vy: number } {
+  const speed = Math.sqrt(vx * vx + vy * vy);
+  if (speed === 0) return { vx, vy };
+
+  const minComponent = speed * MIN_SIN;
+  let newVx = vx;
+  let newVy = vy;
+
+  // Guard against near-vertical trajectory (|vx| too small)
+  if (Math.abs(newVx) < minComponent) {
+    newVx = minComponent * (newVx >= 0 ? 1 : -1);
+    const vySign = newVy >= 0 ? 1 : -1;
+    newVy = vySign * Math.sqrt(Math.max(0, speed * speed - newVx * newVx));
+  }
+
+  // Guard against near-horizontal trajectory (|vy| too small)
+  if (Math.abs(newVy) < minComponent) {
+    newVy = minComponent * (newVy >= 0 ? 1 : -1);
+    const vxSign = newVx >= 0 ? 1 : -1;
+    newVx = vxSign * Math.sqrt(Math.max(0, speed * speed - newVy * newVy));
+  }
+
+  return { vx: newVx, vy: newVy };
+}
+
 // --- Reflection helpers ---
 
 function reflectBallWall(ball: BallState, fact: BallHitWallFact): BallState {
+  let vx = ball.vx;
+  let vy = ball.vy;
   if (fact.side === 'left' || fact.side === 'right') {
-    return { ...ball, vx: -ball.vx };
+    vx = -vx;
+  } else {
+    // top
+    vy = -vy;
   }
-  // top
-  return { ...ball, vy: -ball.vy };
+  const enforced = enforceMinAngle(vx, vy);
+  return { ...ball, vx: enforced.vx, vy: enforced.vy };
 }
 
 /**
@@ -43,6 +88,7 @@ function reflectBallWall(ball: BallState, fact: BallHitWallFact): BallState {
  * vy is always forced negative (upward).
  * vx is biased by barContactX: center → small vx, edges → larger vx.
  * Speed magnitude is preserved.
+ * enforceMinAngle is applied after to prevent pure vertical trajectories.
  *
  * Formula:
  *   vx = contactX * speed * 0.7
@@ -50,20 +96,28 @@ function reflectBallWall(ball: BallState, fact: BallHitWallFact): BallState {
  */
 function reflectBallBar(ball: BallState, fact: BallHitBarFact): BallState {
   const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-  const newVx = fact.barContactX * speed * 0.7;
+  const rawVx = fact.barContactX * speed * 0.7;
   // Ensure vy has enough magnitude; clamp to avoid pure horizontal trajectory
-  const vyMagnitude = Math.sqrt(Math.max(speed * speed - newVx * newVx, (speed * 0.3) ** 2));
-  return { ...ball, vx: newVx, vy: -vyMagnitude };
+  const vyMagnitude = Math.sqrt(Math.max(speed * speed - rawVx * rawVx, (speed * 0.3) ** 2));
+  const enforced = enforceMinAngle(rawVx, -vyMagnitude);
+  // Bar always sends ball upward; preserve upward direction after enforceMinAngle
+  return { ...ball, vx: enforced.vx, vy: -Math.abs(enforced.vy) };
 }
 
 /**
  * Block reflection based on which side was hit.
+ * enforceMinAngle is applied after to prevent pure vertical/horizontal trajectories.
  */
 function reflectBallBlock(ball: BallState, fact: BallHitBlockFact): BallState {
+  let vx = ball.vx;
+  let vy = ball.vy;
   if (fact.side === 'left' || fact.side === 'right') {
-    return { ...ball, vx: -ball.vx };
+    vx = -vx;
+  } else {
+    vy = -vy;
   }
-  return { ...ball, vy: -ball.vy };
+  const enforced = enforceMinAngle(vx, vy);
+  return { ...ball, vx: enforced.vx, vy: enforced.vy };
 }
 
 // --- Resolution helpers ---

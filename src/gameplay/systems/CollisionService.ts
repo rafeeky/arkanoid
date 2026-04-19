@@ -218,6 +218,57 @@ function detectItemFellOff(item: ItemDropState): ItemFellOffFloorFact | null {
   return null;
 }
 
+// --- Sub-step collision probe (lightweight, for MovementSystem integration) ---
+
+/**
+ * Quick probe used by moveBallSubSteps onStep callback.
+ *
+ * Purpose: **tunnel prevention only** — stops the ball at the sub-step where
+ * it would enter a boundary, so the full CollisionResolutionService can apply
+ * the reflection correctly on the final state. The velocity is returned
+ * unchanged; only the position is "frozen" at this step.
+ *
+ * When a collision boundary is crossed, returns { vx, vy } identical to the
+ * input (no velocity change), which signals moveBallSubSteps to stop advancing
+ * further sub-steps. The final position will be on or just inside the boundary
+ * so detectCollisions() can pick it up normally.
+ *
+ * Returns null when no boundary is crossed — sub-stepping continues.
+ */
+export function probeSubStepCollision(
+  cx: number,
+  cy: number,
+  vx: number,
+  vy: number,
+  blocks: BlockState[],
+  bar: BarState,
+  prevVy: number,
+): { vx: number; vy: number } | null {
+  // Wall probe — stop when ball has crossed a wall boundary
+  if (cx - BALL_RADIUS <= 0) return { vx, vy };
+  if (cx + BALL_RADIUS >= CANVAS_WIDTH) return { vx, vy };
+  if (cy - BALL_RADIUS <= 0) return { vx, vy };
+
+  // Bar probe (only when moving downward)
+  if (prevVy > 0) {
+    const barRect = rectFromBar(bar);
+    if (circleOverlapsRect(cx, cy, BALL_RADIUS, barRect)) {
+      return { vx, vy };
+    }
+  }
+
+  // Block probe — stop when ball enters an active block
+  for (const block of blocks) {
+    if (block.isDestroyed) continue;
+    const rect = rectFromBlock(block);
+    if (circleOverlapsRect(cx, cy, BALL_RADIUS, rect)) {
+      return { vx, vy };
+    }
+  }
+
+  return null;
+}
+
 // --- Main export ---
 
 export function detectCollisions(
