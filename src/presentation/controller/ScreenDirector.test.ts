@@ -21,7 +21,7 @@ const config: GameplayConfig = {
 };
 
 function makeFlow(kind: GameFlowState['kind']): Readonly<GameFlowState> {
-  return { kind, currentStageIndex: 0 };
+  return { kind, currentStageIndex: 0, selectedDifficulty: 'normal' };
 }
 
 function makeDirector(): ScreenDirector {

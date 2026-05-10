@@ -40,7 +40,7 @@ function advanceToInGame(
 describe('GameFlowController — 통합 시나리오', () => {
   it('초기 상태는 title, stageIndex=0', () => {
     const { controller } = makeController();
-    expect(controller.getState()).toEqual({ kind: 'title', currentStageIndex: 0 });
+    expect(controller.getState()).toEqual({ kind: 'title', currentStageIndex: 0, selectedDifficulty: 'normal' });
   });
 
   describe('Title → IntroStory → RoundIntro → InGame → LifeLost(lives=1) → RoundIntro → LifeLost(lives=0) → GameOver → Title', () => {

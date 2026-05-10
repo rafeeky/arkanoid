@@ -65,9 +65,10 @@ describe('AudioCueResolver — AudioCueTable 매핑 검증', () => {
   });
 
   it('매핑 없는 이벤트는 빈 배열 반환', () => {
+    // 묶음 A 이후 BallLaunched 는 cue_ball_launch 로 매핑됨. 임의의 미매핑 이벤트로 검사.
     expect(resolver.resolveCueIds('UnknownEvent')).toEqual([]);
     expect(resolver.resolveCueIds('')).toEqual([]);
-    expect(resolver.resolveCueIds('BallLaunched')).toEqual([]);
+    expect(resolver.resolveCueIds('NoSuchEvent_xyz')).toEqual([]);
   });
 
   it('커스텀 테이블로도 동작한다', () => {

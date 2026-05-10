@@ -115,10 +115,11 @@ describe('moveItemDrop', () => {
 });
 
 describe('moveAttachedBallToBar', () => {
-  it('비활성 공(attachedOffsetX 없음)은 바 위 중앙에 붙는다', () => {
+  it('비활성 공(attachedOffsetX 없음)은 바 우측 30px (발사각 -60°와 시각 일치) 에 붙는다', () => {
     const inactiveBall: BallState = { ...baseBall, isActive: false };
     const result = moveAttachedBallToBar(inactiveBall, baseBar);
-    expect(result.x).toBe(baseBar.x);
+    // INITIAL_LAUNCH_OFFSET_X = 30 (우측). 발사 각도 -60° (cos = 0.5, 우측) 와 시각 일치.
+    expect(result.x).toBe(baseBar.x + 30);
     expect(result.y).toBe(baseBar.y - 16);
   });
 

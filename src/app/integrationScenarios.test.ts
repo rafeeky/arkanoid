@@ -128,7 +128,7 @@ describe('§15-5 시나리오 1: 시작 → 플레이 → 라이프 손실 → �
     expect(ctx.getGameplayState().blocks).toHaveLength(65);
   });
 
-  it('6. LifeLost 후 resetForRetry: lives = 2 (초기 3에서 1 감소)', async () => {
+  it('6. LifeLost 후 resetForRetry: lives = 4 (초기 5 — Normal 난이도 — 에서 1 감소)', async () => {
     const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
     enterInGame(ctx);
     ctx.tick(spaceInput, 1 / 60);
@@ -136,7 +136,7 @@ describe('§15-5 시나리오 1: 시작 → 플레이 → 라이프 손실 → �
     tickUntilFlowChanges(ctx, 'inGame');
 
     expect(ctx.getFlowState().kind).toBe('roundIntro');
-    expect(ctx.getGameplayState().session.lives).toBe(2);
+    expect(ctx.getGameplayState().session.lives).toBe(4);
   });
 
   it('7. LifeLost 후 resetForRetry: score 유지됨', async () => {
@@ -617,17 +617,17 @@ describe('MVP2 §13-4 시나리오 A: Full clear (Stage1 → Stage2 → Stage3 �
 // ---------------------------------------------------------------------------
 
 describe('MVP2 §13-4 시나리오 B: 중간 GameOver — LifeLost 3회 → GameOver → highScore 저장', () => {
-  it('B-1. lives=3 에서 LifeLost 1회 → roundIntro 전이, lives=2', async () => {
+  it('B-1. lives=5 (Normal 기본) 에서 LifeLost 1회 → roundIntro 전이, lives=4', async () => {
     const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
     advanceToInGame(ctx);
     ctx.tick(spaceInput, 1 / 60); // 공 활성화
     injectBallBelowFloor(ctx);
     tickUntilFlowChanges(ctx, 'inGame');
     expect(ctx.getFlowState().kind).toBe('roundIntro');
-    expect(ctx.getGameplayState().session.lives).toBe(2);
+    expect(ctx.getGameplayState().session.lives).toBe(4);
   });
 
-  it('B-2. lives=2 에서 LifeLost 2회 → roundIntro 전이, lives=1', async () => {
+  it('B-2. lives=4 에서 LifeLost 2회 → roundIntro 전이, lives=3', async () => {
     const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
     advanceToInGame(ctx);
 
@@ -643,7 +643,7 @@ describe('MVP2 §13-4 시나리오 B: 중간 GameOver — LifeLost 3회 → Game
     injectBallBelowFloor(ctx);
     tickUntilFlowChanges(ctx, 'inGame');
     expect(ctx.getFlowState().kind).toBe('roundIntro');
-    expect(ctx.getGameplayState().session.lives).toBe(1);
+    expect(ctx.getGameplayState().session.lives).toBe(3);
   });
 
   it('B-3. lives=1 에서 LifeLost → gameOver 전이 (remainingLives=0)', async () => {
@@ -959,7 +959,7 @@ describe('MVP2 §13-4 시나리오 E: GameClear → Title 복귀 → 새 게임 
     expect(blocks.every((b) => !b.isDestroyed)).toBe(true);
   });
 
-  it('E-6. Title 복귀 후 새 게임 시작 → lives=3 으로 리셋됨', async () => {
+  it('E-6. Title 복귀 후 새 게임 시작 → lives=5 (Normal 기본) 으로 리셋됨', async () => {
     const repo = new InMemorySaveRepository({ highScore: 0 });
     const ctx = await reachGameClear(2000, repo);
     ctx.tick(spaceInput, 1 / 60); // gameClear → title
@@ -967,7 +967,7 @@ describe('MVP2 §13-4 시나리오 E: GameClear → Title 복귀 → 새 게임 
     ctx.tick(spaceInput, 1 / 60); // title → introStory
     ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
 
-    expect(ctx.getGameplayState().session.lives).toBe(3);
+    expect(ctx.getGameplayState().session.lives).toBe(5);
   });
 
   it('E-7. 이전 클리어 highScore는 새 게임 시작 후에도 유지됨', async () => {

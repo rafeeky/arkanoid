@@ -26,6 +26,13 @@ function createMockAudioPlayer(): IAudioPlayer & { calls: AudioCueEntry[] } {
     stopAll(): void {
       // noop
     },
+    stop(_cueId: string): void {
+      // noop — 테스트는 stop 호출을 추적하지 않음
+    },
+    setBgmMuted(_muted: boolean): void { /* noop */ },
+    setSfxMuted(_muted: boolean): void { /* noop */ },
+    isBgmMuted(): boolean { return false; },
+    isSfxMuted(): boolean { return false; },
   };
 }
 
@@ -38,10 +45,15 @@ function createMockSaveRepository(
       return savedData;
     },
     async load(): Promise<SaveData> {
-      return { highScore: initialHighScore };
+      return {
+        highScore: initialHighScore,
+        gold: 0,
+        unlockedMascots: ['albatross'],
+        selectedMascot: 'albatross',
+      };
     },
-    async save(data: SaveData): Promise<void> {
-      savedData = data;
+    async save(data: Partial<SaveData>): Promise<void> {
+      savedData = { highScore: 0, gold: 0, unlockedMascots: ['albatross'], selectedMascot: 'albatross', ...data };
     },
   };
 }
@@ -390,11 +402,13 @@ describe('FlowEventRouter.onGameplayEvent — audio routing', () => {
     expect(audioPlayer.calls.some((c) => c.resourceId === 'sfx_item_collected')).toBe(true);
   });
 
-  it('BallLaunched 이벤트 시 audioPlayer 호출 0회 (AudioCueTable에 매핑 없음)', () => {
+  it('BallLaunched 이벤트 시 cue_ball_launch (피치 1.0) 가 1회 재생됨 (묶음 A)', () => {
     const { router, audioPlayer } = makeRouter({});
     const event: GameplayEvent = { type: 'BallLaunched' };
     router.onGameplayEvent(event, 0);
-    expect(audioPlayer.calls).toHaveLength(0);
+    expect(audioPlayer.calls).toHaveLength(1);
+    expect(audioPlayer.calls[0]!.cueId).toBe('cue_ball_launch');
+    expect(audioPlayer.calls[0]!.pitch).toBe(1);
   });
 });
 

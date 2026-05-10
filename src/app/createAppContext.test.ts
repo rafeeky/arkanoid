@@ -65,13 +65,13 @@ describe('AppContext — Title → IntroStory → RoundIntro: Stage 1 로드', (
     expect(ctx.getGameplayState().blocks).toHaveLength(65);
   });
 
-  it('RoundIntro 진입 후 score=0, lives=3', async () => {
+  it('RoundIntro 진입 후 score=0, lives=5 (Normal 난이도 기본)', async () => {
     const ctx = await createAppContext();
     ctx.tick(spaceInput, 1 / 60);
     ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' });
     const state = ctx.getGameplayState();
     expect(state.session.score).toBe(0);
-    expect(state.session.lives).toBe(3);
+    expect(state.session.lives).toBe(5);
   });
 });
 
@@ -685,6 +685,13 @@ function createMockAudioPlayer(): IAudioPlayer & { calls: AudioCueEntry[] } {
     stopAll(): void {
       // noop
     },
+    stop(_cueId: string): void {
+      // noop — 테스트는 stop 호출을 추적하지 않음
+    },
+    setBgmMuted(_muted: boolean): void { /* noop */ },
+    setSfxMuted(_muted: boolean): void { /* noop */ },
+    isBgmMuted(): boolean { return false; },
+    isSfxMuted(): boolean { return false; },
   };
 }
 
