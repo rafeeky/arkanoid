@@ -152,48 +152,142 @@ MVP 1에서는 확장만 구현한다.
 
 ---
 
-## 5. 아키텍처 설계 원칙
+## 5. 아키텍처 패턴
 
-### 5-1. 상위 구조는 소유권 기준으로 분리한다
+### 5-1. 베이스 패턴: MVVM
+
+본 프로젝트의 코어 코드 아키텍처는 **MVVM (Model-View-ViewModel)** 을 베이스로 한다.
+
+선택 이유:
+- 매 프레임 전체 상태를 다시 읽어 화면을 갱신하는 게임 루프는 MVVM 의 **단방향 pull 갱신**과 정확히 일치한다.
+- ViewModel 은 불변 스냅샷이라 테스트가 쉽고, TS 렌더 함수와 Unity MonoBehaviour 뷰가 **동일한 ViewModel 소비 계약**을 공유해 포팅이 쉽다.
+- 화면별로 ViewModel + Factory + View 세 파일만 독립적으로 확장되므로 Title / IntroStory / RoundIntro / InGame / GameOver / GameClear 6개 화면 추가/수정 비용이 선형.
+
+역할 매핑:
+- **Model**: 게임 규칙과 상태. `Flow` + `Gameplay` + `Definitions`.
+- **ViewModel**: 특정 화면이 표시할 데이터 스냅샷. `Presentation/ViewModels/*` 의 불변 record 들.
+- **View**: 화면에 그리는 최종 레이어. TS 의 `presentation/renderer/*`, Unity 의 `Presentation/View/*` MonoBehaviour.
+
+MVVM 규칙:
+- Model 은 View 와 ViewModel 의 존재를 모른다.
+- ViewModel 은 View 의 존재를 모른다. ViewModel 은 Model 의 데이터로 구성되지만 Model 타입을 직접 노출하지 않도록 가능한 한 변환한다.
+- View 는 ViewModel 만 소비한다. Model 을 직접 읽거나 수정하지 않는다.
+- 데이터 흐름은 **Model → ViewModel → View** 단방향. 사용자 입력은 별도 경로(Command / Event)로 Model 에 전달된다.
+
+### 5-2. 보조 패턴: FSM (상위 상태기계)
+
+상위 게임 상태(Title / IntroStory / RoundIntro / InGame / GameOver / GameClear) 전환은 유한 상태 기계로 관리한다.
+MVVM 과 **직교** 한다. FSM 이 현재 상태를 결정하면, 그 상태를 기반으로 ViewModel Factory 가 적절한 ViewModel 을 빌드한다.
+
+구성: `GameFlowState` + `FlowTransitionPolicy` (pure) + `FlowInputResolver` (pure) + `GameFlowController` (state 보유).
+
+### 5-3. 보조 패턴: Hexagonal / Ports & Adapters (엔진 경계)
+
+엔진/플랫폼 의존 기능(입력 / 오디오 / 렌더링 / 영속성)은 **Port (인터페이스)** 와 **Adapter (구현체)** 로 분리한다.
+
+MVVM 과 **직교** 한다. Adapter 는 View / Model 어느 쪽에도 직접 속하지 않는 경계 계층이다.
+
+예시:
+- `ISaveRepository` (Port) ← `LocalSaveRepository` (TS Adapter) / `PlayerPrefsRepository` (Unity Adapter) / `InMemorySaveRepository` (Test Adapter)
+- `IAudioPlayer` (Port) ← `PhaserAudioPlayer` / `AudioPlayerAdapter` / `NoopAudioPlayer`
+- Input / Renderer 도 동일 원칙
+
+### 5-4. 패턴 조합 요약
+
+```
+┌─────────────────────────────────────────────────────┐
+│            Hexagonal Adapter 경계                    │
+│                                                      │
+│   [Input Adapter] → InputSnapshot ──┐                │
+│                                      ▼               │
+│   ┌───────────────────────────────────┐              │
+│   │  Model 계층 (MVVM Model)          │              │
+│   │  ┌──────────────┐                 │              │
+│   │  │ FSM (Flow)   │─────┐           │              │
+│   │  └──────────────┘     │           │              │
+│   │  ┌──────────────┐     │           │              │
+│   │  │ Gameplay     │◀────┘ 이벤트   │              │
+│   │  │ (RuntimeState│                │              │
+│   │  │  + Systems)  │                 │              │
+│   │  └──────────────┘                 │              │
+│   │  ┌──────────────┐                 │              │
+│   │  │ Definitions  │                 │              │
+│   │  │ (Tables)     │                 │              │
+│   │  └──────────────┘                 │              │
+│   └────────────────┬──────────────────┘              │
+│                    │                                 │
+│   ┌────────────────▼──────────────────┐              │
+│   │  ViewModel 계층 (MVVM ViewModel)  │              │
+│   │  ViewModelFactory (pure)          │              │
+│   │  ViewState (Presentation 전용)    │              │
+│   └────────────────┬──────────────────┘              │
+│                    │ 단방향 pull                     │
+│   ┌────────────────▼──────────────────┐              │
+│   │  View 계층 (MVVM View)            │              │
+│   │  Renderer (TS) / View (Unity)     │              │
+│   └───────────────────────────────────┘              │
+│                                                      │
+│   [Audio Adapter]  [Save Adapter]  [Render Adapter]  │
+└─────────────────────────────────────────────────────┘
+```
+
+- **Model ⇄ Adapter**: Model 은 Port 인터페이스만 앎 (의존성 역전)
+- **Model → ViewModel**: Factory 가 pure 변환
+- **ViewModel → View**: 매 프레임 pull
+- **View → Model**: ❌ 직접 참조 금지. 입력은 Adapter → Model 경로로만.
+
+---
+
+## 6. 아키텍처 설계 원칙
+
+### 6-1. 상위 구조는 소유권 기준으로 분리한다
 상위 책임 구조는 "무슨 행동을 하느냐"보다 "무엇을 소유하느냐" 기준으로 나눈다.
 
-### 5-2. 하위 구조는 행동 기준으로 분리한다
+### 6-2. 하위 구조는 행동 기준으로 분리한다
 상위 축 아래의 세부 모듈은 이동, 충돌, 저장, 타이핑 같은 행동 기준으로 쪼갠다.
 
-### 5-3. 상태 / 정의 / 자산을 분리한다
-- RuntimeState: 현재 변하는 값
-- Definition: 고정 설계 데이터
-- Asset: 실제 파일/리소스 참조
+### 6-3. 상태 / 정의 / 자산을 분리한다
+- RuntimeState: 현재 변하는 값 (Model)
+- Definition: 고정 설계 데이터 (Model 의 상수)
+- Asset: 실제 파일/리소스 참조 (Adapter 경계)
+- ViewState: 화면 표현 전용 상태 (ViewModel 계층에 속함)
 
-### 5-4. 게임 규칙과 표현을 분리한다
-Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
+### 6-4. 게임 규칙과 표현을 분리한다 (MVVM Model/View 경계)
+Model 은 규칙만 계산하고, View 는 ViewModel 을 통해 받은 데이터를 표현만 담당한다.
+Presentation 계층은 Model → ViewModel 변환(Factory) 과 ViewState 소유만 담당한다.
 
-### 5-5. 이벤트는 반응을 위한 최소 연결로 사용한다
-이벤트는 계층 간 결합을 낮추는 수단으로 사용하되, 과도한 이벤트 남발은 피한다.
+### 6-5. 이벤트는 Model 내부 반응 연결로만 사용한다
+이벤트는 Flow / Gameplay / Adapter 간 결합을 낮추는 수단으로 사용한다.
+**View 는 이벤트를 직접 구독하지 않는다** — 이벤트의 결과가 RuntimeState 또는 ViewState 에 반영된 뒤, ViewModel 을 거쳐 View 에 도달한다.
+과도한 이벤트 남발은 피한다.
 
-### 5-6. 지금 구현하지 않을 기능은 확장 포인트로만 남긴다
+### 6-6. 지금 구현하지 않을 기능은 확장 포인트로만 남긴다
 미래 기능을 위해 구조는 열어두되, 현재 MVP에 포함하지 않은 코드는 만들지 않는다.
 
 ---
 
-## 6. 상위 책임 구조
+## 7. 상위 책임 구조
 
-전체 상위 구조는 8축으로 나눈다.
+전체 상위 구조는 8축으로 나눈다. 각 축을 MVVM 역할로 표시한다.
 
-1. Input Acquisition
-2. Flow State
-3. Gameplay Simulation
-4. Presentation
-5. Audio Playback
-6. Persistence
-7. Game Definitions
-8. Asset Resolution
+| # | 축 | MVVM 역할 | 엔진 의존 |
+|:-:|---|---|:---:|
+| 1 | Input Acquisition | **Adapter** (입력 Port 구현체) | ✅ |
+| 2 | Flow State | **Model** (FSM, 순수 C#/TS) | ❌ |
+| 3 | Gameplay Simulation | **Model** (RuntimeState + Systems) | ❌ |
+| 4 | Presentation | **ViewModel 계층** (ViewModel + Factory + ViewState) + **View 계층** (Renderer) | 부분 |
+| 5 | Audio Playback | **Adapter** (오디오 Port 구현체) | ✅ |
+| 6 | Persistence | **Adapter** (저장 Port 구현체) | ✅ |
+| 7 | Game Definitions | **Model** (불변 상수) | ❌ |
+| 8 | Asset Resolution | **Adapter** (리소스 매핑) | ✅ |
+
+Model 축 4개(Flow / Gameplay / Definitions / ViewState 일부) + View 축 1개(Renderer) + ViewModel 축 1개(Presentation Factory) + Adapter 축 4개(Input / Audio / Persistence / Asset) 로 조합된다.
 
 ---
 
-## 7. 상위 책임 상세
+## 8. 상위 책임 상세
 
-### 7-1. Input Acquisition
+### 8-1. Input Acquisition (Adapter)
 
 #### 책임
 - 키 입력 수집
@@ -215,7 +309,7 @@ Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
 
 ---
 
-### 7-2. Flow State
+### 8-2. Flow State (Model — FSM)
 
 #### 책임
 - 상위 게임 상태 소유
@@ -244,7 +338,7 @@ Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
 
 ---
 
-### 7-3. Gameplay Simulation
+### 8-3. Gameplay Simulation (Model)
 
 #### 책임
 - 인게임 세계 상태 소유
@@ -272,38 +366,59 @@ Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
 
 ---
 
-### 7-4. Presentation
+### 8-4. Presentation (ViewModel 계층 + View 계층)
 
-#### 책임
-- 현재 상태와 결과를 화면으로 표현
-- 화면별 표시 데이터 준비
-- HUD 갱신
-- 시간 기반 시각 연출 진행
-- 렌더링
+Presentation 은 내부적으로 **ViewModel 계층** 과 **View 계층** 두 부분으로 다시 나뉜다.
 
-#### 금지 책임
+#### 8-4-1. ViewModel 계층
+
+##### 책임
+- Model(Flow / Gameplay / Definitions) 을 화면 표시용 **불변 ViewModel** 로 변환
+- 화면 표현 전용 상태 (ViewState) 소유
+- 시간 기반 시각 연출 타이머 진행 (플래시, 바 파괴, Intro 타이핑)
+
+##### 금지 책임
 - 게임 규칙 계산
 - 상태 전환 결정
 - 저장 처리
+- 실제 Unity/Phaser API 직접 호출
 
-#### 소유 데이터
-- 화면 표현 상태
-- 연출 타이머/플래시 상태
+##### 소유 데이터
+- `ScreenState` (ViewState)
+- 연출 타이머 (VisualEffectService 내부)
 
-#### 입력
-- Flow 상태
-- Gameplay RuntimeState
-- 이벤트
+##### 입력
+- FlowState
+- GameplayRuntimeState
+- Gameplay / Flow 이벤트 (타이머 트리거용)
 - Definition 데이터
+
+##### 출력
+- 각 화면의 `*ViewModel`
+- Presentation 완료 이벤트 (`RoundIntroFinished`, `IntroSequenceFinished`, `LifeLostPresentationFinished`)
+
+#### 8-4-2. View 계층
+
+##### 책임
+- ViewModel 을 받아 실제 화면에 그림
+- TS: Phaser Scene/Sprite 조작
+- Unity: MonoBehaviour 로 SceneObject / UI 갱신
+
+##### 금지 책임
+- Model 직접 참조 (FlowState, RuntimeState 읽기 금지 — ViewModel 경유)
+- ViewModel 수정
+- 게임 로직 계산
+
+##### 입력
+- ViewModel
 - Asset 참조
 
-#### 출력
-- 화면 렌더링 결과
-- Presentation 완료 이벤트
+##### 출력
+- 실제 화면 렌더링 부수효과
 
 ---
 
-### 7-5. Audio Playback
+### 8-5. Audio Playback (Adapter)
 
 #### 책임
 - 이벤트를 오디오 cue로 해석
@@ -327,7 +442,7 @@ Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
 
 ---
 
-### 7-6. Persistence
+### 8-6. Persistence (Adapter)
 
 #### 책임
 - 최고 점수 로드/저장
@@ -351,7 +466,7 @@ Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
 
 ---
 
-### 7-7. Game Definitions
+### 8-7. Game Definitions (Model — 상수)
 
 #### 책임
 - 고정 규칙/콘텐츠 정의 제공
@@ -373,7 +488,7 @@ Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
 
 ---
 
-### 7-8. Asset Resolution
+### 8-8. Asset Resolution (Adapter)
 
 #### 책임
 - 리소스 의미 ID를 실제 에셋 참조로 해석
@@ -394,57 +509,85 @@ Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
 
 ---
 
-## 8. 상위 책임 간 관계
+## 9. 상위 책임 간 관계 (MVVM 레이어 규칙)
 
-### 8-1. 허용 의존성
-- `app`은 전부 조립 가능
-- `flow`는 `shared`, `definitions` 참조 가능
-- `gameplay`는 `shared`, `definitions` 참조 가능
-- `presentation`은 `flow`, `gameplay`, `definitions`, `assets`, `shared` 참조 가능
-- `audio`는 `definitions`, `assets`, `shared` 참조 가능
-- `persistence`는 `shared` 참조 가능
+### 9-1. 허용 의존성 (Model/ViewModel/View 계층 규칙)
 
-### 8-2. 금지 의존성
-- `gameplay` → `presentation` 직접 참조 금지
-- `gameplay` → `audio` 직접 참조 금지
-- `flow` → renderer 직접 참조 금지
-- `definitions` → runtime state 참조 금지
-- `assets` → gameplay/flow 참조 금지
+**Model 계층**:
+- `shared` → 없음 (leaf)
+- `definitions` → `shared`
+- `flow` → `shared`, `definitions`
+- `gameplay` → `shared`, `definitions`
 
-### 8-3. 직접 참조와 이벤트 반응 구분
-- 상태 전환과 인게임 결과는 이벤트로 연결한다.
-- 렌더링은 상태를 읽는다.
-- 사운드는 이벤트를 듣고 반응한다.
+**ViewModel 계층**:
+- `presentation/state` (ViewState) → `shared`, `gameplay` 타입 참조 최소화
+- `presentation/view-models` → `shared`, `gameplay` 타입 (enum 수준)
+- `presentation/controller` (Factory/Director/VisualEffectService) → `flow`, `gameplay`, `definitions`, `shared`
+
+**View 계층**:
+- `presentation/renderer` (TS) / `presentation/view` (Unity) → `presentation/view-models`, `presentation/state`, `definitions`, `assets`, `shared`
+- ❗ **View 는 `flow`, `gameplay` 직접 참조 금지** — ViewModel 경유
+
+**Adapter 계층**:
+- `audio` → `definitions`, `assets`, `shared`
+- `persistence` → `shared`
+- `input` → `shared`
+- `assets` → `shared`
+
+**조립 계층**:
+- `app` 은 전부 조립 가능 (Composition Root)
+
+### 9-2. 금지 의존성 (계층 역참조 방지)
+- `gameplay` → `presentation` 금지 (Model 이 View/VM 을 모름)
+- `gameplay` → `audio` 금지 (Model 이 Adapter 를 모름)
+- `flow` → `presentation/renderer` 금지
+- `presentation/renderer` (View) → `flow`, `gameplay` 금지 (View 는 ViewModel 만 소비)
+- `definitions` → `runtime state` 금지 (상수는 런타임 값 모름)
+- `assets` → `gameplay`, `flow` 금지
+
+### 9-3. 직접 참조 vs 이벤트 vs 바인딩 구분
+세 가지 결합 수단을 명확히 나눈다.
+
+| 방식 | 용도 | 예 |
+|---|---|---|
+| **직접 참조** | 같은 계층 내부 호출 / Composition Root 에서 의존성 주입 | `GameplayController` 가 `MovementSystem` 호출 |
+| **이벤트** | Model 내부 계층 간(Flow↔Gameplay↔Adapter) 반응 연결 | `LifeLostEvent` → `FlowEventRouter` → `GameFlowController` + AudioAdapter |
+| **단방향 바인딩 (pull)** | Model → ViewModel → View 의 매 프레임 갱신 | `BallView.Refresh(ballViewModel)` |
+
+- 상태 전환과 인게임 결과는 **이벤트** 로 연결한다 (Model 내부).
+- 렌더링은 **ViewModel 을 읽는다** (pull 바인딩).
+- 사운드는 **이벤트를 듣고 반응한다** (Adapter).
+- **View 는 이벤트 구독 금지** — 모든 시각 변화는 ViewModel 필드 변화로 드러나야 한다.
 
 ---
 
-## 9. Flow State 상세 설계
+## 10. Flow State 상세 설계 (FSM — Model)
 
-### 9-1. 하위 구성
+### 10-1. 하위 구성
 - `GameFlowState`
 - `GameFlowController`
 - `FlowInputResolver`
 - `FlowTransitionPolicy`
 - `FlowLifecycleHandler`
 
-### 9-2. 각 구성의 역할
+### 10-2. 각 구성의 역할
 
 #### GameFlowState
-현재 상위 상태를 저장한다.
+현재 상위 상태를 저장한다. 불변 값 타입.
 
-#### GameFlowController
-상태 전환 전체를 orchestration한다.
+#### GameFlowController (StateMachine Service)
+상태 전환 전체를 orchestration 한다. 실질적인 **FSM 서비스**.
 
 #### FlowInputResolver
-비인게임 상태에서 입력을 흐름 명령으로 해석한다.
+비인게임 상태에서 입력을 흐름 명령으로 해석한다. **순수 함수**.
 
 #### FlowTransitionPolicy
-어떤 조건에서 어떤 상태로 갈지 결정한다.
+어떤 조건에서 어떤 상태로 갈지 결정한다. **순수 함수**.
 
 #### FlowLifecycleHandler
-상태 진입/종료 후처리를 담당한다.
+상태 진입/종료 후처리를 담당한다. **순수 함수**.
 
-### 9-3. 전체 제품 상태 목록
+### 10-3. 전체 제품 상태 목록
 - Title
 - IntroStory
 - RoundIntro
@@ -452,7 +595,7 @@ Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
 - GameOver
 - GameClear
 
-### 9-4. MVP 1 상태 목록
+### 10-4. MVP 1 상태 목록
 - Title
 - RoundIntro
 - InGame
@@ -460,9 +603,9 @@ Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
 
 ---
 
-## 10. Gameplay Simulation 상세 설계
+## 11. Gameplay Simulation 상세 설계 (Model)
 
-### 10-1. 하위 구성
+### 11-1. 하위 구성
 - `GameplayRuntimeState`
 - `GameplayController`
 - `InputCommandResolver`
@@ -472,92 +615,122 @@ Gameplay는 규칙만 계산하고, Presentation은 표현만 담당한다.
 - `StageRuleService`
 - `StageRuntimeFactory`
 
-### 10-2. 각 구성의 역할
-
-#### GameplayRuntimeState
-현재 인게임 세계 상태를 보관한다.
-
-#### GameplayController
-한 틱의 진행 순서를 조정한다.
-
-#### InputCommandResolver
-raw input을 인게임 명령으로 해석한다.
-
-#### MovementSystem
-바, 공, 아이템 등의 이동을 갱신한다.
-
-#### CollisionService
-충돌 사실과 물리 결과를 계산한다.
-
-#### CollisionResolutionService
-충돌 결과를 게임 규칙 결과로 반영한다.
-
-#### StageRuleService
-라이프, 클리어, 게임오버 조건을 판정한다.
-
-#### StageRuntimeFactory
-StageDefinition을 RuntimeState로 변환한다.
-
----
-
-## 11. Presentation 상세 설계
-
-### 11-1. 하위 구성
-- `ScreenState`
-- `ScreenDirector`
-- `ScreenPresenter`
-- `HUDPresenter`
-- `VisualEffectController`
-- `SceneRenderer`
-
 ### 11-2. 각 구성의 역할
 
-#### ScreenState
-현재 화면 표현 상태를 저장한다.
+#### GameplayRuntimeState (Model 상태)
+현재 인게임 세계 상태를 보관하는 불변 데이터 컨테이너.
 
-#### ScreenDirector
-현재 어떤 화면이 활성화되어야 하는지 결정한다.
+#### GameplayController (Controller — 진짜 MVC 의미)
+한 틱의 진행 순서를 조정한다. 시스템들을 순서대로 호출.
 
-#### ScreenPresenter
-화면별 표시용 ViewModel을 만든다.
+#### InputCommandResolver
+raw input 을 인게임 명령으로 해석한다. **순수 함수**.
 
-#### HUDPresenter
-인게임 HUD용 표시 데이터를 만든다.
+#### MovementSystem / CollisionService / CollisionResolutionService / StageRuleService
+각각 이동 / 충돌 감지 / 충돌 반영 / 클리어 판정. 모두 **순수 함수(Service)**.
 
-#### VisualEffectController
-타이핑, 피격 플래시, 배너 타이머 같은 시간 기반 표현을 담당한다.
-
-#### SceneRenderer
-최종 화면을 실제로 렌더링한다.
-
-### 11-3. 화면과 연출 분리 원칙
-- 정적 UI 표시와 시간 기반 연출은 Presentation 아래에서 분리한다.
-- Flow는 상태만 소유하고, Intro 세부 진행도는 Presentation이 소유한다.
+#### StageRuntimeFactory
+StageDefinition 을 RuntimeState 로 변환한다. **순수 팩토리**.
 
 ---
 
-## 12. Audio / Persistence / Definitions / Asset 상세 설계
+## 12. Presentation 상세 설계 (ViewModel 계층 + View 계층)
 
-### 12-1. Audio Playback
+### 12-1. 하위 구성
+
+**ViewState (화면 표현 전용 상태)**
+- `ScreenState` — 현재 화면 종류, RoundIntro 남은 시간, 플래시 목록, Intro 타이핑 진행도 등
+
+**화면별 ViewModel (불변 스냅샷)**
+- `TitleScreenViewModel` / `IntroScreenViewModel` / `RoundIntroViewModel` / `HudViewModel` / `GameOverViewModel` / `GameClearViewModel`
+
+**InGame 엔티티별 ViewModel (불변 스냅샷)** — A안 채택 (2026-05-09)
+- `BarViewModel` / `BallViewModel` / `BlockViewModel` / `ItemDropViewModel` / `LaserShotViewModel` / `SpinnerViewModel`
+- 각각이 `*State` (Model) 의 표현용 변환 결과. View 는 이 VM 만 받고 `gameplay/state` 를 직접 import 하지 않는다.
+- 표현 전용 derived 값(예: 색 보정, 페이드 비율, 플래시 여부)은 VM 안에서 결정.
+
+**ViewModelFactory (순수 변환 함수)**
+- `ScreenViewModelFactory` (구 `ScreenPresenter`) — 6개 화면별 ViewModel 빌드 메서드. **pure**.
+- `HudViewModelFactory` (구 `HUDPresenter`) — HUD 전용 VM 빌더. **pure**.
+- `InGameViewModelFactory` — InGame 엔티티별 VM 묶음 빌드. **pure**. (신규)
+
+**Service (상태 보유)**
+- `ScreenDirector` — ScreenState 소유. FlowState 변화에 따라 CurrentScreen 동기화 + 타이머 감소.
+- `VisualEffectService` (기존 `VisualEffectController` 리네이밍 대상) — 플래시/바 파괴/Intro 타이핑 타이머 상태 소유.
+
+**View**
+- TS: `SceneRenderer` + `render*Screen` 함수들 (Phaser 직접 호출)
+- Unity: `ScreenViewRoot` + 각 `*ScreenView` / `*View` / `*ViewPool` MonoBehaviour
+
+### 12-2. 각 구성의 역할
+
+#### ScreenState (ViewState)
+현재 화면 표현 상태를 저장하는 **불변 record**. FlowState 와는 별개.
+
+#### ScreenDirector (Service)
+FlowState 의 Kind 변화를 감지해 ScreenState.CurrentScreen 을 동기화하고, RoundIntro 타이머 같은 시간 기반 상태를 매 틱 갱신한다.
+
+#### ScreenViewModelFactory (구 ScreenPresenter) — pure
+`GameSessionState` + `ScreenState` + DifficultyKind 등을 받아 각 화면용 ViewModel 을 반환한다. **상태 없음, 부수효과 없음, 테스트 쉬움**.
+
+#### HudViewModelFactory (구 HUDPresenter) — pure
+`GameplayRuntimeState` 전체를 받아 `HudViewModel` 을 만든다. 점수/라이프/라운드/효과 타이머를 매핑만.
+
+#### InGameViewModelFactory — pure (신규, A안 채택)
+`GameplayRuntimeState` + `ScreenState` (플래시 ID 등) 를 받아 InGame 엔티티별 VM 묶음을 반환한다. View 가 Model 을 import 하지 않게 하기 위한 핵심 경계.
+
+#### VisualEffectService (Service)
+타이핑, 피격 플래시, 배너 타이머, 바 파괴 연출 같은 **시간 기반 표현 상태**를 소유한다. ScreenDirector 가 매 틱 호출.
+
+#### SceneRenderer / ScreenViewRoot (View)
+화면 전환 coordinator. 현재 ScreenKind 에 맞는 하위 View 만 활성화. Renderer 는 ViewModel 을 받아 그릴 뿐 규칙 계산을 하지 않는다.
+
+### 12-3. Presenter / Controller 명명 변경 결정 (2026-05-09 채택)
+
+본 프로젝트의 `ScreenPresenter`, `HUDPresenter` 는 **MVP 의 Presenter 가 아니다**.
+이들은 **MVVM 의 ViewModel Factory** 이며, 초기 구현 시 관례로 남았던 이름이다.
+또한 `*Controller` 중 일부는 실체가 FSM 또는 Service 이므로 이름이 역할을 가린다.
+
+**결정**: 다음 리네이밍을 채택한다. **Phase 1A (TS) 에서 일괄 적용. 현재 Unity 코드 (드래프트) 는 손대지 않으며, Phase 6 재포팅 시 새 이름으로 작성한다.**
+
+| 현재 | 변경 후 (MVVM 정통 명명) | 이유 |
+|---|---|---|
+| `ScreenPresenter` | `ScreenViewModelFactory` | MVP 와 혼동 방지 |
+| `HUDPresenter` | `HudViewModelFactory` | 동일 |
+| `VisualEffectController` | `VisualEffectService` | 상태 보유 서비스 |
+| `GameFlowController` | `FlowStateMachine` | 실체는 FSM |
+
+부록 A 의 접미사 규칙 (`...Factory`, `...Service`, `...StateMachine`) 과 일관된다.
+
+### 12-4. 화면과 연출 분리 원칙
+- 정적 UI 표시(VM 의 필드 값) 와 시간 기반 연출(플래시/페이드/타이핑) 은 Presentation 내부에서 분리한다.
+- Flow 는 "어느 화면인가" 만 소유하고, Intro 세부 진행도, 플래시 타이머 같은 것은 Presentation(ViewState) 가 소유한다.
+
+---
+
+## 13. Audio / Persistence / Definitions / Asset 상세 설계 (Adapter 계층)
+
+### 13-1. Audio Playback (Adapter)
 구성:
-- `AudioCueResolver`
-- `AudioPlayer`
+- `AudioCueResolver` — eventType → AudioCueEntry[] 조회. **순수.**
+- `IAudioPlayer` (Port) — 오디오 재생 인터페이스
+- `PhaserAudioPlayer` / `AudioPlayerAdapter` / `NoopAudioPlayer` (Adapter 구현체)
 
 원칙:
-- Audio는 이벤트를 듣고 재생만 한다.
-- Audio가 상태 전환이나 규칙을 판단하지 않는다.
+- Audio 는 이벤트를 듣고 재생만 한다.
+- Audio 가 상태 전환이나 규칙을 판단하지 않는다.
 
-### 12-2. Persistence
+### 13-2. Persistence (Adapter)
 구성:
-- `SaveData`
-- `ISaveRepository`
-- `LocalSaveRepository`
+- `SaveData` — 저장 데이터 shape
+- `ISaveRepository` (Port)
+- `LocalSaveRepository` / `PlayerPrefsRepository` / `InMemorySaveRepository` (Adapter 구현체)
 
 원칙:
-- 현재는 highScore만 저장한다.
+- 현재는 highScore 만 저장한다.
 - 인증/랭킹은 후속 확장이다.
 
-### 12-3. Game Definitions
+### 13-3. Game Definitions (Model — 상수)
 MVP 1 기준 테이블:
 - `StageDefinitionTable`
 - `BlockDefinitionTable`
@@ -566,20 +739,54 @@ MVP 1 기준 테이블:
 - `UITextTable`
 - `AudioCueTable`
 
-### 12-4. Asset Resolution
-구성:
-- `AssetCatalog`
-- `AssetResolver`
+Definitions 는 엄밀히는 Adapter 가 아니라 **Model 의 상수 부분**. 이 절에 배치한 이유는 "고정 데이터 / 외부 리소스 / 저장 / 오디오"를 외부 경계 관점에서 한데 묶기 위함.
 
-원칙:
-- Definitions는 `resourceId`만 가진다.
-- 실제 파일 경로나 엔진 에셋 참조는 Asset Resolution만 안다.
+### 13-4. Asset Resolution / 리소스 로딩 전략 (Adapter)
+
+#### 13-4-1. 책임과 경계
+- `IAssetCatalog` (Port): `resourceId` → 실제 에셋 핸들 해석. 엔진 무관 인터페이스.
+- 구현체 (Adapter): TS 는 `PhaserAssetCatalog`, Unity 는 `ResourcesAssetCatalog` (확장 시 `AddressablesAssetCatalog`).
+- Definitions 테이블은 `resourceId` 만 가진다. 실제 파일 경로 / 엔진 핸들은 Adapter 만 안다.
+- AppContext 가 `IAssetCatalog` 1개를 생성해 필요한 곳 (AudioPlayer, View 등) 에 주입한다. 글로벌 정적 접근점 금지.
+
+#### 13-4-2. 리소스 카테고리
+- **Sprite**: 블록, 바, 공, 아이템, 스피너, 게이트, 레이저, UI 아이콘
+- **Sprite atlas**: 화면 단위 묶음 (`atlas.title`, `atlas.ingame_world`, `atlas.hud`, `atlas.intro`)
+- **Audio**: BGM (`bgm.title`), 징글 (`jingle.round_start`), SFX (`sfx.block_hit_1`)
+- **Font**: UI 텍스트용 (TS 는 웹폰트, Unity 는 TMP_FontAsset)
+- **Shader**: Unity 전용 (`Arkanoid/SpinnerUnlit` 등) — 카탈로그에 포함 + Always Included Shaders 등록
+
+#### 13-4-3. 시맨틱 ID 명명 규약
+- 형식: `<카테고리>.<용도>` (예: `block.basic`, `bgm.title`, `sfx.item_collect`)
+- 카테고리 prefix: `block.`, `ball.`, `bar.`, `item.`, `spinner.`, `gate.`, `bgm.`, `jingle.`, `sfx.`, `ui.`, `atlas.`, `font.`, `shader.`
+- 변형 표기: `_v2` 같은 임시 suffix 금지. 의미가 다른 자산은 새 ID 로 (`block.basic_cracked`).
+- 다국어 텍스트 ID 는 `UITextTable` 이 별도 관리하므로 본 카탈로그에 포함 안 됨.
+
+#### 13-4-4. 로딩 시점 정책
+- **Phase 1 (현재): 모든 자산 Eager 로딩.** Bootstrap 시점에 카탈로그가 모두 로드된 상태로 진입한다. 게임 규모가 작아 Lazy 분리 효익 < 복잡도 비용.
+- **확장 trigger**: 자산 총 크기가 모바일 메모리 부담을 만들거나, 스테이지별 배경이 다양해질 때 Lazy / Addressables 전환 검토.
+
+#### 13-4-5. 에러 정책
+- 자산 로드 실패: 1) 로그에 `resourceId` + 실제 경로 명시, 2) placeholder 자산 (분홍 사각형 / 무음 AudioClip) 으로 폴백, 3) 게임은 계속 진행.
+- 시맨틱 ID 가 카탈로그에 없을 때: `IAssetCatalog.Resolve` 가 명시적 예외 (`AssetNotFoundException`) 발생. Adapter 가 catch 하여 폴백.
+- Editor / Test 모드: 폴백 대신 즉시 fail 권장 (회귀 빠르게 잡기).
+
+#### 13-4-6. TS 구현 (Phase 1A 범위)
+- Phaser `TextureManager` / `SoundManager` 의 키를 `resourceId` 와 일치시킨다.
+- Phaser preload 단계에서 모든 자산 등록.
+- TS 는 placeholder 운용 (5-B 결정에 따라 최종 PNG 임포트 안 함). Phase 1A 에서 Port 와 placeholder adapter 만 정비한다.
+
+#### 13-4-7. Unity 구현 (Phase 6 재포팅 시점)
+- 기본: `Resources.Load<Sprite>("Sprites/" + resourceId.replace('.', '/'))` 패턴 (소규모 적합).
+- 확장 trigger 시: Addressables 전환.
+- `IAssetCatalog` 구현체는 Bootstrap 에서 1회 인스턴스화하여 AppContext 에 주입.
+- 셰이더는 Always Included Shaders 등록을 카탈로그 어댑터가 책임지지 않음 — Project Settings 와 카탈로그가 일관되도록 빌드 시 검증한다.
 
 ---
 
-## 13. 상태 전이 구조
+## 14. 상태 전이 구조
 
-### 13-1. MVP 1 상태 전이표
+### 14-1. MVP 1 상태 전이표
 
 | 현재 상태 | 조건 / 입력 | 다음 상태 | 비고 |
 |---|---|---|---|
@@ -590,22 +797,73 @@ MVP 1 기준 테이블:
 | InGame | StageCleared | Title | MVP 1에서는 임시 클리어 처리 후 Title 복귀 |
 | GameOver | RetryRequested | Title | 스페이스 입력 |
 
-### 13-2. 상태 진입 후처리 원칙
+### 14-2. 상태 진입 후처리 원칙
 - 상태 진입 사실은 `Entered...` 이벤트로 알린다.
 - BGM/징글/화면 구성은 상태 진입 이벤트에 반응한다.
 
-### 13-3. 연출 완료와 상태 전이 관계
-- `RoundIntroFinished`는 Presentation이 발행하고 Flow가 수신한다.
-- `LifeLostPresentationFinished`는 바 파괴 연출 종료 신호다.
+### 14-3. 연출 완료와 상태 전이 관계
+- `RoundIntroFinished` 는 Presentation(ViewState) 이 발행하고 Flow 가 수신한다.
+- `LifeLostPresentationFinished` 는 바 파괴 연출 종료 신호다.
 
 ---
 
-## 14. Runtime State 설계
+## 부록 A. 명명 규칙 (Naming Convention)
 
-### 14-1. RuntimeState 정의
-RuntimeState는 현재 게임 진행 중 계속 변하는 값들의 묶음이다.
+MVVM + FSM + Hexagonal 조합에서 클래스 역할이 이름에 명확히 드러나도록 접미사 규칙을 둔다.
 
-### 14-2. GameSessionState
+| 접미사 | 역할 | 상태 보유? | Pure? | 예 |
+|---|---|:---:|:---:|---|
+| `...Service` | 도메인 규칙/연출 실행 + 상태 소유 | ○ | ✕ | `VisualEffectService`, `FlowService` |
+| `...Controller` | 매 틱 시스템 조합 + 오케스트레이션 | ○ | ✕ | `GameplayController` (한 틱의 진행 순서 조정) |
+| `...StateMachine` | 명시적 FSM | ○ | ✕ | `FlowStateMachine` (현 `GameFlowController`) |
+| `...Policy` | 조건→결과 결정 | ✕ | ○ | `FlowTransitionPolicy` |
+| `...Resolver` | 입력/ID → 커맨드/데이터 변환 | ✕ | ○ | `FlowInputResolver`, `InputCommandResolver`, `AudioCueResolver` |
+| `...Factory` / `...Builder` | 불변 객체 생성 (특히 ViewModel) | ✕ | ○ | `HudViewModelFactory`, `StageRuntimeFactory` |
+| `...Handler` | 단일 동작 실행 | ✕ | ○ | `FlowLifecycleHandler`, `GameplayLifecycleHandler` |
+| `...Router` | 이벤트 분기 + 부수효과 | △ | ✕ | `FlowEventRouter` |
+| `...Director` | 시간 기반 진행 조정 (ScreenState 등 얇은 상태 소유) | ○ | ✕ | `ScreenDirector` |
+| `...Repository` | 영속성 Port/Adapter | ○ | ✕ | `ISaveRepository` / `LocalSaveRepository` |
+| `...Adapter` | 엔진 API 래핑 (MonoBehaviour / 브릿지) | △ | ✕ | `AudioPlayerAdapter`, `KeyboardTouchInputAdapter` |
+| `...Injector` | 외부 입력 주입 | ○ | ✕ | `OnScreenInputInjector` |
+| `...Relay` | 이벤트를 Injector 로 전달 | ✕ | ✕ | `OnScreenButtonRelay` |
+| `...State` | 불변 데이터 상태 record | ○ (데이터) | ○ (값 타입) | `GameFlowState`, `GameplayRuntimeState`, `ScreenState` |
+| `...ViewModel` | View 바인딩용 불변 스냅샷 | ○ (데이터) | ○ | `HudViewModel`, `TitleScreenViewModel` |
+| `...View` / `...ViewPool` | 렌더링 전용 MonoBehaviour (Unity) | △ (참조) | ✕ | `BallView`, `BlockViewPool`, `ScreenViewRoot` |
+| `...Renderer` | 렌더링 함수 (TS) | ✕ | ✕ (부수효과) | `SceneRenderer`, `renderInGameScreen` |
+
+### 금지 접미사
+- ❌ `...Manager` — Unity 에서 "신 오브젝트 싱글톤" 연상. 구체 역할로 대체 (Service / Director / Controller).
+- ❌ `...Presenter` — MVP 의 Presenter 와 혼동. MVVM 에서는 `Factory` / `Builder` 로 표기. 현재 `ScreenPresenter`, `HUDPresenter` 는 순차 리네이밍 대상.
+- ❌ `...Helper`, `...Util` — 역할이 불분명. 구체 역할로 쪼개거나 `shared/` 에 pure 함수로.
+- ❌ 접미사 없이 명사만 (예: `GameFlow`) — 상태 덩어리인지 서비스인지 구분 불가. 반드시 접미사로 역할 명시.
+
+### 판단 기준 (decision tree)
+```
+상태 소유?
+├─ ○ (mutable) → Service / Controller / Director / StateMachine / Router
+│     └─ 시간 기반 tick 중심 → Director / Controller
+│     └─ FSM → StateMachine
+│     └─ 이벤트 분기 → Router
+│     └─ 도메인 로직 실행 → Service
+└─ ✕ (pure)
+      ├─ 데이터 생성 → Factory / Builder
+      ├─ 조건→결과 결정 → Policy / Resolver
+      └─ 단발 실행 → Handler
+
+엔진 API 사용?
+├─ ○ → Adapter / View / Renderer / Injector / Relay
+└─ ✕ → (위 규칙)
+```
+
+---
+
+## 15. Runtime State 설계 (Model 의 가변 부분)
+
+### 15-1. RuntimeState 정의
+RuntimeState 는 현재 게임 진행 중 계속 변하는 값들의 묶음이다.
+**MVVM 의 Model 에 해당하며**, ViewState 는 별개로 취급한다.
+
+### 15-2. GameSessionState
 ```ts
 type GameSessionState = {
   currentStageIndex: number;
@@ -1042,74 +1300,117 @@ Unity 구현에서 **MonoBehaviour는 엔진 이벤트 수신, 씬 오브젝트 
 
 ---
 
-### 4. Unity 구현 시 계층 매핑 원칙
+### 4. Unity 구현 시 계층 매핑 원칙 (MVVM 관점)
 
-| 아키텍처 구성 | Unity 구현 형태 |
-|---|---|
-| `GameFlowController` | 순수 C# 클래스 |
-| `FlowTransitionPolicy` | 순수 C# 클래스 |
-| `GameplayController` | 순수 C# 클래스 |
-| `MovementSystem` | 순수 C# 클래스 |
-| `CollisionService` | 순수 C# 클래스 |
-| `CollisionResolutionService` | 순수 C# 클래스 |
-| `StageRuleService` | 순수 C# 클래스 |
-| `KeyboardInputSource` | MonoBehaviour 또는 Input Adapter |
-| `SceneRenderer` | MonoBehaviour + View/Binder 계층 |
-| `AudioPlayer` | MonoBehaviour 또는 AudioSource Adapter |
-| `LocalSaveRepository` | PlayerPrefs / File Adapter 구현체 |
-| `Definition` 데이터 | ScriptableObject 또는 JSON 로드 계층 |
-| `RuntimeState` | 순수 C# 상태 객체 |
+| 아키텍처 구성 | MVVM 계층 | Unity 구현 형태 |
+|---|---|---|
+| `GameFlowState` | Model (State) | 불변 C# record |
+| `GameFlowController` / `FlowStateMachine` | Model (Service) | 순수 C# 클래스 |
+| `FlowTransitionPolicy` / `FlowInputResolver` | Model (Policy/Resolver) | 순수 C# 정적 함수 |
+| `GameplayRuntimeState` | Model (State) | 불변 C# record |
+| `GameplayController` | Model (Controller) | 순수 C# 클래스 |
+| `MovementSystem` / `CollisionService` / `StageRuleService` | Model (Service) | 순수 C# 정적 함수 |
+| `ScreenState` | ViewState | 불변 C# record |
+| `ScreenDirector` | ViewModel 계층 (Service) | 순수 C# 클래스 |
+| `VisualEffectService` (구 `VisualEffectController`) | ViewModel 계층 (Service) | 순수 C# 클래스 |
+| `HudViewModel` / `TitleScreenViewModel` 등 6개 | ViewModel | 불변 C# record |
+| `HudViewModelFactory` / `ScreenViewModelFactory` (구 `HUDPresenter` / `ScreenPresenter`) | ViewModel 계층 (Factory) | 순수 C# 정적 함수 |
+| `ScreenViewRoot`, `InGameView`, `BallView`, `BarView`, `BlockViewPool` 등 | View | MonoBehaviour |
+| `KeyboardTouchInputAdapter` / `OnScreenInputInjector` | Adapter (Input Port) | MonoBehaviour |
+| `AudioPlayerAdapter` | Adapter (Audio Port) | MonoBehaviour |
+| `ISaveRepository` / `PlayerPrefsRepository` | Adapter (Persistence Port) | MonoBehaviour 불필요 (pure 클래스) |
+| `Definition` 테이블 | Model (상수) | `static readonly` 정적 클래스 (또는 ScriptableObject 마이그레이션) |
+| `AppContext` | Composition Root | 순수 C# (인스턴스 1개) |
+| `GameBootstrap` | Runner | MonoBehaviour (진입점) |
 
 ---
 
-### 5. 컴포지션 기반 설계 원칙
-Unity 오브젝트는 상속 중심으로 비대하게 만들지 않고, **역할별 컴포넌트 조합**으로 구성한다.
+### 5. 컴포지션 기반 설계 원칙 (View 계층)
+Unity MonoBehaviour 는 상속 중심으로 비대하게 만들지 않고, **역할별 컴포넌트 조합**으로 구성한다.
 
-예:
-- `BallView`
-- `BlockView`
-- `BarView`
-- `HudView`
-- `ScreenViewRoot`
-- `AudioBridge`
-- `GameplayRunner`
+예 (View 계층):
+- `ScreenViewRoot` — 화면 전환 coordinator
+- `InGameView` — InGame 하위 View 를 묶는 composite
+- `BallView` / `BarView` / `HudView`
+- `BlockViewPool` / `ItemDropViewPool` / `SpinnerViewPool` / `GateViewPool` / `LaserShotViewPool` — 오브젝트 풀 관리
+- 각 `*ScreenView` (Title/IntroStory/RoundIntro/GameOver/GameClear)
 
-중요한 원칙은, 이 컴포넌트들이 **게임 규칙을 직접 계산하지 않고**,  
-순수 로직 계층의 상태와 결과를 **반영하거나 전달하는 역할**만 맡는다는 점이다.
+이 컴포넌트들은 **ViewModel 만 받아 그린다** — 게임 규칙을 직접 계산하지 않고, Model/ViewModel 의 값을 SpriteRenderer / Text / Transform 에 반영만 한다.
+
+싱글톤 금지, "Manager" 명명 금지. 인스턴스는 `GameBootstrap` 이 Composition Root 로 조립하고 씬에 배치한다.
 
 ---
 
 ### 6. Prefab / RuntimeState 분리 원칙
-Prefab과 SceneObject는 **표현용 실체**이고,  
-실제 게임 상태는 `RuntimeState`가 소유한다.
+Prefab 과 SceneObject 는 **표현용 실체(View)** 이고,  
+실제 게임 상태는 `RuntimeState` 가 소유한다 (Model).
 
 즉:
-- Prefab = 보이는 것
-- RuntimeState = 실제 현재 값
-- Binder / Renderer = RuntimeState를 Prefab에 반영하는 계층
+- Prefab = 보이는 것 (View 재료)
+- RuntimeState = 실제 현재 값 (Model)
+- ViewModel = 한 프레임의 화면용 스냅샷 (Model → View 중간 계약)
+- View MonoBehaviour = ViewModel 을 받아 Prefab/SceneObject 에 반영
 
-이 원칙을 지켜야 MonoBehaviour가 상태 저장소가 되는 것을 막을 수 있다.
+이 원칙을 지켜야 MonoBehaviour 가 상태 저장소가 되는 것을 막을 수 있다.
+MonoBehaviour 에는 **프레임별 렌더링 상태 캐시** (예: 오브젝트 풀 Dictionary) 만 보유하고, **게임 규칙 상태는 절대 보유하지 않는다**.
 
 ---
 
-### 7. Adapter / Binder 개념
-Unity 포팅 시 다음 역할을 별도 개념으로 둔다.
+### 7. Adapter / Runner / View 개념
 
-- **Runner**: Unity 수명주기에서 순수 로직 계층을 호출
-- **Adapter**: Unity 입력, 오디오, 저장 API를 순수 계층 인터페이스에 연결
-- **Binder**: RuntimeState 결과를 SceneObject / UI에 반영
-- **View**: 시각 오브젝트와 참조 보관
+| 역할 | 설명 | MVVM 위치 |
+|---|---|---|
+| **Runner** | Unity 수명주기(Update)에서 순수 로직 계층의 Tick 을 호출 | Composition Root (App) |
+| **Adapter** | Unity 입력, 오디오, 저장 API 를 Port 인터페이스에 연결 | Hexagonal 경계 |
+| **View** | ViewModel 을 SceneObject / UGUI 에 반영 | View 계층 |
+| **Injector / Relay** | 온스크린 버튼 같은 엔진 이벤트를 Port 로 주입 | Adapter 의 보조 |
 
-이 구조를 통해 도메인 로직은 Unity API에 직접 의존하지 않게 유지한다.
+"Binder" 라는 용어는 본 문서에서 쓰지 않는다 — MVVM 에서 View 가 ViewModel 을 매 프레임 pull 하는 방식이 곧 Binder 역할이므로, 별도 개념으로 분리하지 않는다.
 
 ---
 
 ### 8. 최종 원칙
-TypeScript 구현과 Unity 구현 모두에서 동일하게 유지해야 하는 핵심은 다음과 같다.
 
-- 게임 규칙은 엔진 밖의 순수 로직 계층에 둔다.
-- 엔진 계층은 입력, 렌더링, 오디오, 저장 연결만 담당한다.
-- 상태는 RuntimeState가 소유하고, SceneObject는 이를 표현만 한다.
-- MonoBehaviour는 얇게 유지하고, 비대한 GameManager로 키우지 않는다.
+TypeScript 구현과 Unity 구현 모두에서 동일하게 유지해야 하는 핵심:
 
-**본 프로젝트는 Unity 포팅 시에도 MonoBehaviour 중심 설계가 아니라, 순수 로직 계층 + MonoBehaviour 어댑터 계층의 컴포지션 구조를 유지하는 것을 원칙으로 한다.**
+- 게임 규칙은 엔진 밖의 **Model 계층** (순수 로직) 에 둔다.
+- **ViewModel 계층** 은 Model 을 받아 화면용 불변 스냅샷으로 변환한다.
+- 엔진 계층(**View + Adapter**) 은 입력, 렌더링, 오디오, 저장 연결만 담당한다.
+- 상태는 RuntimeState (Model) 와 ViewState (ViewModel 측) 가 소유하고, SceneObject 는 이를 표현만 한다.
+- MonoBehaviour 는 얇게 유지하고, 비대한 `GameManager` / 싱글톤으로 키우지 않는다.
+- 단일 조립 지점(`AppContext` / `createAppContext`) 에서만 의존성 주입을 한다.
+
+**본 프로젝트는 MVVM + FSM + Hexagonal 의 조합 구조를 TS 와 Unity 양쪽에서 동일하게 유지한다. 엔진 포팅 시 변경되는 것은 오직 View 계층과 Adapter 계층뿐이다.**
+
+---
+
+### 9. 싱글톤 / 매니저 금지 규칙의 적용 조건과 재검토 trigger
+
+§8 의 "비대한 `GameManager` / 싱글톤으로 키우지 않는다" 는 절대 금기가 아니라 **현 프로젝트의 적용 전제 하에서의 결론**이다. 후일 전제가 깨지면 규칙도 재검토 대상이다.
+
+#### 적용 전제 (현재)
+- 단일 씬 구성
+- 의존성 그래프 깊이 ≤ 3 (`GameBootstrap → AppContext → 서비스 → 뷰` 정도)
+- 외부 플러그인 / 모드 시스템 없음
+- 동적 프리팹 로드 없음
+
+#### 재검토 trigger (이 중 하나라도 발생 시)
+- 씬이 2개 이상으로 늘어남 (예: 부트 씬 + 게임 씬, 메뉴 씬 + 게임 씬)
+- 동적 로드된 프리팹이 서비스 주입을 필요로 하는데 SerializeField + Bootstrap 와이어링이 한계
+- 외부 플러그인 / 모드 시스템 도입
+- 의존성 그래프 깊이 4단계 초과
+
+#### trigger 시 검토 옵션 (우선순위 순)
+1. **구조 재정비** — 서비스 통합, 그래프 평탄화. 보통 첫 trigger 에선 이게 답.
+2. **DI 컨테이너 도입** — VContainer 권장 (가벼움). Zenject 는 과함.
+3. **경계가 명확한 ServiceLocator** — 마지막 수단. 도입 시 예외 주석으로 적용 범위와 도입 사유 명시 필수.
+
+#### 금지 대상이 *아닌* 것 (혼동 방지)
+- `static readonly` 데이터 테이블 (`BlockDefinitionTable` 등) — 컴파일타임 상수, 싱글톤 안티패턴 아님.
+- 단일 Composition Root (`AppContext`) — 글로벌 정적 접근점이 없으므로 싱글톤 아님.
+- Engine API 래퍼 (`Camera.main` 어댑터 등) — 엔진 자체가 싱글톤이라 불가피.
+
+#### 왜 이 규칙이 적용되는가
+- 매니저 / 싱글톤은 *글로벌 접근점*이 본질이고, 글로벌 접근점은 의존성을 숨겨 테스트와 유지보수를 어렵게 한다.
+- 본 프로젝트는 위 적용 전제 하에서 생성자 주입만으로 충분하므로, 싱글톤 비용을 감수할 이유가 없다.
+- 학습 목적상, 싱글톤이라는 *쉬운 도피처*를 막는 것이 의존성 그래프를 직시하는 훈련에 도움이 된다.
