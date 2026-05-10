@@ -9,8 +9,15 @@ model: opus
 ## 프로젝트 맥락
 - 2D 알카노이드. TypeScript 선구현 → Unity(C#) 포팅의 2단계 프로젝트.
 - 개발자는 퀘스트/레벨 디자이너 출신. "Unity MonoBehaviour로 옮기기 쉬움"이 최우선 원칙.
-- Stack: TS strict + Vite + Phaser 3 (PixiJS도 검토 대상, 미확정).
-- 초기 상태: 소스 코드 없음. docs/*.md만 존재.
+- Stack: TS strict + Vite + Phaser 3 (확정).
+- **현재 상태 (2026-05-10):** TS MVP 1~3 완료 + 출시 폴리싱 단계 진행 중. Unity 1차 포팅도 별도로 완료. 1달 내 Google Play 출시 목표 → TS 폴리싱 완료 후 Unity 재포팅.
+- 핵심 개념 (현 시점):
+  - **playfieldLayout** (`src/gameplay/systems/playfieldLayout.ts`): 플레이필드 좌표 단일 진실 소스. 게임 런타임 + 편집기 양쪽 import.
+  - **multi-camera**: 메인 카메라 (게임 월드, zoom 1.5) + UI 카메라 (HUD/Title/Pause, zoom 1). scrollFactor 로 자동 분류.
+  - **Mascot 시스템**: 5종 캐릭터 + 골드 통화 (스테이지 점수에서 적립) + 잠금 해제 + Title 캐러셀 + InGame 응원.
+  - **Pause 메뉴**: ESC → 4 버튼 (배경음/효과음/나가기/돌아가기).
+  - **Stage Editor** (`src/editor/`): 블록/스피너 위치 편집기 — view-engineer 담당.
+  - **출시 가정**: 학습이 메타 목표지만, 결정은 실제 출시 trade-off 기준으로.
 
 ## 모든 작업 시작 전 필수 행동
 1. `docs/architecture.md`를 참조한다 (전체 기준서).
@@ -44,9 +51,9 @@ model: opus
 - 레벨 데이터는 JSON 외부화. 하드코딩 금지.
 
 ## 위임 대상 sub-agents
-- `core-logic-engineer` (sonnet): 엔진 독립 TS 레이어. 타입/RuntimeState/Definition 테이블/이벤트/Flow 상태기계/Gameplay 시스템(Movement, Collision, StageRule)/Persistence 인터페이스.
-- `view-engineer` (sonnet): 엔진 의존 어댑터 레이어. Phaser 또는 PixiJS 기반 SceneRenderer/HUD/VisualEffect/AudioPlayer/KeyboardInputSource/LocalSaveRepository 구현.
-- `tester` (sonnet): 단위/통합 테스트. MVP 문서의 테스트 절 기준. Vitest 사용.
+- `core-logic-engineer` (sonnet): 엔진 독립 TS 레이어. 타입/RuntimeState/Definition 테이블 (**MascotTable, DifficultyConfigTable 포함**)/이벤트/Flow 상태기계/Gameplay 시스템(Movement, Collision, StageRule)/Persistence 인터페이스/IAudioPlayer 인터페이스/`playfieldLayout` 단일 소스.
+- `view-engineer` (sonnet): 엔진 의존 어댑터 레이어. Phaser 기반 SceneRenderer/HUD/VisualEffect/PauseOverlay/AudioPlayer 구현/KeyboardInputSource/LocalSaveRepository 구현/멀티카메라 GameScene/**`src/editor/` Stage Editor**.
+- `tester` (sonnet): 단위/통합 테스트. MVP 문서의 테스트 절 기준. Vitest 사용. SaveData 변경 시 mock 갱신 필수.
 
 위임 시 원칙:
 - `core-logic-engineer`에 엔진 API 사용을 허용하지 않는다.

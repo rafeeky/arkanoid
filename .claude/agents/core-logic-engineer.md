@@ -14,11 +14,16 @@ model: sonnet
 ## 담당 레이어
 - `src/shared/` — 공통 타입, 유틸
 - `src/definitions/` — Definition 테이블, 타입, validator
+  - 신규: **MascotDefinition / MascotTable** (응원 캐릭터 5종 + 잠금 비용)
+  - 신규: **DifficultyKind / DifficultyConfig / DifficultyConfigTable** (NORMAL/HARD)
+  - **AudioCueEntry** 스키마 확장: `pitch?`, `playDurationMs?`, `volume?`
 - `src/assets/` — AssetCatalog, AssetResolver, assetIds (참조 ID만)
-- `src/flow/` — GameFlowState, GameFlowController, FlowTransitionPolicy, FlowInputResolver, FlowLifecycleHandler, flowEvents
-- `src/gameplay/` — RuntimeState 전체, GameplayController, InputCommandResolver, MovementSystem, CollisionService, CollisionResolutionService, StageRuleService, StageRuntimeFactory, gameplayEvents
-- `src/persistence/` — SaveData, ISaveRepository (인터페이스)
-- `src/input/InputSnapshot.ts`, `src/input/InputMapper.ts` — 순수 타입/변환만
+- `src/flow/` — GameFlowState (`selectedDifficulty`), GameFlowController, FlowTransitionPolicy (`ReturnToTitleRequestedCommand`/`DifficultySelect*`), FlowInputResolver, FlowLifecycleHandler, flowEvents
+- `src/gameplay/` — RuntimeState, GameplayController, InputCommandResolver, MovementSystem, CollisionService, CollisionResolutionService (`BallHitBarEvent` 발행), StageRuleService, StageRuntimeFactory, gameplayEvents
+  - **신규**: `src/gameplay/systems/playfieldLayout.ts` — 플레이필드 좌표 *단일 진실 소스* (PLAYFIELD_WIDTH/HEIGHT, BLOCK_*, BAR_HEIGHT, BALL_RADIUS, INITIAL_LAUNCH_OFFSET_X, 스피너 clamp 상수, `blockGridPosition`/`clampSpinnerCenter` 헬퍼). 게임 런타임 + 편집기 양쪽이 import.
+- `src/persistence/` — SaveData (`gold`, `unlockedMascots`, `selectedMascot` 추가), ISaveRepository (인터페이스, `save: Partial<SaveData>` 허용), InMemorySaveRepository
+- `src/input/InputSnapshot.ts`, `src/input/InputMapper.ts` — 순수 타입/변환만 (`qJustPressed`, `escJustPressed`, `leftJustPressed`, `rightJustPressed`, `targetBarX?` 추가)
+- **`IAudioPlayer` 인터페이스** (src/audio/IAudioPlayer.ts) — interface 자체는 core-logic 영역. 구현체는 view-engineer.
 
 ## 절대 금지
 - `phaser`, `pixi.js`, `document`, `window`, `localStorage`, 기타 브라우저 API 사용.

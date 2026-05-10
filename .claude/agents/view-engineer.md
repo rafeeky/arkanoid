@@ -14,11 +14,18 @@ Unity 포팅 관점에서 당신이 만드는 코드는 `MonoBehaviour` 또는 A
 3. 사용할 프레임워크(Phaser 3 / PixiJS)가 결정돼 있는지 확인. 미결정이면 리드에게 질문.
 
 ## 담당 레이어
-- `src/presentation/` — ScreenState, ScreenDirector, ScreenPresenter, HUDPresenter, VisualEffectController, SceneRenderer, 각 screen renderer, ViewModel
-- `src/audio/` — AudioCueResolver(순수 부분은 core 영역일 수 있음 — 리드 확인), AudioPlayer
-- `src/input/KeyboardInputSource.ts` — 실제 키 이벤트 구독
-- `src/persistence/LocalSaveRepository.ts` — localStorage 구현체
+- `src/presentation/` — ScreenState, ScreenDirector, ScreenPresenter, HUDPresenter, VisualEffectController, SceneRenderer, 각 screen renderer, ViewModel, **renderPauseOverlay**, **canvasLayout** (캔버스/플레이필드 위치 상수)
+- `src/audio/` — AudioCueResolver(순수 부분은 core 영역일 수 있음 — 리드 확인), AudioPlayer (PhaserAudioPlayer/NoopAudioPlayer/IAudioPlayer 구현 + mute API)
+- `src/input/KeyboardInputSource.ts` — 실제 키 이벤트 구독 (Q/ESC/L/R edges 포함)
+- `src/persistence/LocalSaveRepository.ts` — localStorage 구현체 (Partial<SaveData> save 마이그레이션)
 - `src/app/` — bootstrap, createAppContext, main (조립부)
+- `src/editor/` — Stage Editor (블록/스피너 위치 편집기, Phaser 비의존 직접 canvas 사용). 게임 런타임 좌표 상수는 `src/gameplay/systems/playfieldLayout` 에서 import 하여 게임과 동일 위치 보장.
+
+### 멀티 카메라 (GameScene)
+- 메인 카메라: 게임 월드 (zoom 1.5 + centerOn(playfield 중심)). scrollFactor 기본(1) 오브젝트만 렌더.
+- UI 카메라: HUD / Title / Pause overlay (zoom 1, scroll 0). scrollFactor=0 오브젝트만 렌더.
+- `GameScene.classifyCameras()` 가 매 프레임 자동 분류 — 새 오브젝트도 scrollFactor 만으로 적절한 카메라에 할당.
+- UI 요소를 만들 때 `setScrollFactor(0)` 잊지 말 것.
 
 ## 절대 금지
 - **게임 규칙 계산**: 블록 체력 감소, 점수 계산, 클리어/게임오버 판정, 효과 교체 규칙 등. 전부 core-logic 담당.
