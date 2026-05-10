@@ -9,8 +9,9 @@
  * Unity 매핑: Resources/Addressables 경로 매핑 ScriptableObject에 해당.
  */
 export const AssetCatalog: Readonly<Record<string, string>> = {
-  // BGM
-  bgm_title: 'assets/sfx/bgm_title.wav',
+  // BGM — 신나는 트랙 (bensound.com — bensound-funkyelement, MP3).
+  // 출시 시 attribution 필요 (Bensound 라이선스 조건). 영구 사용은 Bensound Pro 또는 다른 CC0 트랙 권장.
+  bgm_title: 'assets/sfx/bgm_title.mp3',
 
   // 징글
   jingle_round_start: 'assets/sfx/jingle_round_start.wav',

@@ -17,6 +17,7 @@ import {
   BLOCK_COLORS,
   SPINNER_COLORS,
 } from './editorTypes';
+import { clampSpinnerCenter, CIRCLE_RADIUS } from '../gameplay/systems/playfieldLayout';
 
 export class EditorCanvas {
   private readonly canvas: HTMLCanvasElement;
@@ -190,6 +191,27 @@ export class EditorCanvas {
     for (const spinner of spinners) {
       const color = SPINNER_COLORS[spinner.definitionId] ?? '#00ffaa';
       const isSelected = spinner.id === selectedSpinnerId;
+
+      // 게임 런타임이 적용할 원 궤도 중심 미리보기 — 입력 위치와 다르면 ghost circle + 점선.
+      const { centerX: clampedX, centerY: clampedY } = clampSpinnerCenter(spinner.x, spinner.y);
+      const isClamped = clampedX !== spinner.x || clampedY !== spinner.y;
+      if (isClamped) {
+        ctx.save();
+        ctx.strokeStyle = '#ff8800';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(spinner.x, spinner.y);
+        ctx.lineTo(clampedX, clampedY);
+        ctx.stroke();
+        // ghost circle at clamped position (게임이 실제 그릴 궤도 중심)
+        ctx.setLineDash([]);
+        ctx.strokeStyle = '#ff8800aa';
+        ctx.beginPath();
+        ctx.arc(clampedX, clampedY, CIRCLE_RADIUS, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
 
       ctx.save();
       ctx.translate(spinner.x, spinner.y);

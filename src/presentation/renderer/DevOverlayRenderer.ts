@@ -147,6 +147,13 @@ export class DevOverlayRenderer {
       return;
     }
 
+    // InGame / RoundIntro 외 화면(Title/IntroStory/GameOver/GameClear)에서는
+    // 블록 라벨/공 trail/HUD 등을 모두 숨긴다 (placeholder gameplayState 가 화면에 노출되는 것 방지).
+    if (flowState.kind !== 'inGame' && flowState.kind !== 'roundIntro') {
+      this.hide();
+      return;
+    }
+
     // 1. 반투명 배경
     this.dimOverlay.setVisible(true);
 

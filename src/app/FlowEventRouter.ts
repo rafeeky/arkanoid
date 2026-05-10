@@ -9,6 +9,7 @@ import type { ISaveRepository } from '../persistence/ISaveRepository';
 import type { IAudioPlayer } from '../audio/IAudioPlayer';
 import type { GameplayConfig } from '../definitions/types/GameplayConfig';
 import type { StageDefinition } from '../definitions/types/StageDefinition';
+import { getDifficultyConfig } from '../definitions/tables/DifficultyConfigTable';
 import type { DevContext } from './dev/DevContext';
 import type { CollisionLogEntry } from './dev/CollisionLog';
 
@@ -34,6 +35,7 @@ export class FlowEventRouter {
   private readonly saveRepository: ISaveRepository;
   private readonly config: GameplayConfig;
   private readonly stageDefinitions: readonly StageDefinition[];
+  private readonly addGoldFromScore: (score: number) => void;
   private readonly devContext: DevContext | undefined;
 
   constructor(deps: {
@@ -45,6 +47,8 @@ export class FlowEventRouter {
     saveRepository: ISaveRepository;
     config: GameplayConfig;
     stageDefinitions: readonly StageDefinition[];
+    /** 미지정 시 no-op (테스트 호환). */
+    addGoldFromScore?: (score: number) => void;
     devContext?: DevContext;
   }) {
     this.getAudioPlayer = deps.getAudioPlayer;
@@ -55,6 +59,7 @@ export class FlowEventRouter {
     this.saveRepository = deps.saveRepository;
     this.config = deps.config;
     this.stageDefinitions = deps.stageDefinitions;
+    this.addGoldFromScore = deps.addGoldFromScore ?? ((_: number) => { /* no-op */ });
     this.devContext = deps.devContext;
   }
 
@@ -89,6 +94,12 @@ export class FlowEventRouter {
 
   private routeFlowAudio(event: FlowEvent): void {
     const audioPlayer = this.getAudioPlayer();
+
+    // Phase 2: InGame 진입 시 RoundIntro 짧은 BGM/jingle 정지 (조작 가능 시점=무음).
+    if (event.type === 'EnteredInGame') {
+      audioPlayer.stop('cue_round_intro_jingle');
+    }
+
     if (event.type === 'EnteredRoundIntro' && event.from === 'introStory') {
       // jingle(round_start) + UiConfirm 모두 재생
       const roundCues = this.audioCueResolver.resolveCueIds('EnteredRoundIntro');
@@ -101,9 +112,13 @@ export class FlowEventRouter {
       }
     } else if (
       event.type === 'EnteredTitle' &&
-      (event.from === 'gameOver' || event.from === 'gameClear')
+      (event.from === 'gameOver' ||
+        event.from === 'gameClear' ||
+        event.from === 'introStory' ||
+        event.from === 'roundIntro' ||
+        event.from === 'inGame')
     ) {
-      // UiConfirm SFX + 타이틀 BGM 재개
+      // UiConfirm SFX + 타이틀 BGM 재개 (Q→Title 묶음 F 경로 포함).
       const confirmCues = this.audioCueResolver.resolveCueIds('UiConfirm');
       for (const cue of confirmCues) {
         audioPlayer.play(cue);
@@ -142,11 +157,19 @@ export class FlowEventRouter {
   }
 
   private handleEnteredRoundIntro(from: string): void {
+    // 묶음 E: 현재 선택된 난이도 설정 조회
+    const difficulty = getDifficultyConfig(this.flowController.getState().selectedDifficulty);
+
     if (from === 'introStory') {
       // 인트로 종료 후 첫 스테이지 시작: Stage 0 완전 초기화, 현재 highScore 유지
       const currentHighScore = this.gameplayController.getState().session.highScore;
       const stage0 = this.stageDefinitions[0]!;
-      const newState = this.lifecycleHandler.initializeStage(stage0, this.config, this.config.initialLives);
+      const newState = this.lifecycleHandler.initializeStage(
+        stage0,
+        this.config,
+        this.config.initialLives,
+        difficulty,
+      );
       this.gameplayController.setState({
         ...newState,
         session: { ...newState.session, highScore: currentHighScore, currentStageIndex: 0 },
@@ -169,6 +192,7 @@ export class FlowEventRouter {
           currentGameplayState,
           nextStage,
           this.config,
+          difficulty,
         );
         this.gameplayController.setState({
           ...nextState,
@@ -190,6 +214,7 @@ export class FlowEventRouter {
 
   private handleEnteredResult(): void {
     // 저장 시점: GameOver / GameClear 진입 시 highScore 갱신 후 저장 (fire-and-forget)
+    // 추가: 이번 세션 score 를 gold 로 적립 (addGoldFromScore — AppContext 가 full SaveData 별도 저장).
     const session = this.gameplayController.getState().session;
     const newHighScore = Math.max(session.highScore, session.score);
     if (newHighScore > session.highScore) {
@@ -199,9 +224,12 @@ export class FlowEventRouter {
         session: { ...updatedState.session, highScore: newHighScore },
       });
     }
+    // highScore 만 partial save (다른 필드 보존). LocalSaveRepository 는 머지.
     this.saveRepository.save({ highScore: newHighScore }).catch((err: unknown) => {
       console.warn('[FlowEventRouter] saveRepository.save 실패:', err);
     });
+    // Gold 적립 — AppContext 가 mascot 상태 포함 full save (idempotent).
+    this.addGoldFromScore(session.score);
   }
 
   // ---------------------------------------------------------------------------

@@ -10,17 +10,25 @@
         padding: 0;
         box-sizing: border-box;
       }
+      html, body {
+        /* 캔버스 / letterbox / browser viewport 모두 동일색. */
+        background: #0a0a0a !important;
+      }
       body {
-        background: #000;
         display: flex;
         justify-content: center;
         align-items: center;
         min-height: 100vh;
         overflow: hidden;
       }
+      /* FHD 16:9 베이스 (1080×1920) — Phaser scale=FIT 가 캔버스를 맞춤.
+         실기기 19.5:9/20:9 등은 위/아래 letterbox 로 표시됨. */
       #app {
-        width: 960px;
-        height: 720px;
+        width: 100vw;
+        height: 100vh;
+        max-width: 540px;       /* 데스크톱에서 너비 제한 (모바일 미리보기) */
+        aspect-ratio: 1080 / 1920;
+        max-height: 100vh;
       }
     </style>
   </head>

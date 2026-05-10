@@ -25,6 +25,7 @@ import { IntroSequenceTable } from '../definitions/tables/IntroSequenceTable';
 import { SpinnerDefinitionTable } from '../definitions/tables/SpinnerDefinitionTable';
 import type { DevContext } from './dev/DevContext';
 import { FlowEventRouter } from './FlowEventRouter';
+import { MascotTable } from '../definitions/tables/MascotTable';
 
 /**
  * createAppContext 옵션.
@@ -74,6 +75,19 @@ export type AppContext = {
   skipIntroSequence(): void;
   /** AudioPlayer를 교체한다. GameScene.create 후 PhaserAudioPlayer 주입에 사용. */
   setAudioPlayer(player: IAudioPlayer): void;
+  /** BGM/SFX 음소거 토글 — Pause 메뉴에서 사용. */
+  setBgmMuted(muted: boolean): void;
+  setSfxMuted(muted: boolean): void;
+  isBgmMuted(): boolean;
+  isSfxMuted(): boolean;
+  /** 마스코트 / 골드 시스템 — Title 화면 캐러셀 + InGame 응원 표시. */
+  getGold(): number;
+  getUnlockedMascots(): readonly string[];
+  getSelectedMascot(): string;
+  /** 마스코트 선택 변경. 잠금 해제된 캐릭터만 가능 (그 외 false 반환). 즉시 save. */
+  selectMascot(id: string): boolean;
+  /** 잠금 해제 시도. 골드 충분하면 차감 + 해제 + save, true 반환. 부족하면 false. */
+  tryUnlockMascot(id: string): boolean;
   /** 테스트 전용: GameplayController 상태를 직접 교체한다. 프로덕션 코드에서 호출 금지. */
   _setGameplayState(state: GameplayRuntimeState): void;
 };
@@ -102,6 +116,15 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
   // 초기 highScore 로드: 생성 시점에 await하여 Title 화면 진입 전 세팅 보장
   const initialSaveData = await saveRepository.load();
   const initialHighScore = initialSaveData.highScore;
+
+  // 마스코트 / 골드 영속 상태. 변경 시 saveRepository.save() 동기화.
+  let mascotGold = initialSaveData.gold;
+  let mascotUnlocked: readonly string[] = initialSaveData.unlockedMascots;
+  let mascotSelected = initialSaveData.selectedMascot;
+  // 신규 마스코트 추가 시 selectedMascot 가 unlocked 에 없을 수 있음 — 방어.
+  if (!mascotUnlocked.includes(mascotSelected) && mascotUnlocked.length > 0) {
+    mascotSelected = mascotUnlocked[0]!;
+  }
 
   // GameplayController 는 초기 상태가 필요하다.
   // Title 진입 시점에는 아직 게임이 시작되지 않았으므로,
@@ -134,6 +157,7 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
 
   // FlowEventRouter: Flow/Gameplay 이벤트 라우팅 책임을 단일 클래스로 분리
   // audioPlayer는 교체 가능이므로 getter 콜백으로 전달
+  // addGoldFromScore: result 화면 진입 시 호출되어 score → gold 적립
   const flowEventRouter = new FlowEventRouter({
     getAudioPlayer: () => audioPlayer,
     audioCueResolver,
@@ -143,6 +167,7 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     saveRepository,
     config,
     stageDefinitions: STAGE_DEFINITIONS,
+    addGoldFromScore: (score: number) => addGoldFromScore(score),
     ...(devContext !== undefined ? { devContext } : {}),
   });
 
@@ -222,6 +247,57 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     audioPlayer = player;
   }
 
+  function setBgmMuted(muted: boolean): void { audioPlayer.setBgmMuted(muted); }
+  function setSfxMuted(muted: boolean): void { audioPlayer.setSfxMuted(muted); }
+  function isBgmMuted(): boolean { return audioPlayer.isBgmMuted(); }
+  function isSfxMuted(): boolean { return audioPlayer.isSfxMuted(); }
+
+  // 마스코트 / 골드 API.
+  function getGold(): number { return mascotGold; }
+  function getUnlockedMascots(): readonly string[] { return mascotUnlocked; }
+  function getSelectedMascot(): string { return mascotSelected; }
+
+  function persistMascotState(): void {
+    // gameplayState.session.highScore 가 최신이라 그대로 같이 저장.
+    const currentHighScore = gameplayController.getState().session.highScore;
+    void saveRepository.save({
+      highScore: currentHighScore,
+      gold: mascotGold,
+      unlockedMascots: mascotUnlocked,
+      selectedMascot: mascotSelected,
+    }).catch((err: unknown) => {
+      console.warn('[AppContext] mascot state save 실패:', err);
+    });
+  }
+
+  function selectMascot(id: string): boolean {
+    if (!mascotUnlocked.includes(id)) return false;
+    mascotSelected = id;
+    persistMascotState();
+    return true;
+  }
+
+  function tryUnlockMascot(id: string): boolean {
+    if (mascotUnlocked.includes(id)) return true; // 이미 해제됨
+    const def = MascotTable.find((m) => m.id === id);
+    if (!def) return false;
+    if (mascotGold < def.unlockCost) return false;
+    mascotGold -= def.unlockCost;
+    mascotUnlocked = [...mascotUnlocked, id];
+    persistMascotState();
+    return true;
+  }
+
+  /**
+   * Gold 적립 — FlowEventRouter 가 result 진입 시 호출.
+   * AppContext 외부에서 gold 를 변경할 수 있는 유일한 경로.
+   * score=0 이라도 (highScore 동기화 위해) 항상 save 호출.
+   */
+  function addGoldFromScore(score: number): void {
+    if (score > 0) mascotGold += score;
+    persistMascotState();
+  }
+
   function _setGameplayState(state: GameplayRuntimeState): void {
     gameplayController.setState(state);
   }
@@ -238,6 +314,15 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     handlePresentationEvent,
     getVisualEffectController,
     setAudioPlayer,
+    setBgmMuted,
+    setSfxMuted,
+    isBgmMuted,
+    isSfxMuted,
+    getGold,
+    getUnlockedMascots,
+    getSelectedMascot,
+    selectMascot,
+    tryUnlockMascot,
     _setGameplayState,
     skipIntroSequence,
   };

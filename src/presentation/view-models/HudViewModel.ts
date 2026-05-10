@@ -1,5 +1,7 @@
 export type HudViewModel = {
   score: number;
+  /** Phase 4: HIGH SCORE 중앙상단 표시용. */
+  highScore: number;
   lives: number;
   round: number;
   /** 현재 활성 바 효과. */

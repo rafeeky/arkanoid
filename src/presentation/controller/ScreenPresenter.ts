@@ -1,6 +1,7 @@
 import type { GameSessionState } from '../../gameplay/state/GameSessionState';
 import type { UITextEntry } from '../../definitions/types/UITextEntry';
 import type { IntroSequenceEntry } from '../../definitions/types/IntroSequenceEntry';
+import type { DifficultyKind } from '../../definitions/types/DifficultyKind';
 import type { IntroPhase } from '../state/ScreenState';
 import type { TitleScreenViewModel } from '../view-models/TitleScreenViewModel';
 import type { RoundIntroViewModel } from '../view-models/RoundIntroViewModel';
@@ -22,11 +23,13 @@ export class ScreenPresenter {
   buildTitleViewModel(
     session: Readonly<GameSessionState>,
     uiTexts: readonly UITextEntry[],
+    selectedDifficulty: DifficultyKind = 'normal',
   ): TitleScreenViewModel {
     const startText = this.lookupText(uiTexts, 'txt_title_start');
     return {
       startText,
       highScore: session.highScore,
+      selectedDifficulty,
     };
   }
 

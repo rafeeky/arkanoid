@@ -20,4 +20,16 @@ export class NoopAudioPlayer implements IAudioPlayer {
   stopAll(): void {
     // 의도적으로 아무 동작 없음
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  stop(_cueId: string): void {
+    // 의도적으로 아무 동작 없음
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  setBgmMuted(_muted: boolean): void { /* noop */ }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  setSfxMuted(_muted: boolean): void { /* noop */ }
+  isBgmMuted(): boolean { return false; }
+  isSfxMuted(): boolean { return false; }
 }

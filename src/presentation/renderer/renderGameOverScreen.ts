@@ -55,8 +55,10 @@ export function createGameOverScreenObjects(
     .setOrigin(0.5, 0.5)
     .setVisible(false);
 
+  // Phase 6: highScoreText(360) 와 동일 y 였던 버그 수정 — 490 으로 분리.
+  // 레이아웃: gameOver(200) → final(310) → high(360) → newHigh?(410) → retry(490).
   const retryText = scene.add
-    .text(360, 360, '', {
+    .text(360, 490, '', {
       fontSize: '22px',
       color: '#aaaaaa',
       fontFamily: 'monospace',

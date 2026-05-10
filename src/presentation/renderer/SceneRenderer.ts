@@ -10,9 +10,12 @@ import type { VisualEffectController } from '../controller/VisualEffectControlle
 
 import { ScreenPresenter } from '../controller/ScreenPresenter';
 import { HUDPresenter } from '../controller/HUDPresenter';
+import { GameplayConfigTable } from '../../definitions/tables/GameplayConfigTable';
+import { getMascotById } from '../../definitions/tables/MascotTable';
 
 import {
   type TitleScreenObjects,
+  type MascotCarouselHandlers,
   createTitleScreenObjects,
   renderTitleScreen,
   hideTitleScreen,
@@ -66,6 +69,13 @@ export class SceneRenderer {
   private readonly introPages: readonly IntroSequenceEntry[];
   private readonly visualEffectController: VisualEffectController;
   private readonly roundIntroDurationMs: number;
+  private readonly mascotHandlers: MascotCarouselHandlers;
+  private readonly mascotStateProvider: () => {
+    cursorIndex: number;
+    gold: number;
+    isUnlocked: (id: string) => boolean;
+    selectedMascotId: string;
+  };
 
   private titleObjects!: TitleScreenObjects;
   private roundIntroObjects!: RoundIntroScreenObjects;
@@ -82,6 +92,9 @@ export class SceneRenderer {
     visualEffectController: VisualEffectController,
     roundIntroDurationMs: number = 1500,
     introPages: readonly IntroSequenceEntry[] = [],
+    mascotHandlers: MascotCarouselHandlers = defaultMascotHandlers(),
+    mascotStateProvider: () => { cursorIndex: number; gold: number; isUnlocked: (id: string) => boolean; selectedMascotId: string }
+      = () => ({ cursorIndex: 0, gold: 0, isUnlocked: () => true, selectedMascotId: 'albatross' }),
   ) {
     this.scene = scene;
     this.uiTexts = uiTexts;
@@ -92,13 +105,15 @@ export class SceneRenderer {
     this.introPages = introPages;
     this.presenter = new ScreenPresenter();
     this.hudPresenter = new HUDPresenter();
+    this.mascotHandlers = mascotHandlers;
+    this.mascotStateProvider = mascotStateProvider;
   }
 
   /**
    * create — Phaser.Scene.create() 에서 1회 호출. 모든 오브젝트를 미리 생성한다.
    */
   create(): void {
-    this.titleObjects = createTitleScreenObjects(this.scene);
+    this.titleObjects = createTitleScreenObjects(this.scene, this.mascotHandlers);
     this.roundIntroObjects = createRoundIntroScreenObjects(this.scene);
     this.inGameObjects = createInGameObjects(this.scene);
     this.gameOverObjects = createGameOverScreenObjects(this.scene);
@@ -121,8 +136,9 @@ export class SceneRenderer {
       const vm = this.presenter.buildTitleViewModel(
         gameplayState.session,
         this.uiTexts,
+        flowState.selectedDifficulty,
       );
-      renderTitleScreen(this.titleObjects, vm);
+      renderTitleScreen(this.titleObjects, vm, this.mascotStateProvider());
       hideRoundIntroScreen(this.roundIntroObjects);
       hideInGameScreen(this.inGameObjects);
       hideGameOverScreen(this.gameOverObjects);
@@ -144,6 +160,32 @@ export class SceneRenderer {
     } else if (screen === 'roundIntro') {
       hideTitleScreen(this.titleObjects);
       hideIntroStoryScreen(this.introStoryObjects);
+
+      // Phase 2: RoundIntro 동안 InGame 뷰(블록·바·공)도 렌더한다.
+      // 바는 깜빡 alpha 모듈레이션, 공은 부착 상태로 보임.
+      const hudVm = this.hudPresenter.buildHudViewModel(gameplayState);
+      const barBreakProgress = this.visualEffectController.getBarBreakProgress();
+      const barAlpha = computeRoundIntroBarBlink(
+        screenState.roundIntroRemainingTime,
+        this.roundIntroDurationMs,
+      );
+      renderInGameScreen(
+        this.scene,
+        this.inGameObjects,
+        gameplayState,
+        hudVm,
+        this.blockDefinitions,
+        this.spinnerDefinitions,
+        screenState,
+        barBreakProgress,
+        barAlpha,
+        {
+          ballInitialSpeed: GameplayConfigTable.ballInitialSpeed,
+          ballInitialAngleDeg: GameplayConfigTable.ballInitialAngleDeg,
+        },
+        cheerMascotFromState(this.mascotStateProvider().selectedMascotId),
+      );
+
       const vm = this.presenter.buildRoundIntroViewModel(
         gameplayState.session,
         this.uiTexts,
@@ -151,7 +193,6 @@ export class SceneRenderer {
         this.roundIntroDurationMs,
       );
       renderRoundIntroScreen(this.roundIntroObjects, vm);
-      hideInGameScreen(this.inGameObjects);
       hideGameOverScreen(this.gameOverObjects);
       hideGameClearScreen(this.gameClearObjects);
     } else if (screen === 'inGame') {
@@ -169,6 +210,12 @@ export class SceneRenderer {
         this.spinnerDefinitions,
         screenState,
         barBreakProgress,
+        1,
+        {
+          ballInitialSpeed: GameplayConfigTable.ballInitialSpeed,
+          ballInitialAngleDeg: GameplayConfigTable.ballInitialAngleDeg,
+        },
+        cheerMascotFromState(this.mascotStateProvider().selectedMascotId),
       );
       hideGameOverScreen(this.gameOverObjects);
       hideGameClearScreen(this.gameClearObjects);
@@ -199,4 +246,38 @@ export class SceneRenderer {
     // flowState 사용 없음 — screenState.currentScreen이 동기화 소스
     void flowState;
   }
+}
+
+/** mascotId 로 응원 mascot placeholder 데이터 변환. */
+function cheerMascotFromState(mascotId: string): { displayName: string; placeholderColor: number; placeholderStrokeColor: number } {
+  const m = getMascotById(mascotId);
+  return { displayName: m.displayName, placeholderColor: m.placeholderColor, placeholderStrokeColor: m.placeholderStrokeColor };
+}
+
+/** mascotHandlers 미주입 시 안전한 no-op 기본값. SceneRenderer 단독 테스트용. */
+function defaultMascotHandlers(): MascotCarouselHandlers {
+  return {
+    onCursorPrev: () => { /* noop */ },
+    onCursorNext: () => { /* noop */ },
+    onTryUnlock: () => { /* noop */ },
+    getGold: () => 0,
+    isUnlocked: () => true,
+    getCursorIndex: () => 0,
+  };
+}
+
+/**
+ * RoundIntro 바 깜빡 alpha (Phase 2).
+ * 2000ms 동안 약 4회 깜빡임. 짝수 절반은 0.35, 홀수는 1.0 (square wave).
+ * 이렇게 하면 시각적 명료도가 sin 보다 더 좋다.
+ */
+function computeRoundIntroBarBlink(
+  remainingMs: number,
+  durationMs: number,
+): number {
+  if (durationMs <= 0) return 1;
+  const elapsed = durationMs - remainingMs;
+  // 250ms 주기 (0.125s on / 0.125s off → 8 cycles in 2s 이지만 4 hard blink 이 명확).
+  const cycle = Math.floor(elapsed / 250);
+  return cycle % 2 === 0 ? 1.0 : 0.35;
 }

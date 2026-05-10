@@ -72,16 +72,20 @@ export type EditorState = {
 export type AllStagesJson = StageJson[];
 
 // ─── 그리드 레이아웃 상수 ────────────────────────────────────────────────────
+// 단일 소스 — playfieldLayout 에서 import. 편집기와 게임 런타임이 동일한 좌표로 렌더.
+// 이전 편집기 로컬 값(BLOCK_W=72, GRID_OFFSET=16/16) 은 게임(64, 56/80) 과 어긋났음 — 동기화 완료.
 
-export const GRID_COLS = 9;
-export const GRID_ROWS = 7;
-export const BLOCK_W = 72;
-export const BLOCK_H = 24;
-export const BLOCK_GAP = 4;
-export const GRID_OFFSET_X = 16;
-export const GRID_OFFSET_Y = 16;
-export const CANVAS_W = 720;
-export const CANVAS_H = 720;
+export {
+  BLOCK_WIDTH as BLOCK_W,
+  BLOCK_HEIGHT as BLOCK_H,
+  BLOCK_GAP,
+  BLOCK_GRID_LEFT_MARGIN as GRID_OFFSET_X,
+  BLOCK_GRID_START_Y as GRID_OFFSET_Y,
+  PLAYFIELD_WIDTH as CANVAS_W,
+  PLAYFIELD_HEIGHT as CANVAS_H,
+  BLOCK_GRID_COLS as GRID_COLS,
+  BLOCK_GRID_ROWS as GRID_ROWS,
+} from '../gameplay/systems/playfieldLayout';
 
 // ─── 팔레트 색상 ─────────────────────────────────────────────────────────────
 

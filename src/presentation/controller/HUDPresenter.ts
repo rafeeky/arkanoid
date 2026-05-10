@@ -29,6 +29,7 @@ export class HUDPresenter {
       const session = state.session;
       return {
         score: session.score,
+        highScore: session.highScore,
         lives: session.lives,
         round: session.currentStageIndex + 1,
         activeEffect: state.bar.activeEffect,
@@ -40,6 +41,7 @@ export class HUDPresenter {
       const session = arg as Readonly<GameSessionState>;
       return {
         score: session.score,
+        highScore: session.highScore,
         lives: session.lives,
         round: session.currentStageIndex + 1,
         activeEffect: 'none',

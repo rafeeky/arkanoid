@@ -22,23 +22,32 @@ export class LocalSaveRepository implements ISaveRepository {
       const raw = localStorage.getItem(this.storageKey);
       if (raw === null) return createDefaultSaveData();
       const parsed = JSON.parse(raw) as unknown;
-      if (
-        typeof parsed === 'object' &&
-        parsed !== null &&
-        'highScore' in parsed &&
-        typeof (parsed as Record<string, unknown>).highScore === 'number'
-      ) {
-        return { highScore: (parsed as SaveData).highScore };
+      if (typeof parsed !== 'object' || parsed === null) {
+        return createDefaultSaveData();
       }
-      return createDefaultSaveData();
+      const obj = parsed as Record<string, unknown>;
+      const defaults = createDefaultSaveData();
+      // 신규 필드(gold/unlockedMascots/selectedMascot) 누락 시 default 로 fallback (마이그레이션).
+      const highScore = typeof obj.highScore === 'number' ? obj.highScore : defaults.highScore;
+      const gold = typeof obj.gold === 'number' ? obj.gold : defaults.gold;
+      const unlockedMascots = Array.isArray(obj.unlockedMascots)
+        ? (obj.unlockedMascots.filter((x): x is string => typeof x === 'string'))
+        : defaults.unlockedMascots;
+      const selectedMascot = typeof obj.selectedMascot === 'string'
+        ? obj.selectedMascot
+        : defaults.selectedMascot;
+      return { highScore, gold, unlockedMascots, selectedMascot };
     } catch {
       return createDefaultSaveData();
     }
   }
 
-  async save(data: SaveData): Promise<void> {
+  async save(data: Partial<SaveData>): Promise<void> {
     try {
-      localStorage.setItem(this.storageKey, JSON.stringify(data));
+      // Partial 입력 — 기존 저장값과 머지하여 다른 필드 보존.
+      const existing = await this.load();
+      const merged: SaveData = { ...existing, ...data };
+      localStorage.setItem(this.storageKey, JSON.stringify(merged));
     } catch (error) {
       // QuotaExceeded 등은 호출부에서 catch하여 warn 처리.
       throw error;

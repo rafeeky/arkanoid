@@ -22,8 +22,28 @@ const BLOCK_FLASH_COLOR_MAP: Record<string, number> = {
 const BLOCK_COLOR_DEFAULT = 0x888888;
 const BLOCK_FLASH_COLOR_DEFAULT = 0xffffff;
 
-// 아이템 색상
-const ITEM_COLOR = 0xffdd00;
+// Phase 7: 아이템 색상 — 타입별 매핑 (바 효과 색과 동일).
+// 캡슐 본체 채움색.
+const ITEM_FILL_COLOR: Record<string, number> = {
+  expand: 0xffee99, // 연한 노랑
+  magnet: 0x88ccff, // 연한 파랑
+  laser:  0xff8888, // 연한 빨강
+};
+// 외곽선 색상 — 채움색보다 살짝 연하게 (어둡게가 아니라 더 흐리게).
+// 알카노이드 스타일: 채움색에 +30% white blend 한 색.
+const ITEM_STROKE_COLOR: Record<string, number> = {
+  expand: 0xfff7cc,
+  magnet: 0xc0ddff,
+  laser:  0xffbbbb,
+};
+const ITEM_FILL_DEFAULT = 0xffee99;
+const ITEM_STROKE_DEFAULT = 0xfff7cc;
+// 아이템 첫 글자 매핑.
+const ITEM_INITIAL: Record<string, string> = {
+  expand: 'E',
+  magnet: 'M',
+  laser:  'L',
+};
 
 // 회전체 pseudo-3D 색상
 // cube: Y축 회전 시 3면(front/top/side)을 shade 차이로 구분
@@ -56,28 +76,68 @@ export type InGameObjects = {
   ball: Phaser.GameObjects.Arc;
   // 블록은 동적으로 캐시: blockId → Rectangle
   blockMap: Map<string, Phaser.GameObjects.Rectangle>;
-  // 아이템 드랍: itemId → Rectangle
-  itemMap: Map<string, Phaser.GameObjects.Rectangle>;
+  // 아이템 드랍: itemId → Container (캡슐 본체 + 첫글자 텍스트, 회전 가능). Phase 7.
+  itemMap: Map<string, Phaser.GameObjects.Container>;
   // 레이저 발사체 풀: shotId → Rectangle
-  // 매 프레임 laserShots 배열과 id 기준으로 add/remove 동기화
   laserMap: Map<string, Phaser.GameObjects.Rectangle>;
-  // 회전체 풀: spinnerId → Graphics
-  // cube/triangle 모두 Graphics로 통일. 매 프레임 clear() 후 pseudo-3D 재그림.
-  // Unity 포팅 시: SpinnerView MonoBehaviour + ObjectPool 형태로 대응.
+  // 회전체 풀
   spinnerMap: Map<string, Phaser.GameObjects.Graphics>;
-  // Gate 풀: spinnerId → [leftDoor, rightDoor]
-  // spawning phase 동안만 표시. active 전환 후 숨김.
-  // Unity 포팅 시: SpawnGateView MonoBehaviour 형태로 대응.
+  // Gate 풀
   gateMap: Map<string, [Phaser.GameObjects.Rectangle, Phaser.GameObjects.Rectangle]>;
-  // HUD
-  hudScore: Phaser.GameObjects.Text;
-  hudLives: Phaser.GameObjects.Text;
-  hudRound: Phaser.GameObjects.Text;
-  // HUD 구분선
-  hudDivider: Phaser.GameObjects.Rectangle;
+  // 공 발사 궤적 dot 풀 (ball.isActive=false 동안 표시)
+  trajectoryDots: Phaser.GameObjects.Arc[];
+  // 응원 마스코트 — 캔버스 우하단 4프레임 댄스 placeholder.
+  cheerMascotContainer: Phaser.GameObjects.Container;
+  cheerMascotBody: Phaser.GameObjects.Rectangle;
+  cheerMascotLetter: Phaser.GameObjects.Text;
+  // HUD — Phase 4 재배치 (플레이필드 외부)
+  scoreLabel: Phaser.GameObjects.Text;       // 좌상단 SCORE 라벨
+  scoreValue: Phaser.GameObjects.Text;       // 좌상단 점수 값
+  highScoreLabel: Phaser.GameObjects.Text;   // 중앙상단 HIGH SCORE 라벨 (빨강)
+  highScoreValue: Phaser.GameObjects.Text;   // 중앙상단 하이스코어 값
+  roundLabel: Phaser.GameObjects.Text;       // 우상단 ROUND 라벨
+  roundValue: Phaser.GameObjects.Text;       // 우상단 라운드 값
+  // 라이프 (좌하단, 바 모양 0.3x). 최대 7개 미리 생성하고 lives 만큼 visible.
+  livesBars: Phaser.GameObjects.Rectangle[];
+  // 플레이필드 경계 (top/left/right)
+  borderTop: Phaser.GameObjects.Rectangle;
+  borderLeft: Phaser.GameObjects.Rectangle;
+  borderRight: Phaser.GameObjects.Rectangle;
   // 바 효과 남은 시간 표시 (magnet/laser 활성 시에만 visible)
   hudEffectTimer: Phaser.GameObjects.Text;
 };
+
+// HUD 레이아웃 — 캔버스 절대 좌표 (scrollFactor=0).
+// 캔버스 1080×1920, 플레이필드 가운데 배치 (y=600..1320). HUD 위, Lives 아래.
+const HUD_TOP_LABEL_Y = 80;    // 라벨 행 — 캔버스 위쪽
+const HUD_TOP_VALUE_Y = 150;   // 값 행
+const HUD_LEFT_X = 100;        // 좌상단 SCORE (캔버스 x)
+const HUD_CENTER_X = 540;      // 중앙 HIGH SCORE (캔버스 가로 중앙)
+const HUD_RIGHT_X = 980;       // 우상단 ROUND
+const HUD_LABEL_FONT = '36px';
+const HUD_VALUE_FONT = '52px';
+// 플레이필드 경계 — 플레이필드 로컬 좌표 (카메라 스크롤로 화면에 표시).
+const PLAYFIELD_BORDER_THICKNESS = 6;
+const PLAYFIELD_BORDER_COLOR = 0x666666;
+// 라이프 — 캔버스 절대 좌표 (scrollFactor=0).
+const LIVES_BAR_SCALE = 0.4;                     // 0.3 → 0.4 살짝 키움
+const LIVES_BAR_WIDTH = 120 * LIVES_BAR_SCALE;   // 48
+const LIVES_BAR_HEIGHT = 16 * LIVES_BAR_SCALE;   // ~6.4
+const LIVES_BAR_GAP = 12;
+const LIVES_BAR_X_START_CANVAS = 80;             // 캔버스 좌측 가까이
+const LIVES_BAR_Y_CANVAS = 1700;                 // 캔버스 아래쪽
+const MAX_LIVES_DISPLAY = 7;
+// 응원 mascot 위치 (캔버스 절대 좌표, scrollFactor=0).
+const CHEER_MASCOT_CANVAS_X = 920;
+const CHEER_MASCOT_CANVAS_Y = 1750;
+const CHEER_MASCOT_SIZE = 110;
+// 공 발사 궤적 — 발사 전 (ball.isActive=false) 미리보기.
+const TRAJECTORY_DOT_COUNT = 18;
+const TRAJECTORY_DOT_RADIUS = 5;
+const TRAJECTORY_DOT_COLOR = 0x88ffff;
+const TRAJECTORY_STEP_DT = 0.07;          // 시뮬레이션 step (초)
+const PLAYFIELD_LOCAL_WIDTH = 720;
+const TRAJECTORY_BALL_RADIUS = 8;
 
 const HUD_HEIGHT = 60;
 const BLOCK_WIDTH = 64;
@@ -93,39 +153,120 @@ const ITEM_HEIGHT = 12;
  * Unity 매핑: BarView, BallView, BlockViewPool, HudView MonoBehaviour에 대응.
  */
 export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
-  // HUD 구분선
-  const hudDivider = scene.add
-    .rectangle(360, HUD_HEIGHT, 720, 2, 0x444444)
-    .setOrigin(0.5, 0.5)
-    .setVisible(false);
-
-  // HUD 텍스트
-  const hudScore = scene.add
-    .text(20, 10, 'SCORE  0', {
-      fontSize: '20px',
+  // HUD — 캔버스 절대 좌표 (scrollFactor=0). 카메라 스크롤/줌과 무관.
+  // SCORE — 좌상단 (라벨/값 2줄)
+  const scoreLabel = scene.add
+    .text(HUD_LEFT_X, HUD_TOP_LABEL_Y, 'SCORE', {
+      fontSize: HUD_LABEL_FONT,
       color: '#ffffff',
       fontFamily: 'monospace',
     })
     .setOrigin(0, 0)
+    .setScrollFactor(0)
+    .setVisible(false);
+  const scoreValue = scene.add
+    .text(HUD_LEFT_X, HUD_TOP_VALUE_Y, '0', {
+      fontSize: HUD_VALUE_FONT,
+      color: '#ffffff',
+      fontFamily: 'monospace',
+    })
+    .setOrigin(0, 0)
+    .setScrollFactor(0)
     .setVisible(false);
 
-  const hudLives = scene.add
-    .text(360, 10, 'LIVES  3', {
-      fontSize: '20px',
+  // HIGH SCORE — 중앙상단 (빨강 라벨 + 값)
+  const highScoreLabel = scene.add
+    .text(HUD_CENTER_X, HUD_TOP_LABEL_Y, 'HIGH SCORE', {
+      fontSize: HUD_LABEL_FONT,
+      color: '#ff3333',
+      fontFamily: 'monospace',
+      fontStyle: 'bold',
+    })
+    .setOrigin(0.5, 0)
+    .setScrollFactor(0)
+    .setVisible(false);
+  const highScoreValue = scene.add
+    .text(HUD_CENTER_X, HUD_TOP_VALUE_Y, '0', {
+      fontSize: HUD_VALUE_FONT,
       color: '#ffffff',
       fontFamily: 'monospace',
     })
     .setOrigin(0.5, 0)
+    .setScrollFactor(0)
     .setVisible(false);
 
-  const hudRound = scene.add
-    .text(700, 10, 'RD 1', {
-      fontSize: '20px',
+  // ROUND — 우상단
+  const roundLabel = scene.add
+    .text(HUD_RIGHT_X, HUD_TOP_LABEL_Y, 'ROUND', {
+      fontSize: HUD_LABEL_FONT,
       color: '#ffffff',
       fontFamily: 'monospace',
     })
     .setOrigin(1, 0)
+    .setScrollFactor(0)
     .setVisible(false);
+  const roundValue = scene.add
+    .text(HUD_RIGHT_X, HUD_TOP_VALUE_Y, '1', {
+      fontSize: HUD_VALUE_FONT,
+      color: '#ffffff',
+      fontFamily: 'monospace',
+    })
+    .setOrigin(1, 0)
+    .setScrollFactor(0)
+    .setVisible(false);
+
+  // 플레이필드 경계 — top / left / right (알카노이드풍 회색 띠)
+  const borderTop = scene.add
+    .rectangle(360, -PLAYFIELD_BORDER_THICKNESS / 2, 720 + PLAYFIELD_BORDER_THICKNESS * 2,
+               PLAYFIELD_BORDER_THICKNESS, PLAYFIELD_BORDER_COLOR)
+    .setOrigin(0.5, 0.5)
+    .setVisible(false);
+  const borderLeft = scene.add
+    .rectangle(-PLAYFIELD_BORDER_THICKNESS / 2, 360, PLAYFIELD_BORDER_THICKNESS, 720,
+               PLAYFIELD_BORDER_COLOR)
+    .setOrigin(0.5, 0.5)
+    .setVisible(false);
+  const borderRight = scene.add
+    .rectangle(720 + PLAYFIELD_BORDER_THICKNESS / 2, 360, PLAYFIELD_BORDER_THICKNESS, 720,
+               PLAYFIELD_BORDER_COLOR)
+    .setOrigin(0.5, 0.5)
+    .setVisible(false);
+
+  // 응원 mascot — 캔버스 우하단. scrollFactor=0 (UI 카메라).
+  // body + letter 를 Container 로 묶어 회전/스케일 애니메이션.
+  const cheerMascotBody = scene.add
+    .rectangle(0, 0, CHEER_MASCOT_SIZE, CHEER_MASCOT_SIZE, 0xffffff)
+    .setStrokeStyle(3, 0x666666)
+    .setOrigin(0.5, 0.5);
+  const cheerMascotLetter = scene.add
+    .text(0, 0, '?', { fontSize: '40px', color: '#000000', fontFamily: 'monospace', fontStyle: 'bold' })
+    .setOrigin(0.5, 0.5);
+  const cheerMascotContainer = scene.add
+    .container(CHEER_MASCOT_CANVAS_X, CHEER_MASCOT_CANVAS_Y, [cheerMascotBody, cheerMascotLetter])
+    .setScrollFactor(0)
+    .setVisible(false);
+
+  // 공 발사 궤적 점 풀 — ball.isActive=false 일 때 미리 보이는 cyan 점들.
+  // playfield-local 좌표 (카메라 스크롤로 표시).
+  const trajectoryDots: Phaser.GameObjects.Arc[] = [];
+  for (let i = 0; i < TRAJECTORY_DOT_COUNT; i++) {
+    const dot = scene.add
+      .arc(0, 0, TRAJECTORY_DOT_RADIUS, 0, 360, false, TRAJECTORY_DOT_COLOR)
+      .setVisible(false);
+    trajectoryDots.push(dot);
+  }
+
+  // 라이프 — 캔버스 절대 좌표 (scrollFactor=0). 캔버스 좌하단 가까이.
+  const livesBars: Phaser.GameObjects.Rectangle[] = [];
+  for (let i = 0; i < MAX_LIVES_DISPLAY; i++) {
+    const x = LIVES_BAR_X_START_CANVAS + i * (LIVES_BAR_WIDTH + LIVES_BAR_GAP);
+    const rect = scene.add
+      .rectangle(x, LIVES_BAR_Y_CANVAS, LIVES_BAR_WIDTH, LIVES_BAR_HEIGHT, 0xffffff)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setVisible(false);
+    livesBars.push(rect);
+  }
 
   // 바
   const bar = scene.add
@@ -138,7 +279,6 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
     .setVisible(false);
 
   // 바 효과 남은 시간 텍스트 (화면 하단 중앙, 바 위)
-  // activeEffect が magnet/laser の時だけ visible になる
   const hudEffectTimer = scene.add
     .text(360, 648, '', {
       fontSize: '14px',
@@ -156,10 +296,20 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
     laserMap: new Map(),
     spinnerMap: new Map(),
     gateMap: new Map(),
-    hudScore,
-    hudLives,
-    hudRound,
-    hudDivider,
+    scoreLabel,
+    scoreValue,
+    highScoreLabel,
+    highScoreValue,
+    roundLabel,
+    roundValue,
+    livesBars,
+    borderTop,
+    borderLeft,
+    borderRight,
+    trajectoryDots,
+    cheerMascotContainer,
+    cheerMascotBody,
+    cheerMascotLetter,
     hudEffectTimer,
   };
 }
@@ -185,12 +335,40 @@ export function renderInGameScreen(
   spinnerDefinitions: Readonly<Record<string, SpinnerDefinition>>,
   screenState: Readonly<ScreenState>,
   barBreakProgress: number,
+  /**
+   * RoundIntro READY 깜빡 연출용 (Phase 2). 0.0..1.0.
+   * 지정 시 바 alpha 에 곱해진다. 미지정/1.0 이면 기존 동작.
+   */
+  barAlphaOverride: number = 1,
+  /**
+   * 공 발사 궤적 시뮬레이션용 (ballInitialSpeed, ballInitialAngleDeg).
+   * 미지정 시 궤적 표시 안 함.
+   */
+  ballConfig?: { ballInitialSpeed: number; ballInitialAngleDeg: number },
+  /**
+   * 응원 mascot 정보 — 우하단 댄스 placeholder 표시용.
+   * 미지정 시 응원 mascot 숨김.
+   */
+  cheerMascot?: { displayName: string; placeholderColor: number; placeholderStrokeColor: number },
 ): void {
-  // HUD 표시
-  objects.hudDivider.setVisible(true);
-  objects.hudScore.setText(`SCORE  ${hudViewModel.score}`).setVisible(true);
-  objects.hudLives.setText(`LIVES  ${hudViewModel.lives}`).setVisible(true);
-  objects.hudRound.setText(`RD ${hudViewModel.round}`).setVisible(true);
+  // Phase 4: HUD 표시 (플레이필드 외부 위 영역)
+  objects.scoreLabel.setVisible(true);
+  objects.scoreValue.setText(String(hudViewModel.score)).setVisible(true);
+  objects.highScoreLabel.setVisible(true);
+  objects.highScoreValue.setText(String(hudViewModel.highScore)).setVisible(true);
+  objects.roundLabel.setVisible(true);
+  objects.roundValue.setText(String(hudViewModel.round)).setVisible(true);
+
+  // 플레이필드 경계
+  objects.borderTop.setVisible(true);
+  objects.borderLeft.setVisible(true);
+  objects.borderRight.setVisible(true);
+
+  // 라이프 (좌하단, 바 모양 0.3x). lives 만큼만 visible.
+  for (let i = 0; i < objects.livesBars.length; i++) {
+    const rect = objects.livesBars[i]!;
+    rect.setVisible(i < hudViewModel.lives);
+  }
 
   const flashBlockIdSet = new Set(screenState.blockHitFlashBlockIds);
 
@@ -216,27 +394,47 @@ export function renderInGameScreen(
       .setPosition(bar.x, bar.y)
       .setSize(bar.width * scaleX, BAR_HEIGHT)
       .setFillStyle(barColor)
-      .setAlpha(alpha)
+      .setAlpha(alpha * barAlphaOverride)
       .setVisible(true);
   } else {
     objects.bar
       .setPosition(bar.x, bar.y)
       .setSize(bar.width, BAR_HEIGHT)
       .setFillStyle(barColor)
-      .setAlpha(1)
+      .setAlpha(barAlphaOverride)
       .setVisible(true);
   }
 
   // 공 표시 (바 파괴 연출 중이 아니면 항상 표시)
-  // - 발사 전(isActive=false): moveAttachedBallToBar 가 바 위 좌표를 세팅
-  // - 자석 부착(isActive=false + attachedOffsetX): 바 이동에 동기 이동 중
-  // - 일반 플레이(isActive=true): ball.x/y 그대로
-  // 바 파괴 연출 중엔 공 숨김 (사망 연출)
   const ballToRender = gameplayState.balls[0];
   if (ballToRender && !screenState.isBarBreaking) {
     objects.ball.setPosition(ballToRender.x, ballToRender.y).setAlpha(1).setVisible(true);
   } else {
     objects.ball.setVisible(false);
+  }
+
+  // 공 발사 궤적 — ball.isActive=false 일 때 (발사 전 / 자석 부착) 미리보기.
+  if (ballToRender && !ballToRender.isActive && !screenState.isBarBreaking && ballConfig) {
+    renderBallTrajectory(objects.trajectoryDots, ballToRender.x, ballToRender.y, ballConfig);
+  } else {
+    for (const dot of objects.trajectoryDots) dot.setVisible(false);
+  }
+
+  // 응원 mascot — 4프레임 댄스 placeholder (회전 ±5도 사이클 + 부드러운 스케일).
+  if (cheerMascot) {
+    objects.cheerMascotBody
+      .setFillStyle(cheerMascot.placeholderColor)
+      .setStrokeStyle(3, cheerMascot.placeholderStrokeColor);
+    objects.cheerMascotLetter.setText(cheerMascot.displayName.charAt(0));
+    // 4프레임 (250ms 단위) — 0/2 직립, 1 우측 살짝, 3 좌측 살짝.
+    const frameIdx = Math.floor(performance.now() / 250) % 4;
+    const angle = frameIdx === 1 ? 6 : frameIdx === 3 ? -6 : 0;
+    const scale = frameIdx % 2 === 0 ? 1.0 : 1.05;
+    objects.cheerMascotContainer.angle = angle;
+    objects.cheerMascotContainer.setScale(scale);
+    objects.cheerMascotContainer.setVisible(true);
+  } else {
+    objects.cheerMascotContainer.setVisible(false);
   }
 
   // 블록: 파괴되지 않은 블록만 visible
@@ -285,25 +483,50 @@ export function renderInGameScreen(
     }
   }
 
-  // 아이템 드랍
+  // Phase 7: 아이템 드랍 — 캡슐 모양 (Rectangle + stroke) + 첫 글자 (노랑 + 검은 그림자) + 낙하 시 회전.
+  // 4꼭짓점 픽셀 빠진 진짜 캡슐 모양은 동적 텍스처가 필요해서 Unity 포팅 시 구현.
+  // 현재는 Stroked Rectangle + 첫글자 + 회전 으로 시각 의도만 표현.
   const activeItemIds = new Set<string>();
   for (const item of gameplayState.itemDrops) {
     if (item.isCollected) continue;
     activeItemIds.add(item.id);
 
-    let rect = objects.itemMap.get(item.id);
-    if (!rect) {
-      rect = scene.add.rectangle(item.x, item.y, ITEM_WIDTH, ITEM_HEIGHT, ITEM_COLOR);
-      objects.itemMap.set(item.id, rect);
+    let container = objects.itemMap.get(item.id);
+    if (!container) {
+      const fillColor = ITEM_FILL_COLOR[item.itemType] ?? ITEM_FILL_DEFAULT;
+      const strokeColor = ITEM_STROKE_COLOR[item.itemType] ?? ITEM_STROKE_DEFAULT;
+      const initial = ITEM_INITIAL[item.itemType] ?? '?';
+
+      const body = scene.add
+        .rectangle(0, 0, ITEM_WIDTH, ITEM_HEIGHT, fillColor)
+        .setStrokeStyle(2, strokeColor)
+        .setOrigin(0.5, 0.5);
+
+      // 첫 글자 — 노랑 + 검은 그림자 (Phaser Text shadow API).
+      const letter = scene.add
+        .text(0, 0, initial, {
+          fontSize: '14px',
+          color: '#ffff00',
+          fontFamily: 'monospace',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5, 0.5);
+      letter.setShadow(1, 1, '#000000', 0, true, true);
+
+      container = scene.add.container(item.x, item.y, [body, letter]);
+      objects.itemMap.set(item.id, container);
     }
 
-    rect.setPosition(item.x, item.y).setVisible(true);
+    // 위치 + 회전 (낙하 거리 기반 굴러가는 효과).
+    container.setPosition(item.x, item.y);
+    container.angle = (item.y * 2) % 360;
+    container.setVisible(true);
   }
 
   // 수집/소멸된 아이템 숨기기
-  for (const [id, rect] of objects.itemMap) {
+  for (const [id, container] of objects.itemMap) {
     if (!activeItemIds.has(id)) {
-      rect.setVisible(false);
+      container.setVisible(false);
     }
   }
 
@@ -644,21 +867,75 @@ export function renderInGameScreen(
 }
 
 /**
+ * 공 발사 궤적 시뮬레이션 + 점 표시.
+ * 시작 위치(ball.x, ball.y) + 초기 속도(config) → 양 옆 벽 반사하며 dt 단위 전진.
+ * MAX_DOTS 개 점을 alpha 페이드로 표시. 천장(y<0) 도달 시 그 이후 점 숨김.
+ */
+function renderBallTrajectory(
+  dots: Phaser.GameObjects.Arc[],
+  startX: number,
+  startY: number,
+  cfg: { ballInitialSpeed: number; ballInitialAngleDeg: number },
+): void {
+  const angleRad = (cfg.ballInitialAngleDeg * Math.PI) / 180;
+  let vx = cfg.ballInitialSpeed * Math.cos(angleRad);
+  let vy = cfg.ballInitialSpeed * Math.sin(angleRad);
+  let x = startX;
+  let y = startY;
+
+  for (let i = 0; i < dots.length; i++) {
+    x += vx * TRAJECTORY_STEP_DT;
+    y += vy * TRAJECTORY_STEP_DT;
+
+    // 좌/우 벽 반사 (공 반지름 고려).
+    if (x < TRAJECTORY_BALL_RADIUS) {
+      x = TRAJECTORY_BALL_RADIUS * 2 - x;
+      vx = -vx;
+    } else if (x > PLAYFIELD_LOCAL_WIDTH - TRAJECTORY_BALL_RADIUS) {
+      x = (PLAYFIELD_LOCAL_WIDTH - TRAJECTORY_BALL_RADIUS) * 2 - x;
+      vx = -vx;
+    }
+
+    // 천장 도달 시 이후 점 숨김.
+    if (y < TRAJECTORY_BALL_RADIUS) {
+      for (let j = i; j < dots.length; j++) dots[j]!.setVisible(false);
+      return;
+    }
+
+    const alpha = 1 - i / dots.length;
+    dots[i]!.setPosition(x, y).setAlpha(alpha).setVisible(true);
+  }
+}
+
+/**
  * hideInGameScreen — InGame 화면 오브젝트를 전부 숨긴다.
  */
 export function hideInGameScreen(objects: InGameObjects): void {
-  objects.hudDivider.setVisible(false);
-  objects.hudScore.setVisible(false);
-  objects.hudLives.setVisible(false);
-  objects.hudRound.setVisible(false);
+  // Phase 4: 새 HUD + 경계 + 라이프 모두 숨김
+  objects.scoreLabel.setVisible(false);
+  objects.scoreValue.setVisible(false);
+  objects.highScoreLabel.setVisible(false);
+  objects.highScoreValue.setVisible(false);
+  objects.roundLabel.setVisible(false);
+  objects.roundValue.setVisible(false);
+  objects.borderTop.setVisible(false);
+  objects.borderLeft.setVisible(false);
+  objects.borderRight.setVisible(false);
+  for (const rect of objects.livesBars) {
+    rect.setVisible(false);
+  }
+  for (const dot of objects.trajectoryDots) {
+    dot.setVisible(false);
+  }
+  objects.cheerMascotContainer.setVisible(false);
   objects.hudEffectTimer.setVisible(false);
   objects.bar.setVisible(false);
   objects.ball.setVisible(false);
   for (const rect of objects.blockMap.values()) {
     rect.setVisible(false);
   }
-  for (const rect of objects.itemMap.values()) {
-    rect.setVisible(false);
+  for (const container of objects.itemMap.values()) {
+    container.setVisible(false);
   }
   for (const rect of objects.laserMap.values()) {
     rect.setVisible(false);

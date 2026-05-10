@@ -3,6 +3,7 @@ import { createAppContext } from './createAppContext';
 import type { AppContext } from './createAppContext';
 import { KeyboardInputSource } from '../input/KeyboardInputSource';
 import { GameScene } from '../presentation/renderer/GameScene';
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../presentation/renderer/canvasLayout';
 import { UITextTable } from '../definitions/tables/UITextTable';
 import { BlockDefinitionTable } from '../definitions/tables/BlockDefinitionTable';
 import { GameplayConfigTable } from '../definitions/tables/GameplayConfigTable';
@@ -83,14 +84,23 @@ function createGame(appContext: AppContext, devContext: DevContext | undefined):
       phaserAudioPlayer.create(this, AudioCueTable);
       // Phaser가 준비된 시점에 AppContext에 실제 AudioPlayer swap
       appContext.setAudioPlayer(phaserAudioPlayer);
+
+      // 초기 Flow 가 Title 이지만 EnteredTitle 이벤트는 발행되지 않으므로
+      // (Flow 가 처음부터 Title 로 생성됨) Title BGM 을 직접 트리거.
+      // Phaser sound 는 user gesture 전엔 lock 되지만 play() 는 큐잉됨.
+      if (appContext.getFlowState().kind === 'title') {
+        const titleBgmCue = AudioCueTable.find((c) => c.cueId === 'cue_title_bgm');
+        if (titleBgmCue) phaserAudioPlayer.play(titleBgmCue);
+      }
     }
   }
 
   return new Phaser.Game({
     type: Phaser.AUTO,
-    width: 720,
-    height: 720,
-    backgroundColor: '#000000',
+    width: CANVAS_WIDTH,
+    height: CANVAS_HEIGHT,
+    // 캔버스 단일 어두운 회색 배경 — bg rect 대신 Phaser 자체 background 사용 (uniform 보장).
+    backgroundColor: '#0a0a0a',
     parent: 'app',
     scene: [GameSceneBootstrap],
     scale: {

@@ -23,6 +23,8 @@ export class PhaserAudioPlayer implements IAudioPlayer {
   private readonly assetResolver: AssetResolver;
   private readonly soundMap = new Map<string, Phaser.Sound.BaseSound>();
   private currentBgmCueId: string | null = null;
+  private bgmMuted = false;
+  private sfxMuted = false;
 
   constructor(assetResolver: AssetResolver) {
     this.assetResolver = assetResolver;
@@ -65,6 +67,13 @@ export class PhaserAudioPlayer implements IAudioPlayer {
       return;
     }
 
+    // 음소거 체크 — 카테고리별로 즉시 스킵.
+    if (cue.playbackType === 'bgm' && this.bgmMuted) return;
+    if ((cue.playbackType === 'sfx' || cue.playbackType === 'jingle') && this.sfxMuted) return;
+
+    const rate = cue.pitch ?? 1;
+    const volume = cue.volume ?? 1;
+
     if (cue.playbackType === 'bgm') {
       // 이미 같은 bgm이 재생 중이면 skip
       if (this.currentBgmCueId === cue.cueId && sound.isPlaying) {
@@ -78,10 +87,17 @@ export class PhaserAudioPlayer implements IAudioPlayer {
         }
       }
       this.currentBgmCueId = cue.cueId;
-      sound.play({ loop: true });
+      sound.play({ loop: true, rate, volume });
     } else {
-      // jingle / sfx: 1회 재생
-      sound.play();
+      // jingle / sfx: 1회 재생, 피치 + 볼륨 적용
+      sound.play({ rate, volume });
+      // Phase 3: playDurationMs 가 지정되면 그 시간 후 강제 stop (1음절 효과음 cut).
+      if (cue.playDurationMs !== undefined && cue.playDurationMs > 0) {
+        const ms = cue.playDurationMs;
+        setTimeout(() => {
+          if (sound.isPlaying) sound.stop();
+        }, ms);
+      }
     }
   }
 
@@ -92,4 +108,36 @@ export class PhaserAudioPlayer implements IAudioPlayer {
     this.scene.sound.stopAll();
     this.currentBgmCueId = null;
   }
+
+  /**
+   * 특정 cueId 의 사운드만 정지 (Phase 2).
+   * RoundIntro 짧은 BGM 을 InGame 진입 시 끊기 위해 사용.
+   */
+  stop(cueId: string): void {
+    if (!this.scene) return;
+    const sound = this.soundMap.get(cueId);
+    if (sound && sound.isPlaying) {
+      sound.stop();
+    }
+    if (this.currentBgmCueId === cueId) {
+      this.currentBgmCueId = null;
+    }
+  }
+
+  setBgmMuted(muted: boolean): void {
+    this.bgmMuted = muted;
+    if (muted && this.scene && this.currentBgmCueId) {
+      const sound = this.soundMap.get(this.currentBgmCueId);
+      if (sound && sound.isPlaying) sound.stop();
+      this.currentBgmCueId = null;
+    }
+  }
+
+  setSfxMuted(muted: boolean): void {
+    this.sfxMuted = muted;
+    // 효과음은 짧으니 진행 중인 것은 끝까지 둠 (다음 호출부터 스킵).
+  }
+
+  isBgmMuted(): boolean { return this.bgmMuted; }
+  isSfxMuted(): boolean { return this.sfxMuted; }
 }
