@@ -1,8 +1,10 @@
 import type { StageDefinition } from '../../definitions/types/StageDefinition';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
+import type { DifficultyConfig } from '../../definitions/types/DifficultyConfig';
 import type { GameplayRuntimeState } from '../state/GameplayRuntimeState';
 import { createGameplayRuntimeFromStageDefinition } from '../systems/StageRuntimeFactory';
+import { INITIAL_LAUNCH_OFFSET_X } from '../systems/MovementSystem';
 
 const BAR_HEIGHT = 16;
 
@@ -32,12 +34,14 @@ export class GameplayLifecycleHandler {
     stage: StageDefinition,
     config: GameplayConfig,
     initialLives: number,
+    difficulty?: DifficultyConfig,
   ): GameplayRuntimeState {
     return createGameplayRuntimeFromStageDefinition(
       stage,
       config,
       this.blockDefinitions,
       initialLives,
+      difficulty,
     );
   }
 
@@ -66,7 +70,8 @@ export class GameplayLifecycleHandler {
       isActive: false,
       vx: 0,
       vy: 0,
-      x: stage.barSpawnX,
+      // 발사 각도(-60°) 와 시각 일치 — 바 우측 30px 오프셋.
+      x: stage.barSpawnX + INITIAL_LAUNCH_OFFSET_X,
       y: stage.barSpawnY - BAR_HEIGHT,
     }));
 
@@ -98,6 +103,7 @@ export class GameplayLifecycleHandler {
     currentState: GameplayRuntimeState,
     nextStage: StageDefinition,
     config: GameplayConfig,
+    difficulty?: DifficultyConfig,
   ): GameplayRuntimeState {
     // 새 스테이지 블록 생성은 StageRuntimeFactory 를 재사용하되
     // session.score / lives / highScore 는 currentState 에서 유지한다.
@@ -106,6 +112,7 @@ export class GameplayLifecycleHandler {
       config,
       this.blockDefinitions,
       currentState.session.lives, // 현재 라이프 유지
+      difficulty,
     );
 
     // freshState 는 StageRuntimeFactory 에서 생성되므로:

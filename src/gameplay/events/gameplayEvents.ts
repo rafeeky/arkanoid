@@ -46,6 +46,15 @@ export type LaserFiredEvent = {
   shotCount: number;
 };
 
+/**
+ * 공이 바에 부딪혀 반사되었다 (자석 부착은 제외).
+ * 바 튕김 사운드(저음, pitch 0.7) 트리거. Unity 묶음 A 이식.
+ */
+export type BallHitBarEvent = {
+  type: 'BallHitBar';
+  ballId: string;
+};
+
 export type LifeLostEvent = {
   type: 'LifeLost';
   remainingLives: number;
@@ -59,6 +68,7 @@ export type GameplayEvent =
   | BallLaunchedEvent
   | BallAttachedEvent
   | BallsReleasedEvent
+  | BallHitBarEvent
   | LaserFiredEvent
   | BlockHitEvent
   | BlockDestroyedEvent

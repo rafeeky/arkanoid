@@ -115,6 +115,20 @@ export class GameFlowController {
   }
 
   private applyCommand(command: FlowCommand): void {
+    // 묶음 E: Title 난이도 커서 이동은 intra-state 업데이트로 처리 (FlowTransitionPolicy 미경유)
+    if (command.type === 'DifficultySelectNormal') {
+      if (this.state.kind === 'title') {
+        this.state = { ...this.state, selectedDifficulty: 'normal' };
+      }
+      return;
+    }
+    if (command.type === 'DifficultySelectHard') {
+      if (this.state.kind === 'title') {
+        this.state = { ...this.state, selectedDifficulty: 'hard' };
+      }
+      return;
+    }
+
     const from = this.state.kind;
     const next = nextState(from, command);
     if (next === null) return;
@@ -135,6 +149,7 @@ export class GameFlowController {
     this.state = {
       kind: next,
       currentStageIndex: nextStageIndex,
+      selectedDifficulty: this.state.selectedDifficulty,
     };
 
     this.listener(onEnter(next, from));

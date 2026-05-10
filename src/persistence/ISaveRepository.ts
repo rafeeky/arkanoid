@@ -9,5 +9,6 @@ import type { SaveData } from './SaveData';
  */
 export interface ISaveRepository {
   load(): Promise<SaveData>;
-  save(data: SaveData): Promise<void>;
+  /** Partial 입력 허용 — 구현체는 미지정 필드를 기존 값과 머지하거나 default 적용. */
+  save(data: Partial<SaveData>): Promise<void>;
 }

@@ -5,13 +5,18 @@ import type { ItemDropState } from '../state/ItemDropState';
 import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
 import type { BallHitBlockFact, BallHitWallFact } from './CollisionService';
 import { enforceMinAngle } from './CollisionResolutionService';
+import {
+  PLAYFIELD_WIDTH as CANVAS_WIDTH,
+  PLAYFIELD_HEIGHT as CANVAS_HEIGHT,
+  BLOCK_WIDTH,
+  BLOCK_HEIGHT,
+  BAR_HEIGHT,
+  BALL_RADIUS,
+  INITIAL_LAUNCH_OFFSET_X,
+} from './playfieldLayout';
 
-const CANVAS_WIDTH = 720;
-const CANVAS_HEIGHT = 720;
-const BAR_HEIGHT = 16;
-const BALL_RADIUS = 8;
-const BLOCK_WIDTH = 64;
-const BLOCK_HEIGHT = 24;
+// 외부 호환을 위한 re-export — StageRuntimeFactory 등이 MovementSystem 에서 import 함.
+export { INITIAL_LAUNCH_OFFSET_X };
 
 /**
  * Distance the ball is pushed away from a block face or wall after reflection.
@@ -501,8 +506,10 @@ export function moveItemDrop(item: ItemDropState, dt: number): ItemDropState {
  * 비활성 공(자석 부착 포함)을 바에 동기화한다.
  *
  * - attachedOffsetX が定義されている場合: 바 중심 + 오프셋으로 x를 갱신 (자석 부착)
- * - 그 외 비활성 공: 바 중심 상단 고정 (발사 대기 위치)
+ * - 그 외 비활성 공: 바 중심에서 INITIAL_LAUNCH_OFFSET_X 만큼 우측 고정
+ *   (발사 각도 -60° 와 시각적으로 일치 — 우측 발사면 우측에서 출발해야 자연스러움)
  */
+// INITIAL_LAUNCH_OFFSET_X 는 playfieldLayout 단일 소스에서 import (위쪽 import).
 export function moveAttachedBallToBar(ball: BallState, bar: BarState): BallState {
   if (ball.isActive) {
     return ball;
@@ -516,10 +523,10 @@ export function moveAttachedBallToBar(ball: BallState, bar: BarState): BallState
       y: attachY,
     };
   }
-  // 일반 비활성 공 (발사 대기)
+  // 일반 비활성 공 (발사 대기) — 우측 30px 오프셋
   return {
     ...ball,
-    x: bar.x,
+    x: bar.x + INITIAL_LAUNCH_OFFSET_X,
     y: bar.y - BAR_HEIGHT,
   };
 }

@@ -215,11 +215,14 @@ function resolveBar(
     }
   }
 
-  // 일반 상태: 반사
+  // 일반 상태: 반사. BallHitBarEvent 발행 (저음 사운드 트리거 — 묶음 A 이식)
   const balls = state.balls.map((b) =>
     b.id === fact.ballId ? reflectBallBar(b, fact) : b,
   );
-  return { state: { ...state, balls }, events: [] };
+  return {
+    state: { ...state, balls },
+    events: [{ type: 'BallHitBar', ballId: fact.ballId }],
+  };
 }
 
 function resolveBlock(
