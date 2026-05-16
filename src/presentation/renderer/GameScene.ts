@@ -24,6 +24,7 @@ import type { IntroSequenceEntry } from '../../definitions/types/IntroSequenceEn
 import type { DevContext } from '../../app/dev/DevContext';
 import { DevOverlayRenderer } from './DevOverlayRenderer';
 import { DevInputSource } from '../../input/DevInputSource';
+import { PointerInputSource } from '../../input/PointerInputSource';
 
 export type GameSceneInitData = {
   appContext: AppContext;
@@ -52,6 +53,7 @@ export type GameSceneInitData = {
 export class GameScene extends Phaser.Scene {
   private appContext!: AppContext;
   private keyboardInputSource!: KeyboardInputSource;
+  private pointerInputSource!: PointerInputSource;
   private sceneRenderer!: SceneRenderer;
 
   // Dev 전용 — production 빌드에서는 undefined
@@ -152,6 +154,9 @@ export class GameScene extends Phaser.Scene {
 
     this.sceneRenderer.create();
 
+    // 마우스/터치 슬라이더 입력 — 바 좌표(targetBarX) 를 산출해 InputSnapshot 에 주입.
+    this.pointerInputSource = new PointerInputSource(this);
+
     // 일시정지 오버레이 — InGame 중 ESC 누르면 표시. 4개 버튼 (배경음/효과음/나가기/돌아가기).
     this.pauseOverlay = createPauseOverlayObjects(this, {
       onToggleBgm: () => this.appContext.setBgmMuted(!this.appContext.isBgmMuted()),
@@ -183,7 +188,9 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     const dt = deltaMs / 1000;
-    const input = this.keyboardInputSource.readSnapshot();
+    const kbInput = this.keyboardInputSource.readSnapshot();
+    const targetBarX = this.pointerInputSource.readTargetBarX();
+    const input = targetBarX !== undefined ? { ...kbInput, targetBarX } : kbInput;
     const flowKindBefore = this.appContext.getFlowState().kind;
 
     // Dev 모드 전용: introStory 중 space 입력이면 즉시 intro 스킵.
@@ -271,6 +278,11 @@ export class GameScene extends Phaser.Scene {
       // F3: 충돌 로그 초기화
       if (this.devInputSource.isClearLogPressed()) {
         this.devContext.collisionLog.clear();
+      }
+
+      // N: 현재 스테이지 강제 클리어 → 다음 스테이지 로드 (디버그 용)
+      if (this.devInputSource.isSkipStagePressed()) {
+        this.appContext.skipStage();
       }
 
       // 오버레이 렌더링

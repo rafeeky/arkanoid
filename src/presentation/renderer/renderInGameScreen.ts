@@ -5,6 +5,17 @@ import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { SpinnerDefinition } from '../../definitions/types/SpinnerDefinition';
 import type { ScreenState } from '../state/ScreenState';
 import { SPAWN_DURATION_MS } from '../../gameplay/systems/SpinnerSystem';
+import {
+  BLOCK_WIDTH,
+  BLOCK_HEIGHT,
+  BAR_HEIGHT,
+  BALL_RADIUS,
+  ITEM_WIDTH,
+  ITEM_HEIGHT,
+  BORDER_LENGTH,
+  BORDER_THICKNESS,
+} from '../../gameplay/systems/playfieldLayout';
+import { LayoutConfigTable } from '../../definitions/tables/LayoutConfigTable';
 
 // 블록 시각 ID → 기본 색상 매핑
 // Phaser API 없이 순수 값 매핑. Unity 포팅 시 Material/Sprite 참조로 교체된다.
@@ -76,6 +87,13 @@ export type InGameObjects = {
   ball: Phaser.GameObjects.Arc;
   // 블록은 동적으로 캐시: blockId → Rectangle
   blockMap: Map<string, Phaser.GameObjects.Rectangle>;
+  // 테두리(BorderBlock) — 동적 캐시: borderId → Rectangle
+  borderMap: Map<string, Phaser.GameObjects.Rectangle>;
+  // 문(Door) — 동적 캐시: doorId → Rectangle
+  doorMap: Map<string, Phaser.GameObjects.Rectangle>;
+  // 하단 슬라이더 — track + knob.
+  sliderTrack: Phaser.GameObjects.Rectangle;
+  sliderKnob: Phaser.GameObjects.Arc;
   // 아이템 드랍: itemId → Container (캡슐 본체 + 첫글자 텍스트, 회전 가능). Phase 7.
   itemMap: Map<string, Phaser.GameObjects.Container>;
   // 레이저 발사체 풀: shotId → Rectangle
@@ -107,30 +125,30 @@ export type InGameObjects = {
   hudEffectTimer: Phaser.GameObjects.Text;
 };
 
-// HUD 레이아웃 — 캔버스 절대 좌표 (scrollFactor=0).
-// 캔버스 1080×1920, 플레이필드 가운데 배치 (y=600..1320). HUD 위, Lives 아래.
-const HUD_TOP_LABEL_Y = 80;    // 라벨 행 — 캔버스 위쪽
-const HUD_TOP_VALUE_Y = 150;   // 값 행
-const HUD_LEFT_X = 100;        // 좌상단 SCORE (캔버스 x)
-const HUD_CENTER_X = 540;      // 중앙 HIGH SCORE (캔버스 가로 중앙)
-const HUD_RIGHT_X = 980;       // 우상단 ROUND
-const HUD_LABEL_FONT = '36px';
-const HUD_VALUE_FONT = '52px';
-// 플레이필드 경계 — 플레이필드 로컬 좌표 (카메라 스크롤로 화면에 표시).
+// HUD/Mascot/Lives 레이아웃은 LayoutConfigTable 단일 진실에서 읽음.
+// 캡쳐된 값들 (분리 const 는 더 이상 없음).
+const HUD_TOP_LABEL_Y = LayoutConfigTable.hud.labelY;
+const HUD_TOP_VALUE_Y = LayoutConfigTable.hud.valueY;
+const HUD_LEFT_X = LayoutConfigTable.hud.leftX;
+const HUD_CENTER_X = LayoutConfigTable.hud.centerX;
+const HUD_RIGHT_X = LayoutConfigTable.hud.rightX;
+const HUD_LABEL_FONT = `${LayoutConfigTable.hud.labelFontPx}px`;
+const HUD_VALUE_FONT = `${LayoutConfigTable.hud.valueFontPx}px`;
+// 플레이필드 경계 — 시각 장식 (BorderBlock 과 별개). 추후 LayoutConfig 로 이관 가능.
 const PLAYFIELD_BORDER_THICKNESS = 6;
 const PLAYFIELD_BORDER_COLOR = 0x666666;
-// 라이프 — 캔버스 절대 좌표 (scrollFactor=0).
-const LIVES_BAR_SCALE = 0.4;                     // 0.3 → 0.4 살짝 키움
-const LIVES_BAR_WIDTH = 120 * LIVES_BAR_SCALE;   // 48
-const LIVES_BAR_HEIGHT = 16 * LIVES_BAR_SCALE;   // ~6.4
-const LIVES_BAR_GAP = 12;
-const LIVES_BAR_X_START_CANVAS = 80;             // 캔버스 좌측 가까이
-const LIVES_BAR_Y_CANVAS = 1700;                 // 캔버스 아래쪽
-const MAX_LIVES_DISPLAY = 7;
-// 응원 mascot 위치 (캔버스 절대 좌표, scrollFactor=0).
-const CHEER_MASCOT_CANVAS_X = 920;
-const CHEER_MASCOT_CANVAS_Y = 1750;
-const CHEER_MASCOT_SIZE = 110;
+// Lives bar — LayoutConfigTable 참조.
+const LIVES_BAR_SCALE = LayoutConfigTable.livesBar.scale;
+const LIVES_BAR_WIDTH = 120 * LIVES_BAR_SCALE;
+const LIVES_BAR_HEIGHT = 16 * LIVES_BAR_SCALE;
+const LIVES_BAR_GAP = LayoutConfigTable.livesBar.gap;
+const LIVES_BAR_X_START_CANVAS = LayoutConfigTable.livesBar.startX;
+const LIVES_BAR_Y_CANVAS = LayoutConfigTable.livesBar.y;
+const MAX_LIVES_DISPLAY = LayoutConfigTable.livesBar.maxDisplay;
+// Cheer mascot — LayoutConfigTable 참조.
+const CHEER_MASCOT_CANVAS_X = LayoutConfigTable.mascot.centerX;
+const CHEER_MASCOT_CANVAS_Y = LayoutConfigTable.mascot.centerY;
+const CHEER_MASCOT_SIZE = LayoutConfigTable.mascot.size;
 // 공 발사 궤적 — 발사 전 (ball.isActive=false) 미리보기.
 const TRAJECTORY_DOT_COUNT = 18;
 const TRAJECTORY_DOT_RADIUS = 5;
@@ -140,12 +158,6 @@ const PLAYFIELD_LOCAL_WIDTH = 720;
 const TRAJECTORY_BALL_RADIUS = 8;
 
 const HUD_HEIGHT = 60;
-const BLOCK_WIDTH = 64;
-const BLOCK_HEIGHT = 24;
-const BAR_HEIGHT = 16;
-const BALL_RADIUS = 8;
-const ITEM_WIDTH = 24;
-const ITEM_HEIGHT = 12;
 
 /**
  * createInGameObjects — InGame 화면에 필요한 Phaser 오브젝트를 1회 생성한다.
@@ -288,10 +300,43 @@ export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
     .setOrigin(0.5, 1)
     .setVisible(false);
 
+  // 하단 슬라이더 — 모바일 한 손 조작용. 캔버스 절대 좌표(scrollFactor=0).
+  const L_slider = LayoutConfigTable.barSlider;
+  const trackCenterX = LayoutConfigTable.canvas.width / 2;
+  const sliderTrack = scene.add
+    .rectangle(
+      trackCenterX,
+      L_slider.centerY,
+      L_slider.trackHalfWidth * 2,
+      L_slider.trackHeight,
+      0x2233aa,
+    )
+    .setOrigin(0.5, 0.5)
+    .setStrokeStyle(2, 0x4466cc)
+    .setScrollFactor(0)
+    .setVisible(false);
+  const sliderKnob = scene.add
+    .arc(
+      trackCenterX,
+      L_slider.centerY,
+      L_slider.knobRadius,
+      0,
+      360,
+      false,
+      0xeeeeee,
+    )
+    .setStrokeStyle(3, 0x666666)
+    .setScrollFactor(0)
+    .setVisible(false);
+
   return {
     bar,
     ball,
     blockMap: new Map(),
+    borderMap: new Map(),
+    doorMap: new Map(),
+    sliderTrack,
+    sliderKnob,
     itemMap: new Map(),
     laserMap: new Map(),
     spinnerMap: new Map(),
@@ -437,6 +482,75 @@ export function renderInGameScreen(
     objects.cheerMascotContainer.setVisible(false);
   }
 
+  // 테두리(BorderBlock) — 깨지지 않는 벽. orientation 에 따라 가로/세로.
+  // 메탈릭 회색 + 흰 stroke 으로 일반 블럭과 구분.
+  const activeBorderIds = new Set<string>();
+  for (const border of gameplayState.borders) {
+    activeBorderIds.add(border.id);
+    const w = border.orientation === 'horizontal' ? BORDER_LENGTH : BORDER_THICKNESS;
+    const h = border.orientation === 'horizontal' ? BORDER_THICKNESS : BORDER_LENGTH;
+
+    let rect = objects.borderMap.get(border.id);
+    if (!rect) {
+      rect = scene.add
+        .rectangle(border.x, border.y, w, h, 0x555566)
+        .setOrigin(0, 0)
+        .setStrokeStyle(1, 0x8899aa);
+      objects.borderMap.set(border.id, rect);
+    }
+    rect.setPosition(border.x, border.y).setSize(w, h).setVisible(true);
+  }
+  for (const [id, rect] of objects.borderMap) {
+    if (!activeBorderIds.has(id)) rect.setVisible(false);
+  }
+
+  // 문(Door) — closed/opening/opened.
+  // 닫힌 문: 진한 갈색 본체 + 황색 stroke.
+  // opening: 왼쪽 anchor 유지, width 가 0 으로 줄어듦 (왼쪽으로 슬라이드 인 효과).
+  // opened: 보이지 않음. (단, 공 collision 은 여전히 풀 사이즈 — 사용자 결정)
+  const activeDoorIds = new Set<string>();
+  for (const door of gameplayState.doors) {
+    activeDoorIds.add(door.id);
+    let rect = objects.doorMap.get(door.id);
+    if (!rect) {
+      rect = scene.add
+        .rectangle(door.x, door.y, BORDER_LENGTH, BORDER_THICKNESS, 0x6b4226)
+        .setOrigin(0, 0)
+        .setStrokeStyle(2, 0xddaa44);
+      objects.doorMap.set(door.id, rect);
+    }
+    if (door.phase === 'opened') {
+      rect.setVisible(false);
+    } else if (door.phase === 'opening') {
+      // ease-out: 1 - (1-t)^2 — 시작 빠르고 끝 부드러움
+      const t = Math.min(1, door.openingElapsedMs / 600);
+      const eased = 1 - (1 - t) * (1 - t);
+      const w = Math.max(0, BORDER_LENGTH * (1 - eased));
+      rect.setPosition(door.x, door.y).setSize(w, BORDER_THICKNESS).setVisible(w > 0);
+    } else {
+      // closed
+      rect.setPosition(door.x, door.y).setSize(BORDER_LENGTH, BORDER_THICKNESS).setVisible(true);
+    }
+  }
+  for (const [id, rect] of objects.doorMap) {
+    if (!activeDoorIds.has(id)) rect.setVisible(false);
+  }
+
+  // 하단 슬라이더 — knob 위치를 bar.x 에 매핑.
+  // bar.x 범위 [halfBar, playfield.width - halfBar] → 트랙 [-trackHalfWidth, +trackHalfWidth]
+  {
+    const L_s = LayoutConfigTable.barSlider;
+    const trackCenterX = LayoutConfigTable.canvas.width / 2;
+    const halfBar = gameplayState.bar.width / 2;
+    const playfieldW = LayoutConfigTable.playfield.width;
+    const denom = playfieldW - 2 * halfBar;
+    const ratio = denom > 0 ? (gameplayState.bar.x - halfBar) / denom : 0.5;
+    const clampedRatio = Math.max(0, Math.min(1, ratio));
+    const knobX = trackCenterX - L_s.trackHalfWidth + clampedRatio * (L_s.trackHalfWidth * 2);
+    objects.sliderTrack.setVisible(true);
+    objects.sliderKnob.setPosition(knobX, L_s.centerY).setVisible(true);
+  }
+
   // 블록: 파괴되지 않은 블록만 visible
   const activeBlockIds = new Set<string>();
   for (const block of gameplayState.blocks) {
@@ -449,16 +563,14 @@ export function renderInGameScreen(
     let rect = objects.blockMap.get(block.id);
     if (!rect) {
       // 최초 등장 시 1회 생성 (기본 색으로 생성)
+      // setOrigin(0,0): BlockState.{x,y}는 좌상단 (collision/editor와 동일 컨벤션).
+      // Phaser 기본 origin(0.5)을 그대로 쓰면 시각이 (-W/2,-H/2)만큼 어긋나 공이 통과하는 것처럼 보임.
       const color = def
         ? (BLOCK_COLOR_MAP[def.visualId] ?? BLOCK_COLOR_DEFAULT)
         : BLOCK_COLOR_DEFAULT;
-      rect = scene.add.rectangle(
-        block.x,
-        block.y,
-        BLOCK_WIDTH,
-        BLOCK_HEIGHT,
-        color,
-      );
+      rect = scene.add
+        .rectangle(block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT, color)
+        .setOrigin(0, 0);
       objects.blockMap.set(block.id, rect);
     }
 
@@ -639,14 +751,19 @@ export function renderInGameScreen(
       ];
 
       // 면 정의: [vi0, vi1, vi2, vi3, colorHex]
+      // 각 면이 "OUTSIDE" 에서 봤을 때 동일한 chirality 가 되도록 vertex 순서 정렬.
+      // 2D nz 체크는 모든 면에서 동일한 부호 규칙 (front-facing = positive) 이 성립
+      // 해야 함. back/left 가 다른 면들과 반대로 listed 되어 있던 버그를 수정 —
+      // 이전 버전에서는 angle ≈ π 근처에서 front+back 둘 다 hidden, 사이드만
+      // narrow strip 으로 보여 큐브가 비어 보였음.
       type Face = { idx: [number, number, number, number]; color: number };
       const faces: Face[] = [
         { idx: [4, 5, 6, 7], color: CUBE_FRONT },  // front
-        { idx: [0, 1, 2, 3], color: CUBE_FRONT },  // back
-        { idx: [0, 1, 5, 4], color: CUBE_TOP   },  // top
-        { idx: [3, 2, 6, 7], color: CUBE_TOP   },  // bottom
+        { idx: [3, 2, 1, 0], color: CUBE_FRONT },  // back (역순 — outside view 일치)
+        { idx: [0, 1, 5, 4], color: CUBE_TOP   },  // top (degenerate, 순서 무관)
+        { idx: [3, 2, 6, 7], color: CUBE_TOP   },  // bottom (degenerate)
         { idx: [1, 2, 6, 5], color: CUBE_SIDE  },  // right
-        { idx: [0, 3, 7, 4], color: CUBE_SIDE  },  // left
+        { idx: [4, 7, 3, 0], color: CUBE_SIDE  },  // left (역순)
       ];
 
       // 가시 판정 & depth 정렬
@@ -929,6 +1046,8 @@ export function hideInGameScreen(objects: InGameObjects): void {
   }
   objects.cheerMascotContainer.setVisible(false);
   objects.hudEffectTimer.setVisible(false);
+  objects.sliderTrack.setVisible(false);
+  objects.sliderKnob.setVisible(false);
   objects.bar.setVisible(false);
   objects.ball.setVisible(false);
   for (const rect of objects.blockMap.values()) {
@@ -938,6 +1057,12 @@ export function hideInGameScreen(objects: InGameObjects): void {
     container.setVisible(false);
   }
   for (const rect of objects.laserMap.values()) {
+    rect.setVisible(false);
+  }
+  for (const rect of objects.borderMap.values()) {
+    rect.setVisible(false);
+  }
+  for (const rect of objects.doorMap.values()) {
     rect.setVisible(false);
   }
   for (const obj of objects.spinnerMap.values()) {

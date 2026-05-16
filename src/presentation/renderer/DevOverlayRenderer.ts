@@ -3,6 +3,14 @@ import type { GameplayRuntimeState } from '../../gameplay/state/GameplayRuntimeS
 import type { GameFlowState } from '../../flow/state/GameFlowState';
 import type { DevContext } from '../../app/dev/DevContext';
 import type { CollisionLogEntry } from '../../app/dev/CollisionLog';
+import {
+  BLOCK_WIDTH,
+  BLOCK_HEIGHT,
+  BORDER_LENGTH,
+  BORDER_THICKNESS,
+} from '../../gameplay/systems/playfieldLayout';
+import { SpinnerDefinitionTable } from '../../definitions/tables/SpinnerDefinitionTable';
+import { getCollisionPolygon } from '../../gameplay/entities/Spinner';
 
 /**
  * DevOverlayRenderer — 개발 전용 오버레이 렌더러.
@@ -191,6 +199,43 @@ export class DevOverlayRenderer {
         this.trailGraphics.lineTo(curr.x, curr.y);
         this.trailGraphics.strokePath();
       }
+    }
+
+    // 3b. Collision shape 시각화 — 디버그용. 같은 trailGraphics 에 stroke.
+    //   block:     magenta AABB
+    //   border:    cyan AABB
+    //   door:      orange AABB
+    //   spinner:   yellow circle (radius = size/2). circling phase 만 solid, 그 외 dashed.
+    for (const block of gameplayState.blocks) {
+      if (block.isDestroyed) continue;
+      this.trailGraphics.lineStyle(1, 0xff00ff, 0.9);
+      this.trailGraphics.strokeRect(block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT);
+    }
+    for (const border of gameplayState.borders) {
+      const w = border.orientation === 'horizontal' ? BORDER_LENGTH : BORDER_THICKNESS;
+      const h = border.orientation === 'horizontal' ? BORDER_THICKNESS : BORDER_LENGTH;
+      this.trailGraphics.lineStyle(1, 0x00ffff, 0.8);
+      this.trailGraphics.strokeRect(border.x, border.y, w, h);
+    }
+    for (const door of gameplayState.doors) {
+      this.trailGraphics.lineStyle(2, 0xff8800, 0.9);
+      this.trailGraphics.strokeRect(door.x, door.y, BORDER_LENGTH, BORDER_THICKNESS);
+    }
+    for (const spinner of gameplayState.spinnerStates) {
+      const def = SpinnerDefinitionTable[spinner.definitionId];
+      if (def === undefined) continue;
+      const isActive = spinner.phase === 'circling';
+      this.trailGraphics.lineStyle(2, 0xffee00, isActive ? 0.95 : 0.4);
+      const poly = getCollisionPolygon(spinner, def);
+      this.trailGraphics.beginPath();
+      const first = poly[0]!;
+      this.trailGraphics.moveTo(first.x, first.y);
+      for (let i = 1; i < poly.length; i++) {
+        const v = poly[i]!;
+        this.trailGraphics.lineTo(v.x, v.y);
+      }
+      this.trailGraphics.closePath();
+      this.trailGraphics.strokePath();
     }
 
     // 4. 충돌 로그 (우측 상단 최대 5줄)

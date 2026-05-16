@@ -13,6 +13,12 @@ export type BlockTypeId =
 
 export type SpinnerTypeId = 'spinner_cube' | 'spinner_triangle';
 
+/** 에디터 모드. block 팔레트 / spinner 배치 / border 배치 / door 배치 중 1. */
+export type EditorMode = 'block' | 'spinner' | 'border' | 'door';
+
+/** Border 방향. horizontal=상단, vertical=좌/우. */
+export type BorderOrientation = 'horizontal' | 'vertical';
+
 // ─── 그리드 배치 ─────────────────────────────────────────────────────────────
 
 export type EditorBlockPlacement = {
@@ -26,6 +32,17 @@ export type EditorSpinnerPlacement = {
   definitionId: SpinnerTypeId;
   x: number;
   y: number;
+};
+
+export type EditorBorderPlacement = {
+  row: number;
+  col: number;
+  orientation: BorderOrientation;
+};
+
+export type EditorDoorPlacement = {
+  col: number;
+  spinnerDefinitionId: SpinnerTypeId;
 };
 
 // ─── 스테이지 메타데이터 ──────────────────────────────────────────────────────
@@ -48,6 +65,8 @@ export type StageSlotState = {
   metadata: StageMetadata;
   blocks: EditorBlockPlacement[];
   spinners: EditorSpinnerPlacement[];
+  borders: EditorBorderPlacement[];
+  doors: EditorDoorPlacement[];
 };
 
 // ─── 에디터 상태 ─────────────────────────────────────────────────────────────
@@ -58,6 +77,7 @@ export type EditorState = {
   activeStageIndex: 0 | 1 | 2;
 
   // 팔레트 / 인터랙션 (활성 스테이지와 독립)
+  mode: EditorMode;
   selectedBlockType: BlockTypeId;
   selectedSpinnerType: SpinnerTypeId | null;
   isSpinnerPlacementMode: boolean;
@@ -65,6 +85,10 @@ export type EditorState = {
   isDraggingSpinner: boolean;
   dragOffsetX: number;
   dragOffsetY: number;
+  /** border 모드에서 다음에 놓을 방향. horizontal=상단, vertical=좌/우. */
+  selectedBorderOrientation: BorderOrientation;
+  /** door 모드에서 door가 spawn 시킬 스피너 정의. */
+  selectedDoorSpinner: SpinnerTypeId;
 };
 
 // ─── Bulk JSON 포맷 ──────────────────────────────────────────────────────────
@@ -85,7 +109,14 @@ export {
   PLAYFIELD_HEIGHT as CANVAS_H,
   BLOCK_GRID_COLS as GRID_COLS,
   BLOCK_GRID_ROWS as GRID_ROWS,
+  BORDER_LENGTH,
+  BORDER_THICKNESS,
 } from '../gameplay/systems/playfieldLayout';
+
+/** Border 그리드: 상단 가로 셀 수. PLAYFIELD_WIDTH / BORDER_LENGTH. */
+export const BORDER_TOP_COLS = 11; // 720 / 64 = 11.25 → 11 (마지막 16px 빔)
+/** Border 그리드: 좌/우 세로 셀 수. PLAYFIELD_HEIGHT / BORDER_LENGTH. */
+export const BORDER_SIDE_ROWS = 11;
 
 // ─── 팔레트 색상 ─────────────────────────────────────────────────────────────
 
@@ -127,6 +158,17 @@ export type StageSpinnerPlacementJson = {
   y: number;
 };
 
+export type StageBorderPlacementJson = {
+  row: number;
+  col: number;
+  orientation: BorderOrientation;
+};
+
+export type StageDoorPlacementJson = {
+  col: number;
+  spinnerDefinitionId: string;
+};
+
 export type StageJson = {
   stageId: string;
   displayName: string;
@@ -138,5 +180,7 @@ export type StageJson = {
   ballInitialSpeed: number;
   ballInitialAngleDeg: number;
   blocks: StageBlockPlacementJson[];
+  borders?: StageBorderPlacementJson[];
+  doors?: StageDoorPlacementJson[];
   spinners?: StageSpinnerPlacementJson[];
 };

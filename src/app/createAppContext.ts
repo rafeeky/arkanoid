@@ -73,6 +73,8 @@ export type AppContext = {
   getVisualEffectController(): import('../presentation/controller/VisualEffectController').VisualEffectController;
   /** Dev 전용: 진행 중인 intro 를 즉시 스킵한다. IntroSequenceFinished 가 발행되어 Flow 가 RoundIntro 로 전이한다. */
   skipIntroSequence(): void;
+  /** Dev 전용: 현재 스테이지를 강제 클리어 → 다음 스테이지 로드. inGame 상태에서만 동작. */
+  skipStage(): void;
   /** AudioPlayer를 교체한다. GameScene.create 후 PhaserAudioPlayer 주입에 사용. */
   setAudioPlayer(player: IAudioPlayer): void;
   /** BGM/SFX 음소거 토글 — Pause 메뉴에서 사용. */
@@ -306,6 +308,18 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     visualEffectController.skipIntroSequence(handlePresentationEvent);
   }
 
+  function skipStage(): void {
+    // Dev: inGame 상태에서만 의미 있음. 다른 상태에서는 무시.
+    if (flowController.getState().kind !== 'inGame') return;
+    // GameplayController.forceStageCleared 가 StageCleared 이벤트를 반환.
+    // 정상 tick 의 gameplayEvents 처리 경로와 동일하게 라우팅.
+    const events = gameplayController.forceStageCleared();
+    for (const event of events) {
+      flowEventRouter.onGameplayEvent(event, currentTick);
+      visualEffectController.handleGameplayEvent(event);
+    }
+  }
+
   return {
     tick,
     getFlowState,
@@ -325,5 +339,6 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
     tryUnlockMascot,
     _setGameplayState,
     skipIntroSequence,
+    skipStage,
   };
 }

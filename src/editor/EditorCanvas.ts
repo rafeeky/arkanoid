@@ -16,6 +16,10 @@ import {
   CANVAS_H,
   BLOCK_COLORS,
   SPINNER_COLORS,
+  BORDER_LENGTH,
+  BORDER_THICKNESS,
+  BORDER_TOP_COLS,
+  BORDER_SIDE_ROWS,
 } from './editorTypes';
 import { clampSpinnerCenter, CIRCLE_RADIUS } from '../gameplay/systems/playfieldLayout';
 
@@ -102,9 +106,84 @@ export class EditorCanvas {
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
     this.drawStageLabel(state);
+    this.drawBorderGrid(state);
+    this.drawBorders(slot.borders);
+    this.drawDoors(slot.doors);
     this.drawGrid(slot.blocks);
     this.drawSpinners(slot.spinners, state.selectedSpinnerId);
     this.drawCursor(state);
+  }
+
+  /**
+   * 테두리 셀 그리드 라인 표시 — border/door 모드일 때 강조.
+   * 상단(BORDER_TOP_COLS 개 가로 셀) + 좌/우(BORDER_SIDE_ROWS 개 세로 셀) 가이드.
+   */
+  private drawBorderGrid(state: Readonly<EditorState>): void {
+    const { ctx } = this;
+    const highlight = state.mode === 'border' || state.mode === 'door';
+    ctx.save();
+    ctx.strokeStyle = highlight ? '#8899aa' : '#333';
+    ctx.lineWidth = 1;
+    ctx.setLineDash(highlight ? [] : [2, 3]);
+    // 상단
+    for (let col = 0; col < BORDER_TOP_COLS; col++) {
+      ctx.strokeRect(col * BORDER_LENGTH + 0.5, 0.5, BORDER_LENGTH - 1, BORDER_THICKNESS - 1);
+    }
+    // 좌/우 — door 모드에선 비활성 (door는 상단만)
+    if (state.mode !== 'door') {
+      for (let row = 0; row < BORDER_SIDE_ROWS; row++) {
+        ctx.strokeRect(0.5, row * BORDER_LENGTH + 0.5, BORDER_THICKNESS - 1, BORDER_LENGTH - 1);
+        ctx.strokeRect(
+          CANVAS_W - BORDER_THICKNESS + 0.5,
+          row * BORDER_LENGTH + 0.5,
+          BORDER_THICKNESS - 1,
+          BORDER_LENGTH - 1,
+        );
+      }
+    }
+    ctx.restore();
+  }
+
+  private drawBorders(borders: Readonly<EditorState['stages'][0]['borders']>): void {
+    const { ctx } = this;
+    for (const b of borders) {
+      const w = b.orientation === 'horizontal' ? BORDER_LENGTH : BORDER_THICKNESS;
+      const h = b.orientation === 'horizontal' ? BORDER_THICKNESS : BORDER_LENGTH;
+      let x: number;
+      let y: number;
+      if (b.orientation === 'horizontal') {
+        x = b.col * BORDER_LENGTH;
+        y = b.row * BORDER_THICKNESS;
+      } else {
+        x = b.col === 0 ? 0 : CANVAS_W - BORDER_THICKNESS;
+        y = b.row * BORDER_LENGTH;
+      }
+      ctx.fillStyle = '#555566';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#8899aa';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    }
+  }
+
+  private drawDoors(doors: Readonly<EditorState['stages'][0]['doors']>): void {
+    const { ctx } = this;
+    for (const d of doors) {
+      const x = d.col * BORDER_LENGTH;
+      const y = 0;
+      ctx.fillStyle = '#6b4226';
+      ctx.fillRect(x, y, BORDER_LENGTH, BORDER_THICKNESS);
+      ctx.strokeStyle = '#ddaa44';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, BORDER_LENGTH - 2, BORDER_THICKNESS - 2);
+      // spinner kind 표기 (cube=C / triangle=T)
+      ctx.fillStyle = '#ffe0a0';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const letter = d.spinnerDefinitionId === 'spinner_cube' ? 'C' : 'T';
+      ctx.fillText(letter, x + BORDER_LENGTH / 2, y + BORDER_THICKNESS / 2);
+    }
   }
 
   private drawStageLabel(state: Readonly<EditorState>): void {
@@ -259,25 +338,28 @@ export class EditorCanvas {
   }
 
   private drawCursor(state: Readonly<EditorState>): void {
-    if (!state.isSpinnerPlacementMode) return;
-
     const { ctx } = this;
-    ctx.save();
-    ctx.strokeStyle = '#ffff00';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    let label: string | null = null;
+    if (state.mode === 'spinner') {
+      label = state.selectedSpinnerType === 'spinner_cube'
+        ? '[cube 배치 모드] 캔버스 안 임의 위치 클릭'
+        : '[triangle 배치 모드] 캔버스 안 임의 위치 클릭';
+    } else if (state.mode === 'border') {
+      label = state.selectedBorderOrientation === 'horizontal'
+        ? '[테두리 (가로/상단) 배치] 상단 라인 클릭. 같은 곳 재클릭 = 제거'
+        : '[테두리 (세로/좌·우) 배치] 좌/우 라인 클릭. 같은 곳 재클릭 = 제거';
+    } else if (state.mode === 'door') {
+      const kind = state.selectedDoorSpinner === 'spinner_cube' ? 'cube' : 'triangle';
+      label = `[문 배치 — ${kind} 스폰] 상단 라인 클릭. 같은 곳 재클릭 = 제거`;
+    }
+    if (label === null) return;
 
-    // 스피너 배치 모드 안내 텍스트
+    ctx.save();
     ctx.fillStyle = '#ffff00cc';
     ctx.font = '13px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    const label =
-      state.selectedSpinnerType === 'spinner_cube'
-        ? '[cube 배치 모드] 클릭해서 스피너 배치'
-        : '[triangle 배치 모드] 클릭해서 스피너 배치';
     ctx.fillText(label, CANVAS_W / 2, CANVAS_H - 30);
-
     ctx.restore();
   }
 }

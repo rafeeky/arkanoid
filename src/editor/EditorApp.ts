@@ -8,8 +8,11 @@ import type {
   StageSlotState,
   EditorBlockPlacement,
   EditorSpinnerPlacement,
+  EditorBorderPlacement,
+  EditorDoorPlacement,
   BlockTypeId,
   SpinnerTypeId,
+  BorderOrientation,
   StageJson,
   StageMetadata,
   AllStagesJson,
@@ -23,6 +26,11 @@ import {
   GRID_OFFSET_X,
   GRID_OFFSET_Y,
   CANVAS_W,
+  CANVAS_H,
+  BORDER_LENGTH,
+  BORDER_THICKNESS,
+  BORDER_TOP_COLS,
+  BORDER_SIDE_ROWS,
 } from './editorTypes';
 
 let _spinnerIdCounter = 0;
@@ -74,6 +82,8 @@ function makeEmptySlot(idx: 0 | 1 | 2): StageSlotState {
     metadata: { ...STAGE_DEFAULT_METADATA[idx] },
     blocks: [],
     spinners: [],
+    borders: [],
+    doors: [],
   };
 }
 
@@ -90,6 +100,7 @@ export class EditorApp {
     this.state = {
       stages: makeInitialStages(),
       activeStageIndex: 0,
+      mode: 'block',
       selectedBlockType: 'basic',
       selectedSpinnerType: null,
       isSpinnerPlacementMode: false,
@@ -97,6 +108,8 @@ export class EditorApp {
       isDraggingSpinner: false,
       dragOffsetX: 0,
       dragOffsetY: 0,
+      selectedBorderOrientation: 'horizontal',
+      selectedDoorSpinner: 'spinner_cube',
     };
   }
 
@@ -145,6 +158,7 @@ export class EditorApp {
   selectBlockType(type: BlockTypeId): void {
     this.state = {
       ...this.state,
+      mode: 'block',
       selectedBlockType: type,
       isSpinnerPlacementMode: false,
       selectedSpinnerType: null,
@@ -155,6 +169,7 @@ export class EditorApp {
   enterSpinnerPlacementMode(type: SpinnerTypeId): void {
     this.state = {
       ...this.state,
+      mode: 'spinner',
       isSpinnerPlacementMode: true,
       selectedSpinnerType: type,
     };
@@ -164,6 +179,29 @@ export class EditorApp {
   exitSpinnerPlacementMode(): void {
     this.state = {
       ...this.state,
+      mode: 'block',
+      isSpinnerPlacementMode: false,
+      selectedSpinnerType: null,
+    };
+    this.onStateChange();
+  }
+
+  enterBorderMode(orientation: BorderOrientation): void {
+    this.state = {
+      ...this.state,
+      mode: 'border',
+      selectedBorderOrientation: orientation,
+      isSpinnerPlacementMode: false,
+      selectedSpinnerType: null,
+    };
+    this.onStateChange();
+  }
+
+  enterDoorMode(spinnerType: SpinnerTypeId): void {
+    this.state = {
+      ...this.state,
+      mode: 'door',
+      selectedDoorSpinner: spinnerType,
       isSpinnerPlacementMode: false,
       selectedSpinnerType: null,
     };
@@ -196,14 +234,61 @@ export class EditorApp {
     };
   }
 
+  // ─── Border/Door 셀 좌표 변환 ────────────────────────────────────────────
+
+  /**
+   * 클릭 좌표가 어느 테두리 셀에 속하는지 판정.
+   *   - 상단(horizontal): y < BORDER_THICKNESS, col 0..BORDER_TOP_COLS-1
+   *   - 좌측(vertical, col=0): x < BORDER_THICKNESS, row 0..BORDER_SIDE_ROWS-1
+   *   - 우측(vertical, col=1): x >= CANVAS_W - BORDER_THICKNESS, row 0..BORDER_SIDE_ROWS-1
+   */
+  canvasPosToBorderCell(
+    cx: number,
+    cy: number,
+  ): { row: number; col: number; orientation: BorderOrientation } | null {
+    if (cy < BORDER_THICKNESS) {
+      const col = Math.floor(cx / BORDER_LENGTH);
+      if (col < 0 || col >= BORDER_TOP_COLS) return null;
+      return { row: 0, col, orientation: 'horizontal' };
+    }
+    if (cx < BORDER_THICKNESS) {
+      const row = Math.floor(cy / BORDER_LENGTH);
+      if (row < 0 || row >= BORDER_SIDE_ROWS) return null;
+      return { row, col: 0, orientation: 'vertical' };
+    }
+    if (cx >= CANVAS_W - BORDER_THICKNESS) {
+      const row = Math.floor(cy / BORDER_LENGTH);
+      if (row < 0 || row >= BORDER_SIDE_ROWS) return null;
+      return { row, col: 1, orientation: 'vertical' };
+    }
+    return null;
+  }
+
+  /** 캔버스 좌표 → 상단 테두리 col (door 배치용). 상단 영역 외면 null. */
+  canvasPosToDoorCol(cx: number, cy: number): number | null {
+    if (cy >= BORDER_THICKNESS) return null;
+    const col = Math.floor(cx / BORDER_LENGTH);
+    if (col < 0 || col >= BORDER_TOP_COLS) return null;
+    return col;
+  }
+
   // ─── 블록 배치/제거 ──────────────────────────────────────────────────────
 
   handleCanvasClick(cx: number, cy: number): void {
-    if (this.state.isSpinnerPlacementMode) {
+    if (this.state.mode === 'spinner') {
       this.placeSpinnerAt(cx, cy);
       return;
     }
+    if (this.state.mode === 'border') {
+      this.handleBorderClick(cx, cy);
+      return;
+    }
+    if (this.state.mode === 'door') {
+      this.handleDoorClick(cx, cy);
+      return;
+    }
 
+    // 'block' mode
     const cell = this.canvasPosToGridCell(cx, cy);
     if (cell === null) return;
 
@@ -221,6 +306,61 @@ export class EditorApp {
       this.removeBlock(row, col);
     } else {
       this.setBlock(row, col, this.state.selectedBlockType);
+    }
+  }
+
+  // ─── Border 배치/제거 ────────────────────────────────────────────────────
+
+  private handleBorderClick(cx: number, cy: number): void {
+    const cell = this.canvasPosToBorderCell(cx, cy);
+    if (cell === null) return;
+    const slot = this.getActiveSlot();
+    // 같은 셀에 이미 border 가 있으면 제거, 없으면 추가
+    const existing = slot.borders.find(
+      (b) => b.row === cell.row && b.col === cell.col && b.orientation === cell.orientation,
+    );
+    if (existing) {
+      const borders = slot.borders.filter(
+        (b) => !(b.row === cell.row && b.col === cell.col && b.orientation === cell.orientation),
+      );
+      this.patchActiveSlot({ borders });
+    } else {
+      // door 와 같은 자리 (상단 horizontal) 충돌 방지: 같은 col 의 horizontal border 추가 시
+      //   해당 col 의 door 가 있으면 door 우선 — border 추가 거부.
+      if (cell.orientation === 'horizontal' && slot.doors.some((d) => d.col === cell.col)) {
+        return;
+      }
+      const placement: EditorBorderPlacement = cell;
+      this.patchActiveSlot({ borders: [...slot.borders, placement] });
+    }
+  }
+
+  // ─── Door 배치/제거 ──────────────────────────────────────────────────────
+
+  private handleDoorClick(cx: number, cy: number): void {
+    const col = this.canvasPosToDoorCol(cx, cy);
+    if (col === null) return;
+    const slot = this.getActiveSlot();
+    const existing = slot.doors.find((d) => d.col === col);
+    if (existing) {
+      // 같은 자리 클릭 → 제거
+      const doors = slot.doors.filter((d) => d.col !== col);
+      this.patchActiveSlot({ doors });
+    } else {
+      // border 가 같은 col 의 horizontal 자리에 있으면 같이 제거 (door 가 우선)
+      const borders = slot.borders.filter(
+        (b) => !(b.orientation === 'horizontal' && b.col === col),
+      );
+      // 같은 col 범위 [col*BORDER_LENGTH, (col+1)*BORDER_LENGTH) 의 직접 spinner 제거.
+      // door 가 spawn 시키므로 중복 방지.
+      const colMinX = col * BORDER_LENGTH;
+      const colMaxX = (col + 1) * BORDER_LENGTH;
+      const spinners = slot.spinners.filter((s) => s.x < colMinX || s.x >= colMaxX);
+      const placement: EditorDoorPlacement = {
+        col,
+        spinnerDefinitionId: this.state.selectedDoorSpinner,
+      };
+      this.patchActiveSlot({ borders, spinners, doors: [...slot.doors, placement] });
     }
   }
 
@@ -252,9 +392,13 @@ export class EditorApp {
       y: Math.round(cy),
     };
     const slot = this.getActiveSlot();
-    this.patchActiveSlot({ spinners: [...slot.spinners, spinner] });
+    // 같은 col 의 door 가 있으면 제거 (중복 spawn 방지).
+    const col = Math.floor(spinner.x / BORDER_LENGTH);
+    const doors = slot.doors.filter((d) => d.col !== col);
+    this.patchActiveSlot({ spinners: [...slot.spinners, spinner], doors });
     this.state = {
       ...this.state,
+      mode: 'block',
       isSpinnerPlacementMode: false,
       selectedSpinnerType: null,
     };
@@ -394,6 +538,8 @@ export class EditorApp {
       metadata: { ...STAGE_DEFAULT_METADATA[idx] },
       blocks: [],
       spinners: [],
+      borders: [],
+      doors: [],
     });
   }
 
@@ -414,13 +560,28 @@ export class EditorApp {
 // ─── 순수 변환 함수 (내부 헬퍼) ──────────────────────────────────────────────
 
 function slotToJson(slot: Readonly<StageSlotState>): string {
-  const { metadata, blocks, spinners } = slot;
+  const { metadata, blocks, spinners, borders, doors } = slot;
   const json: StageJson = {
     ...metadata,
     blocks: blocks
       .sort((a, b) => a.row - b.row || a.col - b.col)
       .map((b) => ({ row: b.row, col: b.col, definitionId: b.definitionId })),
   };
+  if (borders.length > 0) {
+    json.borders = [...borders]
+      .sort(
+        (a, b) =>
+          (a.orientation < b.orientation ? -1 : a.orientation > b.orientation ? 1 : 0) ||
+          a.row - b.row ||
+          a.col - b.col,
+      )
+      .map((b) => ({ row: b.row, col: b.col, orientation: b.orientation }));
+  }
+  if (doors.length > 0) {
+    json.doors = [...doors]
+      .sort((a, b) => a.col - b.col)
+      .map((d) => ({ col: d.col, spinnerDefinitionId: d.spinnerDefinitionId }));
+  }
   if (spinners.length > 0) {
     json.spinners = spinners.map((s) => ({
       definitionId: s.definitionId,
@@ -507,6 +668,31 @@ function parseStageJsonFromObject(parsed: unknown): ParseResult {
       }));
   }
 
+  const rawBorders = Array.isArray(obj['borders']) ? obj['borders'] : [];
+  if (rawBorders.length > 0) {
+    data.borders = rawBorders
+      .filter((b): b is Record<string, unknown> => typeof b === 'object' && b !== null)
+      .map((b) => ({
+        row: typeof b['row'] === 'number' ? b['row'] : 0,
+        col: typeof b['col'] === 'number' ? b['col'] : 0,
+        orientation:
+          b['orientation'] === 'vertical' ? 'vertical' : 'horizontal',
+      }));
+  }
+
+  const rawDoors = Array.isArray(obj['doors']) ? obj['doors'] : [];
+  if (rawDoors.length > 0) {
+    data.doors = rawDoors
+      .filter((d): d is Record<string, unknown> => typeof d === 'object' && d !== null)
+      .map((d) => ({
+        col: typeof d['col'] === 'number' ? d['col'] : 0,
+        spinnerDefinitionId:
+          typeof d['spinnerDefinitionId'] === 'string'
+            ? d['spinnerDefinitionId']
+            : 'spinner_cube',
+      }));
+  }
+
   return { ok: true, data };
 }
 
@@ -514,7 +700,8 @@ function jsonToSlot(data: StageJson): StageSlotState {
   const { stageId, displayName, backgroundId,
     barSpawnX, barSpawnY, ballSpawnX, ballSpawnY,
     ballInitialSpeed, ballInitialAngleDeg,
-    blocks: rawBlocks, spinners: rawSpinners } = data;
+    blocks: rawBlocks, spinners: rawSpinners,
+    borders: rawBorders, doors: rawDoors } = data;
 
   const metadata: StageMetadata = {
     stageId, displayName, backgroundId,
@@ -535,5 +722,16 @@ function jsonToSlot(data: StageJson): StageSlotState {
     y: s.y,
   }));
 
-  return { metadata, blocks, spinners };
+  const borders: EditorBorderPlacement[] = (rawBorders ?? []).map((b) => ({
+    row: b.row,
+    col: b.col,
+    orientation: b.orientation,
+  }));
+
+  const doors: EditorDoorPlacement[] = (rawDoors ?? []).map((d) => ({
+    col: d.col,
+    spinnerDefinitionId: d.spinnerDefinitionId as import('./editorTypes').SpinnerTypeId,
+  }));
+
+  return { metadata, blocks, spinners, borders, doors };
 }

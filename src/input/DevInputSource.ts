@@ -15,12 +15,14 @@ export class DevInputSource {
   private readonly f1Key: Phaser.Input.Keyboard.Key;
   private readonly f2Key: Phaser.Input.Keyboard.Key;
   private readonly f3Key: Phaser.Input.Keyboard.Key;
+  private readonly nKey: Phaser.Input.Keyboard.Key;
 
   constructor(scene: Phaser.Scene) {
     const kb = scene.input.keyboard!;
     this.f1Key = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F1);
     this.f2Key = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F2);
     this.f3Key = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F3);
+    this.nKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.N);
   }
 
   /**
@@ -45,5 +47,13 @@ export class DevInputSource {
    */
   isClearLogPressed(): boolean {
     return Phaser.Input.Keyboard.JustDown(this.f3Key);
+  }
+
+  /**
+   * isSkipStagePressed — N 단일 눌림 감지 (현재 스테이지 강제 클리어용).
+   * inGame 상태에서만 의미 있음.
+   */
+  isSkipStagePressed(): boolean {
+    return Phaser.Input.Keyboard.JustDown(this.nKey);
   }
 }

@@ -16,22 +16,25 @@
  * Screen Match Mode = Expand. 플레이필드 RectTransform anchor 가 동일한 offset.
  */
 
-/** 캔버스 (Phaser game) 가로/세로 — FHD 1080×1920, 16:9 베이스. */
-export const CANVAS_WIDTH = 1080;
-export const CANVAS_HEIGHT = 1920;
+// LayoutConfigTable 이 단일 진실 (docs/screen-layout.md §4-1). 이 모듈은
+// 기존 import 경로 호환용 re-export. 값 수정은 LayoutConfigTable.ts 에서만.
 
-/** 플레이필드 가로/세로 — 기존 720×720 종회. */
-export const PLAYFIELD_WIDTH = 720;
-export const PLAYFIELD_HEIGHT = 720;
+import { LayoutConfigTable as L } from '../../definitions/tables/LayoutConfigTable';
+
+/** 캔버스 (Phaser game) 가로/세로. */
+export const CANVAS_WIDTH = L.canvas.width;
+export const CANVAS_HEIGHT = L.canvas.height;
+
+/** 플레이필드 가로/세로. */
+export const PLAYFIELD_WIDTH = L.playfield.width;
+export const PLAYFIELD_HEIGHT = L.playfield.height;
 
 /** 캔버스 내부 플레이필드 좌상단 오프셋 (캔버스 좌표계). */
-export const PLAYFIELD_OFFSET_X = (CANVAS_WIDTH - PLAYFIELD_WIDTH) / 2; // 180
-// 플레이필드를 캔버스 세로 가운데 배치. (1920 - 720) / 2 = 600.
-// HUD 와 Lives 는 scrollFactor=0 으로 캔버스 위/아래 끝에 따로 배치.
-export const PLAYFIELD_OFFSET_Y = (CANVAS_HEIGHT - PLAYFIELD_HEIGHT) / 2; // 600
+export const PLAYFIELD_OFFSET_X = L.playfield.offsetX;
+export const PLAYFIELD_OFFSET_Y = L.playfield.offsetY;
 
 /** 위쪽 HUD 영역 높이 (HIGH SCORE / SCORE / ROUND 등). */
-export const TOP_HUD_HEIGHT = PLAYFIELD_OFFSET_Y; // 600
+export const TOP_HUD_HEIGHT = L.playfield.offsetY;
 
 /** 아래 영역 높이 (라이프 표시 + 추가 UI 자리). */
-export const BOTTOM_AREA_HEIGHT = CANVAS_HEIGHT - PLAYFIELD_OFFSET_Y - PLAYFIELD_HEIGHT; // 600
+export const BOTTOM_AREA_HEIGHT = L.canvas.height - L.playfield.offsetY - L.playfield.height;

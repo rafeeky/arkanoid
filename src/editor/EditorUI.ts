@@ -3,12 +3,14 @@
 // Unity 포팅 시 EditorUIPanel (MonoBehaviour or UI Toolkit Document) 하나로 매핑.
 // DOM 조작은 이 파일 안에서만 수행.
 
-import type { EditorState, StageMetadata, BlockTypeId, SpinnerTypeId } from './editorTypes';
+import type { EditorState, StageMetadata, BlockTypeId, SpinnerTypeId, BorderOrientation } from './editorTypes';
 import { BLOCK_COLORS, BLOCK_LABELS, SPINNER_COLORS } from './editorTypes';
 
 export type EditorUICallbacks = {
   onSelectBlockType: (type: BlockTypeId) => void;
   onSelectSpinnerType: (type: SpinnerTypeId) => void;
+  onEnterBorderMode: (orientation: BorderOrientation) => void;
+  onEnterDoorMode: (spinnerType: SpinnerTypeId) => void;
   onSetActiveStage: (idx: 0 | 1 | 2) => void;
   onExportCurrent: () => void;
   onImportCurrent: (text: string) => void;
@@ -40,6 +42,8 @@ export class EditorUI {
   // 팔레트 버튼 참조
   private blockBtns: Map<BlockTypeId, HTMLButtonElement> = new Map();
   private spinnerBtns: Map<SpinnerTypeId, HTMLButtonElement> = new Map();
+  private borderBtns: Map<BorderOrientation, HTMLButtonElement> = new Map();
+  private doorBtns: Map<SpinnerTypeId, HTMLButtonElement> = new Map();
 
   // 메타데이터 입력 참조
   private metaInputs: Partial<Record<keyof StageMetadata, HTMLInputElement>> = {};
@@ -81,6 +85,8 @@ export class EditorUI {
     this.root.appendChild(this.buildStageTabs());
     this.root.appendChild(this.buildBlockPalette());
     this.root.appendChild(this.buildSpinnerPanel());
+    this.root.appendChild(this.buildBorderPanel());
+    this.root.appendChild(this.buildDoorPanel());
     this.root.appendChild(this.buildMetadataPanel());
     this.root.appendChild(this.buildExportCurrentPanel());
     this.root.appendChild(this.buildImportCurrentPanel());
@@ -209,6 +215,67 @@ export class EditorUI {
       row.appendChild(btn);
     }
 
+    section.appendChild(row);
+    return section;
+  }
+
+  private buildBorderPanel(): HTMLElement {
+    const section = this.buildSection('Borders');
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:10px;color:#666;margin-bottom:2px';
+    hint.textContent = '방향 선택 후 캔버스 테두리 라인 클릭 / 같은 셀 재클릭 = 제거';
+    section.appendChild(hint);
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px';
+
+    const orientations: { value: BorderOrientation; label: string }[] = [
+      { value: 'horizontal', label: '가로 (상단)' },
+      { value: 'vertical', label: '세로 (좌·우)' },
+    ];
+
+    for (const { value, label } of orientations) {
+      const btn = document.createElement('button');
+      btn.style.cssText = [
+        'flex:1', 'padding:6px 4px',
+        'border:1px solid #444', 'background:#333', 'color:#ccc',
+        'cursor:pointer', 'font-family:monospace', 'font-size:10px',
+        'border-radius:3px',
+      ].join(';');
+      btn.textContent = label;
+      btn.addEventListener('click', () => this.callbacks.onEnterBorderMode(value));
+      this.borderBtns.set(value, btn);
+      row.appendChild(btn);
+    }
+    section.appendChild(row);
+    return section;
+  }
+
+  private buildDoorPanel(): HTMLElement {
+    const section = this.buildSection('Doors (상단)');
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:10px;color:#666;margin-bottom:2px';
+    hint.textContent = '스폰할 스피너 선택 후 상단 테두리 클릭 / 같은 셀 재클릭 = 제거';
+    section.appendChild(hint);
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px';
+
+    for (const type of SPINNER_TYPES) {
+      const btn = document.createElement('button');
+      btn.style.cssText = [
+        'flex:1', 'padding:6px 4px',
+        'border:1px solid #444', 'background:#333', 'color:#ccc',
+        'cursor:pointer', 'font-family:monospace', 'font-size:10px',
+        'border-radius:3px',
+      ].join(';');
+      const kind = type === 'spinner_cube' ? 'Cube' : 'Triangle';
+      const color = SPINNER_COLORS[type];
+      btn.innerHTML = `<span style="color:${color}">Door → ${kind}</span>`;
+      btn.addEventListener('click', () => this.callbacks.onEnterDoorMode(type));
+      this.doorBtns.set(type, btn);
+      row.appendChild(btn);
+    }
     section.appendChild(row);
     return section;
   }
@@ -503,16 +570,30 @@ export class EditorUI {
 
     // 블록 팔레트 하이라이트
     for (const [type, btn] of this.blockBtns) {
-      const isActive = !state.isSpinnerPlacementMode && state.selectedBlockType === type;
+      const isActive = state.mode === 'block' && state.selectedBlockType === type;
       btn.style.borderColor = isActive ? '#fff' : '#444';
       btn.style.background = isActive ? '#555' : '#333';
     }
 
     // 스피너 버튼 하이라이트
     for (const [type, btn] of this.spinnerBtns) {
-      const isActive = state.isSpinnerPlacementMode && state.selectedSpinnerType === type;
+      const isActive = state.mode === 'spinner' && state.selectedSpinnerType === type;
       btn.style.borderColor = isActive ? '#ffff00' : '#444';
       btn.style.background = isActive ? '#443300' : '#333';
+    }
+
+    // 테두리 버튼 하이라이트
+    for (const [orientation, btn] of this.borderBtns) {
+      const isActive = state.mode === 'border' && state.selectedBorderOrientation === orientation;
+      btn.style.borderColor = isActive ? '#8899aa' : '#444';
+      btn.style.background = isActive ? '#334455' : '#333';
+    }
+
+    // 문 버튼 하이라이트
+    for (const [type, btn] of this.doorBtns) {
+      const isActive = state.mode === 'door' && state.selectedDoorSpinner === type;
+      btn.style.borderColor = isActive ? '#ddaa44' : '#444';
+      btn.style.background = isActive ? '#553322' : '#333';
     }
 
     // 활성 스테이지의 메타데이터로 입력 필드 동기화

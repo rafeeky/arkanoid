@@ -61,6 +61,14 @@ function bootstrap(): void {
       app.enterSpinnerPlacementMode(type);
     },
 
+    onEnterBorderMode: (orientation) => {
+      app.enterBorderMode(orientation);
+    },
+
+    onEnterDoorMode: (spinnerType) => {
+      app.enterDoorMode(spinnerType);
+    },
+
     // 현재 스테이지 export
     onExportCurrent: () => {
       const json = app.exportCurrentJson();
@@ -127,13 +135,13 @@ function bootstrap(): void {
 
     if (state.isDraggingSpinner) return;
 
-    // 스피너 배치 모드
-    if (state.isSpinnerPlacementMode) {
+    // border/door/spinner 모드 — 캔버스 클릭 즉시 처리
+    if (state.mode === 'border' || state.mode === 'door' || state.mode === 'spinner') {
       app.handleCanvasClick(cx, cy);
       return;
     }
 
-    // 스피너 드래그 시작 시도
+    // block 모드: 기존 스피너가 있으면 드래그 시작 시도
     const spinnerId = app.hitTestSpinner(cx, cy);
     if (spinnerId !== null) {
       app.startDragSpinner(spinnerId, cx, cy);
