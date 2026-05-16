@@ -3,9 +3,9 @@
   "displayName": "STAGE 3",
   "backgroundId": "bg_stage_03",
   "barSpawnX": 360,
-  "barSpawnY": 660,
+  "barSpawnY": 840,
   "ballSpawnX": 360,
-  "ballSpawnY": 600,
+  "ballSpawnY": 780,
   "ballInitialSpeed": 588,
   "ballInitialAngleDeg": -60,
   "blocks": [
@@ -16,21 +16,6 @@
     },
     {
       "row": 0,
-      "col": 1,
-      "definitionId": "basic"
-    },
-    {
-      "row": 0,
-      "col": 2,
-      "definitionId": "basic"
-    },
-    {
-      "row": 0,
-      "col": 4,
-      "definitionId": "basic"
-    },
-    {
-      "row": 0,
       "col": 6,
       "definitionId": "basic"
     },
@@ -42,42 +27,47 @@
     {
       "row": 0,
       "col": 8,
-      "definitionId": "laser_drop"
+      "definitionId": "basic"
     },
     {
       "row": 1,
       "col": 0,
-      "definitionId": "laser_drop"
+      "definitionId": "tough"
     },
     {
       "row": 1,
       "col": 1,
-      "definitionId": "basic_drop"
+      "definitionId": "tough"
     },
     {
       "row": 1,
       "col": 2,
-      "definitionId": "basic"
+      "definitionId": "tough"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "definitionId": "tough"
     },
     {
       "row": 1,
       "col": 4,
-      "definitionId": "basic"
+      "definitionId": "tough"
     },
     {
       "row": 1,
       "col": 6,
-      "definitionId": "basic"
+      "definitionId": "tough"
     },
     {
       "row": 1,
       "col": 7,
-      "definitionId": "magnet_drop"
+      "definitionId": "basic"
     },
     {
       "row": 1,
       "col": 8,
-      "definitionId": "basic"
+      "definitionId": "tough"
     },
     {
       "row": 2,
@@ -86,45 +76,285 @@
     },
     {
       "row": 2,
-      "col": 1,
-      "definitionId": "magnet_drop"
-    },
-    {
-      "row": 2,
-      "col": 2,
-      "definitionId": "basic"
-    },
-    {
-      "row": 2,
-      "col": 4,
-      "definitionId": "basic"
-    },
-    {
-      "row": 2,
       "col": 6,
       "definitionId": "basic"
     },
     {
       "row": 2,
       "col": 7,
-      "definitionId": "basic_drop"
+      "definitionId": "basic"
     },
     {
       "row": 2,
       "col": 8,
       "definitionId": "basic"
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "definitionId": "basic_drop"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "definitionId": "basic"
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "definitionId": "basic"
+    },
+    {
+      "row": 3,
+      "col": 3,
+      "definitionId": "magnet_drop"
+    },
+    {
+      "row": 3,
+      "col": 4,
+      "definitionId": "basic"
+    },
+    {
+      "row": 3,
+      "col": 6,
+      "definitionId": "basic"
+    },
+    {
+      "row": 3,
+      "col": 7,
+      "definitionId": "laser_drop"
+    },
+    {
+      "row": 3,
+      "col": 8,
+      "definitionId": "basic"
+    },
+    {
+      "row": 4,
+      "col": 0,
+      "definitionId": "basic"
+    },
+    {
+      "row": 4,
+      "col": 6,
+      "definitionId": "basic"
+    },
+    {
+      "row": 4,
+      "col": 7,
+      "definitionId": "basic"
+    },
+    {
+      "row": 4,
+      "col": 8,
+      "definitionId": "basic"
+    },
+    {
+      "row": 5,
+      "col": 0,
+      "definitionId": "tough"
+    },
+    {
+      "row": 5,
+      "col": 1,
+      "definitionId": "tough"
+    },
+    {
+      "row": 5,
+      "col": 2,
+      "definitionId": "tough"
+    },
+    {
+      "row": 5,
+      "col": 3,
+      "definitionId": "tough"
+    },
+    {
+      "row": 5,
+      "col": 4,
+      "definitionId": "tough"
+    },
+    {
+      "row": 5,
+      "col": 6,
+      "definitionId": "tough"
+    },
+    {
+      "row": 5,
+      "col": 7,
+      "definitionId": "tough"
+    },
+    {
+      "row": 5,
+      "col": 8,
+      "definitionId": "tough"
     }
   ],
-  "spinners": [
+  "borders": [
     {
-      "definitionId": "spinner_cube",
-      "x": 437,
-      "y": 9
+      "row": 0,
+      "col": 0,
+      "orientation": "horizontal"
     },
     {
-      "definitionId": "spinner_cube",
-      "x": 282,
-      "y": 8
+      "row": 0,
+      "col": 1,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 5,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 6,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 7,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 8,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 10,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 4,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 4,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 5,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 5,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 6,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 6,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 7,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 7,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 8,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 8,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 9,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 9,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 10,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 10,
+      "col": 1,
+      "orientation": "vertical"
+    }
+  ],
+  "doors": [
+    {
+      "col": 4,
+      "spinnerDefinitionId": "spinner_cube"
+    },
+    {
+      "col": 9,
+      "spinnerDefinitionId": "spinner_triangle"
     }
   ]
 }

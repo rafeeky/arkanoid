@@ -3,9 +3,9 @@
   "displayName": "STAGE 1",
   "backgroundId": "bg_stage_01",
   "barSpawnX": 360,
-  "barSpawnY": 660,
+  "barSpawnY": 840,
   "ballSpawnX": 360,
-  "ballSpawnY": 600,
+  "ballSpawnY": 780,
   "ballInitialSpeed": 588,
   "ballInitialAngleDeg": -60,
   "blocks": [
@@ -21,6 +21,11 @@
     },
     {
       "row": 0,
+      "col": 2,
+      "definitionId": "tough"
+    },
+    {
+      "row": 0,
       "col": 3,
       "definitionId": "tough"
     },
@@ -37,6 +42,11 @@
     {
       "row": 0,
       "col": 6,
+      "definitionId": "tough"
+    },
+    {
+      "row": 0,
+      "col": 7,
       "definitionId": "tough"
     },
     {
@@ -81,6 +91,11 @@
     },
     {
       "row": 1,
+      "col": 7,
+      "definitionId": "basic"
+    },
+    {
+      "row": 1,
       "col": 8,
       "definitionId": "basic"
     },
@@ -102,7 +117,7 @@
     {
       "row": 2,
       "col": 3,
-      "definitionId": "magnet_drop"
+      "definitionId": "basic"
     },
     {
       "row": 2,
@@ -121,13 +136,18 @@
     },
     {
       "row": 2,
+      "col": 7,
+      "definitionId": "basic"
+    },
+    {
+      "row": 2,
       "col": 8,
       "definitionId": "basic"
     },
     {
       "row": 3,
       "col": 0,
-      "definitionId": "basic"
+      "definitionId": "magnet_drop"
     },
     {
       "row": 3,
@@ -137,7 +157,7 @@
     {
       "row": 3,
       "col": 2,
-      "definitionId": "magnet_drop"
+      "definitionId": "basic"
     },
     {
       "row": 3,
@@ -161,20 +181,201 @@
     },
     {
       "row": 3,
+      "col": 7,
+      "definitionId": "basic"
+    },
+    {
+      "row": 3,
       "col": 8,
+      "definitionId": "basic"
+    },
+    {
+      "row": 5,
+      "col": 4,
+      "definitionId": "basic"
+    },
+    {
+      "row": 6,
+      "col": 3,
+      "definitionId": "basic"
+    },
+    {
+      "row": 6,
+      "col": 4,
+      "definitionId": "basic"
+    },
+    {
+      "row": 6,
+      "col": 5,
       "definitionId": "basic"
     }
   ],
-  "spinners": [
+  "borders": [
     {
-      "definitionId": "spinner_cube",
-      "x": 581,
-      "y": 11
+      "row": 0,
+      "col": 0,
+      "orientation": "horizontal"
     },
     {
-      "definitionId": "spinner_triangle",
-      "x": 192,
-      "y": 25
+      "row": 0,
+      "col": 1,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 4,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 6,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 7,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 8,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 9,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 10,
+      "orientation": "horizontal"
+    },
+    {
+      "row": 0,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 4,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 4,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 5,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 5,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 6,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 6,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 7,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 7,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 8,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 8,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 9,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 9,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 10,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 10,
+      "col": 1,
+      "orientation": "vertical"
+    }
+  ],
+  "doors": [
+    {
+      "col": 5,
+      "spinnerDefinitionId": "spinner_triangle"
     }
   ]
 }
