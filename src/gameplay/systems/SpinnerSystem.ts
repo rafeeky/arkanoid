@@ -33,6 +33,8 @@ import type { BlockState } from '../state/BlockState';
 import type { SpinnerDefinition } from '../../definitions/types/SpinnerDefinition';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { GameplayEvent } from '../events/gameplayEvents';
+import { BORDER_LENGTH, CIRCLE_RADIUS, clampSpinnerCenter } from './playfieldLayout';
+import * as Spinner from '../entities/Spinner';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -69,8 +71,42 @@ export const CIRCLE_SPEED_RAD_PER_SEC = 1.5;
 // SpinnerSystem
 // ---------------------------------------------------------------------------
 
+/** door-spawned 스피너의 기본 descentEndY. 디자이너 튜닝 시 config 로 이관 고려. */
+const DOOR_SPAWN_DESCENT_END_Y = 50;
+
 export class SpinnerSystem {
   constructor(private readonly spinnerDefinitions: Record<string, SpinnerDefinition>) {}
+
+  /**
+   * door 가 opened 로 전이된 시점에 호출. door 위치(상단 테두리) 에서
+   * descending phase 로 시작하는 스피너 생성. spawning phase 는 door 의
+   * opening 애니가 이미 대체했으므로 건너뜀.
+   */
+  spawnFromDoor(
+    doorX: number,
+    doorY: number,
+    spinnerDefinitionId: string,
+    uniqueId: string,
+  ): SpinnerRuntimeState {
+    const spawnX = doorX + BORDER_LENGTH / 2;
+    const descentEndY = DOOR_SPAWN_DESCENT_END_Y;
+    const { centerX, centerY } = clampSpinnerCenter(spawnX, descentEndY);
+    return {
+      id: uniqueId,
+      definitionId: spinnerDefinitionId,
+      x: spawnX,
+      y: doorY,
+      angleRad: 0,
+      phase: 'descending',
+      spawnElapsedMs: 0,
+      descentEndY,
+      circleCenterX: centerX,
+      circleCenterY: centerY,
+      circleRadius: CIRCLE_RADIUS,
+      circleAngleRad: 0,
+      spawnX,
+    };
+  }
 
   // -------------------------------------------------------------------------
   // tick
@@ -133,87 +169,39 @@ export class SpinnerSystem {
       return { nextBall: ball, collided: false };
     }
 
-    // phase='circling'인 spinner만 대상으로 한다
+    // phase='circling' 인 spinner 만 대상.
     const activeSpinners = spinnerStates.filter((s) => s.phase === 'circling');
     if (activeSpinners.length === 0) {
       return { nextBall: ball, collided: false };
     }
 
-    // 가장 가까운 겹침 회전체를 찾는다
-    let closestSpinner: SpinnerRuntimeState | undefined;
-    let closestDist = Infinity;
-
+    // 가장 가까운 (broad-phase 원형 근사) 회전체부터 polygon 충돌 검사.
+    // broad-phase 반경 = def.size + BALL_RADIUS (silhouette 의 최외곽 vertex 가
+    // size/2 보다 멀 수 있어 def.size 로 잡음. cube vertex max ≈ s√3, triangle
+    // top vertex 거리 = h ≈ size * 0.577).
+    const candidates: Array<{ s: SpinnerRuntimeState; def: SpinnerDefinition; dist: number }> = [];
     for (const s of activeSpinners) {
       const def = this.spinnerDefinitions[s.definitionId];
       if (!def) continue;
-
-      const spinnerRadius = def.size / 2;
-      const combinedRadius = spinnerRadius + BALL_RADIUS;
-      const dist = distance(ball.x, ball.y, s.x, s.y);
-
-      if (dist < combinedRadius && dist < closestDist) {
-        closestDist = dist;
-        closestSpinner = s;
+      const broadR = def.size + BALL_RADIUS;
+      const d = distance(ball.x, ball.y, s.x, s.y);
+      if (d < broadR) {
+        candidates.push({ s, def, dist: d });
       }
     }
-
-    if (!closestSpinner) {
+    if (candidates.length === 0) {
       return { nextBall: ball, collided: false };
     }
+    candidates.sort((a, b) => a.dist - b.dist);
 
-    const def = this.spinnerDefinitions[closestSpinner.definitionId];
-    if (!def) return { nextBall: ball, collided: false };
-
-    const spinnerRadius = def.size / 2;
-    const combinedRadius = spinnerRadius + BALL_RADIUS;
-
-    // 반사 법선: 회전체 중심 → 공 방향 (공이 회전체 밖으로 나가는 방향)
-    const dx = ball.x - closestSpinner.x;
-    const dy = ball.y - closestSpinner.y;
-    const dist = closestDist;
-
-    let nx: number;
-    let ny: number;
-
-    if (dist < 1e-6) {
-      // 공 중심이 회전체 중심과 거의 겹치는 극단적 케이스 → 위 방향으로 튕김
-      nx = 0;
-      ny = -1;
-    } else {
-      nx = dx / dist;
-      ny = dy / dist;
+    // 첫 번째 후보 polygon 으로 정확 충돌 — 통과하면 다음 후보.
+    for (const { s, def } of candidates) {
+      const r = Spinner.handleBallCollision(ball, s, def);
+      if (r.collided) {
+        return r;
+      }
     }
-
-    // 입사 속도의 법선 성분
-    const dot = ball.vx * nx + ball.vy * ny;
-
-    // 이미 분리 방향(dot > 0)이면 반사 불필요 — 관통 방지만 적용
-    if (dot >= 0) {
-      // 분리만 수행 (속도 유지)
-      const overlap = combinedRadius - dist;
-      const nextBall: BallState = {
-        ...ball,
-        x: ball.x + nx * overlap,
-        y: ball.y + ny * overlap,
-      };
-      return { nextBall, collided: true };
-    }
-
-    // 반사: v' = v - 2(v·n)n
-    const newVx = ball.vx - 2 * dot * nx;
-    const newVy = ball.vy - 2 * dot * ny;
-
-    // 겹침 해소: 공을 결합 반지름 경계로 밀어낸다
-    const overlap = combinedRadius - dist;
-    const nextBall: BallState = {
-      ...ball,
-      x: ball.x + nx * overlap,
-      y: ball.y + ny * overlap,
-      vx: newVx,
-      vy: newVy,
-    };
-
-    return { nextBall, collided: true };
+    return { nextBall: ball, collided: false };
   }
 
   // -------------------------------------------------------------------------
@@ -356,13 +344,18 @@ export class SpinnerSystem {
    */
   private tickDescending(s: SpinnerRuntimeState, dt: number): SpinnerRuntimeState {
     const newY = s.y + DESCENT_SPEED_PX_PER_SEC * dt;
+    // descent 종료점 = orbit top (circleCenterY - circleRadius). 이렇게 해야
+    // circling 의 첫 프레임에서 y 점프(순간이동)가 발생하지 않는다.
+    // 이전 버전은 descentEndY 까지 descend 후 circling 첫 프레임이 orbit top 으로
+    // 갑자기 이동했었음.
+    const orbitTopY = s.circleCenterY - s.circleRadius;
 
-    if (newY >= s.descentEndY) {
+    if (newY >= orbitTopY) {
       return {
         ...s,
         phase: 'circling',
         x: s.spawnX,
-        y: s.descentEndY,
+        y: orbitTopY,
         circleAngleRad: -Math.PI / 2, // 원 궤도 상단(위쪽)에서 시작
       };
     }

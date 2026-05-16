@@ -12,8 +12,11 @@
  */
 
 // ─── 플레이필드 (논리 좌표계) ────────────────────────────────────────────
-export const PLAYFIELD_WIDTH = 720;
-export const PLAYFIELD_HEIGHT = 720;
+// LayoutConfigTable 이 SSOT (docs/screen-layout.md §4-1). 게임플레이 로직과
+// 프레젠테이션이 같은 값을 공유.
+import { LayoutConfigTable as _L } from '../../definitions/tables/LayoutConfigTable';
+export const PLAYFIELD_WIDTH = _L.playfield.width;
+export const PLAYFIELD_HEIGHT = _L.playfield.height;
 
 // ─── 블록 그리드 ──────────────────────────────────────────────────────
 export const BLOCK_WIDTH = 64;
@@ -31,6 +34,16 @@ export const BAR_HEIGHT = 16;
 export const BALL_RADIUS = 8;
 /** 발사 각도 -60° 와 시각 일치 — 비활성 공이 바 중심에서 우측 30px 위에 위치. */
 export const INITIAL_LAUNCH_OFFSET_X = 30;
+
+// ─── 아이템 드랍 ─────────────────────────────────────────────────────
+export const ITEM_WIDTH = 24;
+export const ITEM_HEIGHT = 12;
+
+// ─── 테두리 (BorderBlock) ──────────────────────────────────────────────
+/** 테두리의 긴 변 (= 일반 블럭 가로). 한 셀이 차지하는 길이. */
+export const BORDER_LENGTH = 64;
+/** 테두리의 짧은 변 (= 일반 블럭 세로의 1/2). 두께. */
+export const BORDER_THICKNESS = 12;
 
 // ─── 스피너 궤도 clamp ─────────────────────────────────────────────────
 export const CIRCLE_RADIUS = 60;

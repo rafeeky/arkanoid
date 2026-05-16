@@ -1,4 +1,5 @@
 import type { GameplayConfig } from '../types/GameplayConfig';
+import { defaultPhysicsConfig } from '../types/GameplayConfig';
 
 export const GameplayConfigTable: GameplayConfig = {
   initialLives: 3,
@@ -11,4 +12,5 @@ export const GameplayConfigTable: GameplayConfig = {
   blockHitFlashDurationMs: 120,
   barBreakDurationMs: 700,
   expandMultiplier: 1.5,
+  physics: defaultPhysicsConfig,
 };

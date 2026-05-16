@@ -5,7 +5,7 @@ import type { BarState } from '../state/BarState';
 import type { ItemDropState } from '../state/ItemDropState';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { ItemDefinition } from '../../definitions/types/ItemDefinition';
-import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
+import type { GameplayConfig, PhysicsConfig } from '../../definitions/types/GameplayConfig';
 import type {
   CollisionFact,
   BallHitWallFact,
@@ -17,6 +17,10 @@ import type {
 } from './CollisionService';
 import type { GameplayEvent } from '../events/gameplayEvents';
 import { BarEffectService } from './BarEffectService';
+import { BAR_HEIGHT, BALL_RADIUS } from './playfieldLayout';
+import * as Wall from '../entities/Wall';
+import * as Bar from '../entities/Bar';
+import * as Block from '../entities/Block';
 
 type ApplyResult = {
   nextState: GameplayRuntimeState;
@@ -40,42 +44,31 @@ type ApplyOptions = {
   blockReflectionAlreadyApplied?: boolean;
 };
 
-// --- Playfield geometry constants (mirror of CollisionService to avoid cross-import) ---
-
-const CANVAS_WIDTH = 720;
-const BALL_RADIUS = 8;
-const BAR_HEIGHT = 16;
-
-/**
- * Epsilon used when snapping ball position to the playfield boundary after a
- * wall reflection.  Matches the push-out value used in MovementSystem for block
- * reflections so both behaviours are symmetric.
- */
-const WALL_PUSH_OUT_EPSILON = 0.5;
-
 // --- Minimum angle enforcement ---
 
-const MIN_ANGLE_FROM_AXIS_DEG = 15;
-const MIN_SIN = Math.sin((MIN_ANGLE_FROM_AXIS_DEG * Math.PI) / 180); // ≈ 0.259
-
 /**
- * Ensures the velocity vector is never closer than MIN_ANGLE_FROM_AXIS_DEG
- * to either axis (horizontal or vertical).
+ * Ensures the velocity vector is never closer than `minAngleDeg` to either axis
+ * (horizontal or vertical). Speed magnitude is preserved.
  *
- * - If |vx|/speed < sin(15°), vx is clamped to ±(speed * sin(15°)) and vy is
- *   recalculated to preserve the speed magnitude and the sign of vy.
- * - Likewise, if |vy|/speed < sin(15°), vy is clamped and vx is recalculated.
- * - Speed magnitude is always preserved.
- * - Normal angles (>15° from both axes) are not modified.
+ * - If |vx|/speed < sin(minAngleDeg), vx is clamped to ±(speed * sin(...)) and
+ *   vy is recalculated.
+ * - Likewise for |vy|.
+ * - Normal angles (>minAngleDeg from both axes) are not modified.
  *
- * Exported so that MovementSystem can apply the same angle constraints after
- * swept block reflections.
+ * Exported so that MovementSystem can apply the same constraint after swept
+ * block reflections. `minAngleDeg` is a required parameter — caller passes
+ * `config.physics.minAngleDeg` (data-driven, not a code const).
  */
-export function enforceMinAngle(vx: number, vy: number): { vx: number; vy: number } {
+export function enforceMinAngle(
+  vx: number,
+  vy: number,
+  minAngleDeg: number,
+): { vx: number; vy: number } {
   const speed = Math.sqrt(vx * vx + vy * vy);
   if (speed === 0) return { vx, vy };
 
-  const minComponent = speed * MIN_SIN;
+  const minSin = Math.sin((minAngleDeg * Math.PI) / 180);
+  const minComponent = speed * minSin;
   let newVx = vx;
   let newVy = vy;
 
@@ -96,110 +89,35 @@ export function enforceMinAngle(vx: number, vy: number): { vx: number; vy: numbe
   return { vx: newVx, vy: newVy };
 }
 
-// --- Reflection helpers ---
-
-function reflectBallWall(ball: BallState, fact: BallHitWallFact): BallState {
-  let vx = ball.vx;
-  let vy = ball.vy;
-
-  // Snap position to just inside the playfield boundary.
-  // High-speed balls can overshoot the wall in a single tick, leaving
-  // ball.x/y outside the boundary.  Without a snap the ball stays in an
-  // out-of-bounds position on the next tick and can skip block sweep checks.
-  // The epsilon matches the push-out used for block reflections (symmetric).
-  let x = ball.x;
-  let y = ball.y;
-
-  if (fact.side === 'left') {
-    vx = -vx;
-    x = BALL_RADIUS + WALL_PUSH_OUT_EPSILON;
-  } else if (fact.side === 'right') {
-    vx = -vx;
-    x = CANVAS_WIDTH - BALL_RADIUS - WALL_PUSH_OUT_EPSILON;
-  } else {
-    // top
-    vy = -vy;
-    y = BALL_RADIUS + WALL_PUSH_OUT_EPSILON;
-  }
-
-  const enforced = enforceMinAngle(vx, vy);
-  return { ...ball, x, y, vx: enforced.vx, vy: enforced.vy };
-}
-
-/**
- * Bar reflection.
- * vy is always forced negative (upward).
- * vx is biased by barContactX: center → small vx, edges → larger vx.
- * Speed magnitude is preserved.
- * enforceMinAngle is applied after to prevent pure vertical trajectories.
- *
- * Formula:
- *   vx = contactX * speed * 0.7
- *   vy = -sqrt(speed^2 - vx^2)   (always upward)
- */
-function reflectBallBar(ball: BallState, fact: BallHitBarFact): BallState {
-  const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-  const rawVx = fact.barContactX * speed * 0.7;
-  // Ensure vy has enough magnitude; clamp to avoid pure horizontal trajectory
-  const vyMagnitude = Math.sqrt(Math.max(speed * speed - rawVx * rawVx, (speed * 0.3) ** 2));
-  const enforced = enforceMinAngle(rawVx, -vyMagnitude);
-  // Bar always sends ball upward; preserve upward direction after enforceMinAngle
-  return { ...ball, vx: enforced.vx, vy: -Math.abs(enforced.vy) };
-}
-
-/**
- * Block reflection based on which side was hit.
- * enforceMinAngle is applied after to prevent pure vertical/horizontal trajectories.
- */
-function reflectBallBlock(ball: BallState, fact: BallHitBlockFact): BallState {
-  let vx = ball.vx;
-  let vy = ball.vy;
-  if (fact.side === 'left' || fact.side === 'right') {
-    vx = -vx;
-  } else {
-    vy = -vy;
-  }
-  const enforced = enforceMinAngle(vx, vy);
-  return { ...ball, vx: enforced.vx, vy: enforced.vy };
-}
-
 // --- Resolution helpers ---
+//
+// 반사 로직 자체는 entity 모듈이 소유 (성모님 원칙: 콜리전이 오브젝트에 종속).
+//   Wall.reflectFromBall  — src/gameplay/entities/Wall.ts
+//   Bar.reflectFromBall   — src/gameplay/entities/Bar.ts
+//   Block.reflectFromBall — src/gameplay/entities/Block.ts
+// 이 파일은 fact → entity reflect 호출 → state 갱신의 orchestration 만.
 
 function resolveWall(
   state: GameplayRuntimeState,
   fact: BallHitWallFact,
+  physics: PhysicsConfig,
 ): { state: GameplayRuntimeState; events: GameplayEvent[] } {
   const balls = state.balls.map((b) =>
-    b.id === fact.ballId ? reflectBallWall(b, fact) : b,
+    b.id === fact.ballId ? Wall.reflectFromBall(b, fact, physics) : b,
   );
   return { state: { ...state, balls }, events: [] };
-}
-
-function attachBallToBar(ball: BallState, bar: BarState, fact: BallHitBarFact): BallState {
-  // 바 위 표면 바로 위에 공 중심을 놓는다
-  const attachY = bar.y - BAR_HEIGHT / 2 - BALL_RADIUS;
-  // 부착 시점의 x 오프셋을 기록한다 (바 중심 기준)
-  const offsetX = ball.x - bar.x;
-  return {
-    ...ball,
-    x: ball.x,        // x는 현재 공 위치 그대로 (오프셋으로 보존)
-    y: attachY,
-    vx: 0,
-    vy: 0,
-    isActive: false,
-    attachedOffsetX: offsetX,
-  };
 }
 
 function resolveBar(
   state: GameplayRuntimeState,
   fact: BallHitBarFact,
+  physics: PhysicsConfig,
 ): { state: GameplayRuntimeState; events: GameplayEvent[] } {
   // 자석 상태에서 활성 공이 바에 닿으면 반사 대신 부착
   if (state.bar.activeEffect === 'magnet') {
     const targetBall = state.balls.find((b) => b.id === fact.ballId);
     if (targetBall && targetBall.isActive) {
-      const attachedBall = attachBallToBar(targetBall, state.bar, fact);
+      const attachedBall = Bar.attachBall(targetBall, state.bar);
       const balls = state.balls.map((b) => (b.id === fact.ballId ? attachedBall : b));
       const newAttachedIds = [...state.attachedBallIds, fact.ballId];
       const events: GameplayEvent[] = [
@@ -217,7 +135,7 @@ function resolveBar(
 
   // 일반 상태: 반사. BallHitBarEvent 발행 (저음 사운드 트리거 — 묶음 A 이식)
   const balls = state.balls.map((b) =>
-    b.id === fact.ballId ? reflectBallBar(b, fact) : b,
+    b.id === fact.ballId ? Bar.reflectFromBall(b, fact, physics) : b,
   );
   return {
     state: { ...state, balls },
@@ -236,7 +154,11 @@ function resolveBlock(
   // Reflect ball (skip when swept movement has already applied the reflection)
   let balls = skipBallReflection
     ? state.balls
-    : state.balls.map((b) => (b.id === fact.ballId ? reflectBallBlock(b, fact) : b));
+    : state.balls.map((b) =>
+        b.id === fact.ballId
+          ? Block.reflectFromBall(b, fact.side, tables.config.physics)
+          : b,
+      );
 
   // Update block
   let blocks: BlockState[] = state.blocks;
@@ -392,10 +314,10 @@ export function applyCollisions(
 
     switch (fact.type) {
       case 'BallHitWall':
-        result = resolveWall(state, fact);
+        result = resolveWall(state, fact, tables.config.physics);
         break;
       case 'BallHitBar':
-        result = resolveBar(state, fact);
+        result = resolveBar(state, fact, tables.config.physics);
         break;
       case 'BallHitBlock':
         result = resolveBlock(state, fact, tables, skipBlockReflection);

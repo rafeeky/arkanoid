@@ -6,6 +6,12 @@ export type MoveBarCommand = {
   direction: -1 | 0 | 1;
 };
 
+/** 슬라이더 드래그 — 바를 절대 x 좌표로 스냅 (playfield 좌표). */
+export type SetBarTargetXCommand = {
+  type: 'SetBarTargetX';
+  x: number;
+};
+
 export type LaunchBallCommand = {
   type: 'LaunchBall';
 };
@@ -20,6 +26,7 @@ export type FireLaserCommand = {
 
 export type GameplayCommand =
   | MoveBarCommand
+  | SetBarTargetXCommand
   | LaunchBallCommand
   | ReleaseAttachedBallsCommand
   | FireLaserCommand;
@@ -30,13 +37,18 @@ export function resolveGameplayCommands(
 ): GameplayCommand[] {
   const commands: GameplayCommand[] = [];
 
-  let direction: -1 | 0 | 1 = 0;
-  if (input.leftDown && !input.rightDown) {
-    direction = -1;
-  } else if (input.rightDown && !input.leftDown) {
-    direction = 1;
+  // 포인터 드래그가 활성이면 절대 위치로 바 스냅. 키보드 좌우는 무시 (드래그 우선).
+  if (input.targetBarX !== undefined) {
+    commands.push({ type: 'SetBarTargetX', x: input.targetBarX });
+  } else {
+    let direction: -1 | 0 | 1 = 0;
+    if (input.leftDown && !input.rightDown) {
+      direction = -1;
+    } else if (input.rightDown && !input.leftDown) {
+      direction = 1;
+    }
+    commands.push({ type: 'MoveBar', direction });
   }
-  commands.push({ type: 'MoveBar', direction });
 
   if (input.spaceJustPressed) {
     // 우선순위 1: 자석 상태 + 부착 공 있음 → 해제

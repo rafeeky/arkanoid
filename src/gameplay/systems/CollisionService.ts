@@ -3,6 +3,16 @@ import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
 import type { BarState } from '../state/BarState';
 import type { ItemDropState } from '../state/ItemDropState';
+import {
+  PLAYFIELD_WIDTH as CANVAS_WIDTH,
+  PLAYFIELD_HEIGHT as CANVAS_HEIGHT,
+  BLOCK_WIDTH,
+  BLOCK_HEIGHT,
+  BAR_HEIGHT,
+  BALL_RADIUS,
+  ITEM_WIDTH,
+  ITEM_HEIGHT,
+} from './playfieldLayout';
 
 // --- Collision fact types ---
 
@@ -49,15 +59,6 @@ export type CollisionFact =
   | ItemPickedUpFact
   | ItemFellOffFloorFact;
 
-// --- Constants ---
-
-const CANVAS_WIDTH = 720;
-const CANVAS_HEIGHT = 720;
-const BALL_RADIUS = 8;
-const BLOCK_WIDTH = 64;
-const BLOCK_HEIGHT = 24;
-const BAR_HEIGHT = 16;
-
 // --- AABB helpers ---
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -67,9 +68,12 @@ function rectFromBar(bar: BarState): Rect {
 }
 
 function rectFromItem(item: ItemDropState): Rect {
-  const ITEM_W = 24;
-  const ITEM_H = 12;
-  return { x: item.x - ITEM_W / 2, y: item.y - ITEM_H / 2, width: ITEM_W, height: ITEM_H };
+  return {
+    x: item.x - ITEM_WIDTH / 2,
+    y: item.y - ITEM_HEIGHT / 2,
+    width: ITEM_WIDTH,
+    height: ITEM_HEIGHT,
+  };
 }
 
 /**

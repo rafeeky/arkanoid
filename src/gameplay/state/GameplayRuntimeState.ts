@@ -2,6 +2,8 @@ import type { GameSessionState } from './GameSessionState';
 import type { BarState } from './BarState';
 import type { BallState } from './BallState';
 import type { BlockState } from './BlockState';
+import type { BorderBlockState } from './BorderBlockState';
+import type { DoorState } from './DoorState';
 import type { ItemDropState } from './ItemDropState';
 import type { LaserShotState } from './LaserShotState';
 import type { SpinnerRuntimeState } from './SpinnerRuntimeState';
@@ -11,6 +13,10 @@ export type GameplayRuntimeState = {
   bar: BarState;
   balls: BallState[];
   blocks: BlockState[];
+  /** 플레이필드 테두리 (좌/우/상단). 깨지지 않는 벽. */
+  borders: readonly BorderBlockState[];
+  /** 상단 테두리 위 문(door). 열리면 스피너 spawn. */
+  doors: readonly DoorState[];
   itemDrops: ItemDropState[];
   isStageCleared: boolean;
   /** 자석 효과 남은 시간 (ms). 0이면 비활성. */

@@ -1,10 +1,16 @@
 import type { BarState } from '../state/BarState';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
+import type { BorderBlockState } from '../state/BorderBlockState';
+import type { DoorState } from '../state/DoorState';
 import type { ItemDropState } from '../state/ItemDropState';
-import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
+import type { GameplayConfig, PhysicsConfig } from '../../definitions/types/GameplayConfig';
 import type { BallHitBlockFact, BallHitWallFact } from './CollisionService';
 import { enforceMinAngle } from './CollisionResolutionService';
+import * as Block from '../entities/Block';
+import * as BorderBlock from '../entities/BorderBlock';
+import * as Door from '../entities/Door';
+import * as Wall from '../entities/Wall';
 import {
   PLAYFIELD_WIDTH as CANVAS_WIDTH,
   PLAYFIELD_HEIGHT as CANVAS_HEIGHT,
@@ -18,28 +24,8 @@ import {
 // 외부 호환을 위한 re-export — StageRuntimeFactory 등이 MovementSystem 에서 import 함.
 export { INITIAL_LAUNCH_OFFSET_X };
 
-/**
- * Distance the ball is pushed away from a block face or wall after reflection.
- * Small enough to be imperceptible; large enough to guarantee strict separation.
- */
-const PUSH_OUT_EPSILON = 0.5;
-
-/**
- * Sub-step size in pixels.
- * At 4px per step, a ball travelling at 2000 px/s at 30 fps (66px total) uses
- * ceil(66/4) = 17 steps — tunnelling is geometrically impossible for block
- * thicknesses >= 4px (BLOCK_HEIGHT=24, BLOCK_WIDTH=64).
- */
-const SUB_STEP_SIZE = 4;
-
-/**
- * Hard cap on the number of sub-steps per tick.
- * At SUB_STEP_SIZE=4 this caps total distance at 32*4=128px per tick,
- * which handles speeds up to 128/0.033 ≈ 3900 px/s at 30fps.
- * If a ball somehow exceeds this (should not happen in MVP1), the remaining
- * motion is dropped to avoid an infinite loop.
- */
-const MAX_SUB_STEPS = 32;
+// Physics tuning values (subStepSize, maxSubSteps, pushOutEpsilon, minAngleDeg, barContactBias)
+// come from `config.physics` (GameplayConfigTable). Caller threads them in via PhysicsConfig.
 
 /**
  * Moves a ball by (vx*dt, vy*dt) without any collision checks.
@@ -266,6 +252,9 @@ export function moveBallWithCollisions(
   ball: BallState,
   dt: number,
   blocks: readonly BlockState[],
+  borders: readonly BorderBlockState[],
+  doors: readonly DoorState[],
+  physics: PhysicsConfig,
 ): BallMoveResult {
   if (!ball.isActive) {
     return { ball, blockFacts: [], wallFacts: [] };
@@ -284,7 +273,10 @@ export function moveBallWithCollisions(
   // Compute number of sub-steps
   const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
   const totalDist = speed * dt;
-  const steps = Math.max(1, Math.min(MAX_SUB_STEPS, Math.ceil(totalDist / SUB_STEP_SIZE)));
+  const steps = Math.max(
+    1,
+    Math.min(physics.maxSubSteps, Math.ceil(totalDist / physics.subStepSize)),
+  );
   const stepDt = dt / steps;
 
   let current = ball;
@@ -299,30 +291,23 @@ export function moveBallWithCollisions(
       y: current.y + current.vy * stepDt,
     };
 
-    // b. Wall collisions
+    // b. Wall collisions — Wall.reflectFromBall 이 push-out + 반사를 모두 처리.
+    let wallSide: 'left' | 'right' | 'top' | null = null;
     if (current.x - BALL_RADIUS < 0) {
-      current = {
-        ...current,
-        x: BALL_RADIUS + PUSH_OUT_EPSILON,
-        vx: Math.abs(current.vx),
-      };
-      wallFacts.push({ type: 'BallHitWall', ballId: ball.id, side: 'left' });
+      wallSide = 'left';
     } else if (current.x + BALL_RADIUS > CANVAS_WIDTH) {
-      current = {
-        ...current,
-        x: CANVAS_WIDTH - BALL_RADIUS - PUSH_OUT_EPSILON,
-        vx: -Math.abs(current.vx),
-      };
-      wallFacts.push({ type: 'BallHitWall', ballId: ball.id, side: 'right' });
+      wallSide = 'right';
+    } else if (current.y - BALL_RADIUS < 0) {
+      wallSide = 'top';
     }
-
-    if (current.y - BALL_RADIUS < 0) {
-      current = {
-        ...current,
-        y: BALL_RADIUS + PUSH_OUT_EPSILON,
-        vy: Math.abs(current.vy),
-      };
-      wallFacts.push({ type: 'BallHitWall', ballId: ball.id, side: 'top' });
+    const wallHit = wallSide !== null;
+    if (wallSide !== null) {
+      current = Wall.reflectFromBall(
+        current,
+        { type: 'BallHitWall', ballId: ball.id, side: wallSide },
+        physics,
+      );
+      wallFacts.push({ type: 'BallHitWall', ballId: ball.id, side: wallSide });
     }
 
     // c. Block collision — process at most one block per sub-step.
@@ -335,38 +320,8 @@ export function moveBallWithCollisions(
 
       const side = determineEntrySide(prev.x, prev.y, current.x, current.y, hitBlock);
 
-      // Position correction: push ball outside block face
-      let newX = current.x;
-      let newY = current.y;
-      switch (side) {
-        case 'top':
-          newY = hitBlock.y - BALL_RADIUS - PUSH_OUT_EPSILON;
-          break;
-        case 'bottom':
-          newY = hitBlock.y + BLOCK_HEIGHT + BALL_RADIUS + PUSH_OUT_EPSILON;
-          break;
-        case 'left':
-          newX = hitBlock.x - BALL_RADIUS - PUSH_OUT_EPSILON;
-          break;
-        case 'right':
-          newX = hitBlock.x + BLOCK_WIDTH + BALL_RADIUS + PUSH_OUT_EPSILON;
-          break;
-      }
-
-      // Velocity reflection
-      let newVx = current.vx;
-      let newVy = current.vy;
-      if (side === 'top' || side === 'bottom') {
-        newVy = -newVy;
-      } else {
-        newVx = -newVx;
-      }
-
-      const enforced = enforceMinAngle(newVx, newVy);
-      newVx = enforced.vx;
-      newVy = enforced.vy;
-
-      current = { ...current, x: newX, y: newY, vx: newVx, vy: newVy };
+      // Block 이 자기 충돌 응답을 소유 — push-out + 반사 + enforceMinAngle.
+      current = Block.handleBallCollision(current, side, hitBlock, physics);
 
       // Emit fact only once per block per full tick
       if (!hitBlockIds.has(hitBlock.id)) {
@@ -378,10 +333,140 @@ export function moveBallWithCollisions(
           side,
         });
       }
+    } else if (!wallHit) {
+      // d. Border / Door collision — block/wall 모두 잡지 못한 substep 에 한해.
+      // wall 이 먼저 발동한 경우 같은 substep 에서 border 가 또 반사하면 vx 이중 반전.
+      // Border 와 Door 둘 다 깨지지 않으므로 fact 발행 없음.
+      // Door 의 closed/opening phase 는 BorderBlock 처럼 차단. opened 도 공은 차단 (스피너만 통과).
+      let doorHandled = false;
+      if (doors.length > 0) {
+        const hitDoor = findOverlappingDoor(current.x, current.y, doors);
+        if (hitDoor !== null) {
+          const side = determineDoorEntrySide(prev.x, prev.y, current.x, current.y, hitDoor);
+          current = Door.handleBallCollision(current, side, hitDoor, physics);
+          doorHandled = true;
+        }
+      }
+      if (!doorHandled && borders.length > 0) {
+        const hitBorder = findOverlappingBorder(current.x, current.y, borders);
+        if (hitBorder !== null) {
+          const side = determineBorderEntrySide(prev.x, prev.y, current.x, current.y, hitBorder);
+          current = BorderBlock.handleBallCollision(current, side, hitBorder, physics);
+        }
+      }
     }
   }
 
   return { ball: current, blockFacts, wallFacts };
+}
+
+// ---------------------------------------------------------------------------
+// Border collision helpers (orientation-aware bounds)
+// ---------------------------------------------------------------------------
+
+function findOverlappingDoor(
+  cx: number,
+  cy: number,
+  doors: readonly DoorState[],
+): DoorState | null {
+  for (const d of doors) {
+    if (!Door.blocksBall(d)) continue;
+    const bounds = Door.bounds(d);
+    const nearestX = Math.max(bounds.x, Math.min(cx, bounds.x + bounds.width));
+    const nearestY = Math.max(bounds.y, Math.min(cy, bounds.y + bounds.height));
+    const dx = cx - nearestX;
+    const dy = cy - nearestY;
+    if (dx * dx + dy * dy <= BALL_RADIUS * BALL_RADIUS) {
+      return d;
+    }
+  }
+  return null;
+}
+
+function determineDoorEntrySide(
+  prevX: number,
+  prevY: number,
+  currX: number,
+  currY: number,
+  door: DoorState,
+): 'top' | 'bottom' | 'left' | 'right' {
+  const bounds = Door.bounds(door);
+  const dx = currX - prevX;
+  const dy = currY - prevY;
+  const exLeft   = bounds.x - BALL_RADIUS;
+  const exRight  = bounds.x + bounds.width  + BALL_RADIUS;
+  const exTop    = bounds.y - BALL_RADIUS;
+  const exBottom = bounds.y + bounds.height + BALL_RADIUS;
+  let txEntry = -Infinity;
+  let xSide: 'left' | 'right' = 'left';
+  if (dx > 0) { txEntry = (exLeft  - prevX) / dx; xSide = 'left'; }
+  else if (dx < 0) { txEntry = (exRight - prevX) / dx; xSide = 'right'; }
+  let tyEntry = -Infinity;
+  let ySide: 'top' | 'bottom' = 'top';
+  if (dy > 0) { tyEntry = (exTop    - prevY) / dy; ySide = 'top'; }
+  else if (dy < 0) { tyEntry = (exBottom - prevY) / dy; ySide = 'bottom'; }
+  if (txEntry > tyEntry) return xSide;
+  return ySide;
+}
+
+function findOverlappingBorder(
+  cx: number,
+  cy: number,
+  borders: readonly BorderBlockState[],
+): BorderBlockState | null {
+  for (const b of borders) {
+    const bounds = BorderBlock.bounds(b);
+    const nearestX = Math.max(bounds.x, Math.min(cx, bounds.x + bounds.width));
+    const nearestY = Math.max(bounds.y, Math.min(cy, bounds.y + bounds.height));
+    const dx = cx - nearestX;
+    const dy = cy - nearestY;
+    if (dx * dx + dy * dy <= BALL_RADIUS * BALL_RADIUS) {
+      return b;
+    }
+  }
+  return null;
+}
+
+function determineBorderEntrySide(
+  prevX: number,
+  prevY: number,
+  currX: number,
+  currY: number,
+  border: BorderBlockState,
+): 'top' | 'bottom' | 'left' | 'right' {
+  const bounds = BorderBlock.bounds(border);
+  const dx = currX - prevX;
+  const dy = currY - prevY;
+
+  const exLeft   = bounds.x - BALL_RADIUS;
+  const exRight  = bounds.x + bounds.width  + BALL_RADIUS;
+  const exTop    = bounds.y - BALL_RADIUS;
+  const exBottom = bounds.y + bounds.height + BALL_RADIUS;
+
+  let txEntry = -Infinity;
+  let xSide: 'left' | 'right' = 'left';
+  if (dx > 0) {
+    txEntry = (exLeft  - prevX) / dx;
+    xSide = 'left';
+  } else if (dx < 0) {
+    txEntry = (exRight - prevX) / dx;
+    xSide = 'right';
+  }
+
+  let tyEntry = -Infinity;
+  let ySide: 'top' | 'bottom' = 'top';
+  if (dy > 0) {
+    tyEntry = (exTop    - prevY) / dy;
+    ySide = 'top';
+  } else if (dy < 0) {
+    tyEntry = (exBottom - prevY) / dy;
+    ySide = 'bottom';
+  }
+
+  if (txEntry > tyEntry) {
+    return xSide;
+  }
+  return ySide;
 }
 
 // ---------------------------------------------------------------------------
@@ -408,6 +493,7 @@ export type SanityCheckResult = {
 export function sanityCheckBallBlockSeparation(
   ball: BallState,
   blocks: readonly BlockState[],
+  physics: PhysicsConfig,
 ): SanityCheckResult {
   if (!ball.isActive) {
     return { ball, wasInside: false };
@@ -440,28 +526,28 @@ export function sanityCheckBallBlockSeparation(
     if (overlapX <= overlapY) {
       // Push out along x-axis
       if (ball.x < cx) {
-        newX = bx - BALL_RADIUS - PUSH_OUT_EPSILON;
+        newX = bx - BALL_RADIUS - physics.pushOutEpsilon;
         side = 'left';
         if (newVx > 0) newVx = -newVx;
       } else {
-        newX = bRight + BALL_RADIUS + PUSH_OUT_EPSILON;
+        newX = bRight + BALL_RADIUS + physics.pushOutEpsilon;
         side = 'right';
         if (newVx < 0) newVx = -newVx;
       }
     } else {
       // Push out along y-axis
       if (ball.y < cy) {
-        newY = by - BALL_RADIUS - PUSH_OUT_EPSILON;
+        newY = by - BALL_RADIUS - physics.pushOutEpsilon;
         side = 'top';
         if (newVy > 0) newVy = -newVy;
       } else {
-        newY = bBottom + BALL_RADIUS + PUSH_OUT_EPSILON;
+        newY = bBottom + BALL_RADIUS + physics.pushOutEpsilon;
         side = 'bottom';
         if (newVy < 0) newVy = -newVy;
       }
     }
 
-    const enforced = enforceMinAngle(newVx, newVy);
+    const enforced = enforceMinAngle(newVx, newVy, physics.minAngleDeg);
     const correctedBall: BallState = {
       ...ball,
       x: newX,

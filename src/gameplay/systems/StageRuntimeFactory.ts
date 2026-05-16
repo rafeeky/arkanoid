@@ -4,6 +4,8 @@ import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { DifficultyConfig } from '../../definitions/types/DifficultyConfig';
 import type { GameplayRuntimeState } from '../state/GameplayRuntimeState';
 import type { BlockState } from '../state/BlockState';
+import type { BorderBlockState } from '../state/BorderBlockState';
+import type { DoorState } from '../state/DoorState';
 import type { SpinnerRuntimeState } from '../state/SpinnerRuntimeState';
 import {
   BLOCK_WIDTH,
@@ -12,6 +14,9 @@ import {
   BLOCK_GRID_LEFT_MARGIN,
   BLOCK_GRID_START_Y,
   BAR_HEIGHT,
+  BORDER_LENGTH,
+  BORDER_THICKNESS,
+  PLAYFIELD_WIDTH,
   CIRCLE_RADIUS,
   INITIAL_LAUNCH_OFFSET_X,
   clampSpinnerCenter,
@@ -52,6 +57,9 @@ export function createGameplayRuntimeFromStageDefinition(
     };
   });
 
+  const borders = buildBorderStates(def);
+  const doors = buildDoorStates(def);
+
   // 난이도 적용: SpinnersEnabled=false → 스피너 목록 비움. InitialLives 우선 적용.
   const spinnerStates = (difficulty && !difficulty.spinnersEnabled)
     ? []
@@ -84,6 +92,8 @@ export function createGameplayRuntimeFromStageDefinition(
       },
     ],
     blocks,
+    borders,
+    doors,
     itemDrops: [],
     isStageCleared: false,
     magnetRemainingTime: 0,
@@ -92,6 +102,58 @@ export function createGameplayRuntimeFromStageDefinition(
     laserShots: [],
     spinnerStates,
   };
+}
+
+/**
+ * StageDefinition.borders 의 grid 좌표 (row, col, orientation) 를
+ * 실제 픽셀 좌표(좌상단) 로 변환해 BorderBlockState 배열로 만든다.
+ *
+ * - horizontal (상단): row=0 기준. x = col * BORDER_LENGTH, y = 0.
+ * - vertical (좌/우): col=0 (좌) 또는 col=last (우) 기준. x = col==0 ? 0 : PLAYFIELD_WIDTH - BORDER_THICKNESS. y = row * BORDER_LENGTH.
+ *
+ * 좌/우 col 값은 0 이면 왼쪽, 1 이면 오른쪽으로 해석한다 (binary edge).
+ */
+/**
+ * StageDefinition.doors → DoorState 배열. 모두 'closed' 상태로 초기화.
+ * 위치: 상단 테두리 라인 (y=0). col 단위로 BORDER_LENGTH 픽셀씩.
+ */
+function buildDoorStates(def: StageDefinition): readonly DoorState[] {
+  if (!def.doors || def.doors.length === 0) {
+    return [];
+  }
+  return def.doors.map((placement, index) => ({
+    id: `door_${index}`,
+    x: placement.col * BORDER_LENGTH,
+    y: 0,
+    phase: 'closed' as const,
+    openingElapsedMs: 0,
+    spinnerDefinitionId: placement.spinnerDefinitionId,
+    spawnedSpinnerId: null,
+  }));
+}
+
+function buildBorderStates(def: StageDefinition): readonly BorderBlockState[] {
+  if (!def.borders || def.borders.length === 0) {
+    return [];
+  }
+  return def.borders.map((placement, index) => {
+    let x: number;
+    let y: number;
+    if (placement.orientation === 'horizontal') {
+      x = placement.col * BORDER_LENGTH;
+      y = placement.row * BORDER_THICKNESS;
+    } else {
+      // vertical: col=0 → left edge, col=1 → right edge
+      x = placement.col === 0 ? 0 : PLAYFIELD_WIDTH - BORDER_THICKNESS;
+      y = placement.row * BORDER_LENGTH;
+    }
+    return {
+      id: `border_${index}`,
+      x,
+      y,
+      orientation: placement.orientation,
+    };
+  });
 }
 
 function buildSpinnerStates(def: StageDefinition): readonly SpinnerRuntimeState[] {

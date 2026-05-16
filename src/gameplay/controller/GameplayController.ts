@@ -15,6 +15,8 @@ import { judgeStageOutcome } from '../systems/StageRuleService';
 import { BarEffectService } from '../systems/BarEffectService';
 import { LaserSystem } from '../systems/LaserSystem';
 import { SpinnerSystem } from '../systems/SpinnerSystem';
+import * as Door from '../entities/Door';
+import { PLAYFIELD_WIDTH } from '../systems/playfieldLayout';
 
 type Dependencies = {
   blockDefinitions: Record<string, BlockDefinition>;
@@ -74,6 +76,7 @@ export class GameplayController {
 
     // 2 & 3. Process commands
     let moveDirection: -1 | 0 | 1 = 0;
+    let barTargetX: number | undefined = undefined;
     for (const cmd of commands) {
       if (cmd.type === 'LaunchBall') {
         const { launchState, launchEvent } = this.applyLaunchBall();
@@ -81,6 +84,8 @@ export class GameplayController {
         allEvents.push(launchEvent);
       } else if (cmd.type === 'MoveBar') {
         moveDirection = cmd.direction;
+      } else if (cmd.type === 'SetBarTargetX') {
+        barTargetX = cmd.x;
       } else if (cmd.type === 'ReleaseAttachedBalls') {
         const releaseResult = this.barEffectService.releaseManually(
           this.state.bar,
@@ -123,7 +128,15 @@ export class GameplayController {
     // 4. Movement
     const prevState = this.state;
 
-    const newBar = moveBar(this.state.bar, moveDirection, dt, this.deps.config);
+    // 슬라이더 드래그 (targetBarX) 가 있으면 그 위치로 즉시 스냅. 없으면 키보드 방향.
+    let newBar = this.state.bar;
+    if (barTargetX !== undefined) {
+      const halfWidth = newBar.width / 2;
+      const clampedX = Math.max(halfWidth, Math.min(PLAYFIELD_WIDTH - halfWidth, barTargetX));
+      newBar = { ...newBar, x: clampedX };
+    } else {
+      newBar = moveBar(this.state.bar, moveDirection, dt, this.deps.config);
+    }
     const currentBlocks = this.state.blocks;
 
     // Block and wall collisions are resolved inside moveBallWithCollisions (swept AABB).
@@ -132,8 +145,11 @@ export class GameplayController {
     // block it may have entered due to floating-point drift or extreme dt.
     const accumulatedBlockFacts: BallHitBlockFact[] = [];
     const accumulatedSweptWallFacts: BallHitWallFact[] = [];
+    const physics = this.deps.config.physics;
+    const currentBorders = this.state.borders;
+    const currentDoors = this.state.doors;
     const newBalls = this.state.balls.map((ball) => {
-      const result = moveBallWithCollisions(ball, dt, currentBlocks);
+      const result = moveBallWithCollisions(ball, dt, currentBlocks, currentBorders, currentDoors, physics);
       for (const f of result.blockFacts) {
         accumulatedBlockFacts.push(f);
       }
@@ -145,7 +161,7 @@ export class GameplayController {
       // This runs AFTER swept collision so it only fires when swept AABB misses.
       // If the ball centre is inside a block, push it out and add a collision
       // fact so block hit/destroy logic still fires for that block.
-      const sanity = sanityCheckBallBlockSeparation(result.ball, currentBlocks);
+      const sanity = sanityCheckBallBlockSeparation(result.ball, currentBlocks, physics);
       if (sanity.wasInside && sanity.collisionFact) {
         // Only add the fact if this block has not already been processed this tick
         const alreadyHit = accumulatedBlockFacts.some(
@@ -228,6 +244,27 @@ export class GameplayController {
     if (this.state.spinnerStates.length > 0) {
       const nextSpinnerStates = this.spinnerSystem.tick(this.state.spinnerStates, dt);
       this.state = { ...this.state, spinnerStates: nextSpinnerStates };
+    }
+
+    // 6.45. Door tick — closed → opening → opened 진행. opened 로 막 전이한 door 는 spinner spawn.
+    if (this.state.doors.length > 0) {
+      const dtMs = dt * 1000;
+      const prevDoors = this.state.doors;
+      const nextDoors = prevDoors.map((d) => Door.tickAnimation(d, dtMs));
+      let nextSpinners = [...this.state.spinnerStates];
+      const finalDoors = nextDoors.map((nd, idx) => {
+        const pd = prevDoors[idx];
+        if (!pd) return nd;
+        // 이번 틱에 opened 로 전이했고 아직 스피너 생성 전이면 spawn
+        if (pd.phase !== 'opened' && nd.phase === 'opened' && nd.spawnedSpinnerId === null) {
+          const id = `spinner_${nd.id}`;
+          const spinner = this.spinnerSystem.spawnFromDoor(nd.x, nd.y, nd.spinnerDefinitionId, id);
+          nextSpinners.push(spinner);
+          return { ...nd, spawnedSpinnerId: id };
+        }
+        return nd;
+      });
+      this.state = { ...this.state, doors: finalDoors, spinnerStates: nextSpinners };
     }
 
     // 6.5. Magnet timer tick (dt를 ms로 변환)
@@ -372,6 +409,15 @@ export class GameplayController {
     }
 
     return allEvents;
+  }
+
+  /**
+   * Dev 전용: 현재 스테이지를 강제 클리어. StageCleared 이벤트 1건만 반환.
+   * 일반 tick 흐름과 동일한 flow 전이를 트리거한다.
+   */
+  forceStageCleared(): GameplayEvent[] {
+    this.state = { ...this.state, isStageCleared: true };
+    return [{ type: 'StageCleared' }];
   }
 
   private applyLaunchBall(): {
