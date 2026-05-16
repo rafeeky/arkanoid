@@ -880,6 +880,33 @@ type GameplayRuntimeState = {
   itemDrops: ItemDropState[];
   isStageCleared: boolean;
 };
+
+#### 좌표 규약 (게임 엔티티의 `(x, y)` 의미)
+
+**원칙:** 게임 엔티티의 `(x, y)`는 해당 엔티티 bounding box의 **중심**이다. `width/height/radius` 는 중심으로부터의 대칭 extent. 충돌 검사와 렌더링은 이 단일 정의에서 파생하며, 두 레이어가 독립적으로 좌표를 해석하면 안 된다 (객체가 자신의 transform 을 소유, 충돌·스프라이트가 거기 종속).
+
+**예외 (TS prototype 한정):** `BlockState.{x, y}` 는 좌상단을 가리킨다. grid 배치 코드(`blockGridPosition`)와 Stage Editor (`EditorCanvas` 의 `ctx.fillRect`) 가 좌상단 기준으로 작성된 레거시 경위. 게임 렌더러는 `setOrigin(0, 0)` 으로 명시적으로 좌상단을 사용해 일치를 유지한다. Unity 포팅(M4) 에서 모든 엔티티를 `Transform` 단일 소스 + `BoxCollider2D.size/offset` 컨벤션으로 통일하면서 이 예외가 자연 소멸한다.
+
+**Unity 매핑:** Unity 의 `GameObject` 는 `Transform` 1개를 소유하고 `BoxCollider2D`, `SpriteRenderer` 가 이 Transform 의 자식으로 동작하므로 이 원칙이 컴포넌트 모델로 강제된다. 별도 좌표 컨벤션 코드 불필요.
+
+#### 14-3-x. 오브젝트 카탈로그
+
+각 게임 엔티티가 어떤 좌표/충돌/시각 컨벤션을 갖는지의 단일 진실. 새 엔티티 추가 시 여기 한 줄을 먼저 박고 코드 구현으로 내려간다.
+
+| 엔티티 | (x, y) 의미 | 충돌 형태 | 시각 origin | Entity 모듈 | Unity 매핑 |
+|---|---|---|---|---|---|
+| **Bar** | 중심 | AABB (`bar.width × BAR_HEIGHT`) | 0.5, 0.5 | `entities/Bar.ts` — `bounds`, `reflectFromBall`, `attachBall` | GameObject + BoxCollider2D + SpriteRenderer (pivot center) |
+| **Ball** | 중심 | Circle (`BALL_RADIUS`) | 0.5, 0.5 | — (subject of collision, not target) | GameObject + CircleCollider2D + SpriteRenderer (pivot center) |
+| **Block** | **좌상단** (TS 예외) | AABB (`BLOCK_WIDTH × BLOCK_HEIGHT`) | 0, 0 | `entities/Block.ts` — `bounds`, `reflectFromBall`, `handleBallCollision` | GameObject + BoxCollider2D + SpriteRenderer (Unity 포팅 때 center 로 통일) |
+| **Item** | 중심 | AABB (`ITEM_WIDTH × ITEM_HEIGHT`) | 0.5, 0.5 | — (충돌 응답은 BarEffectService 가 처리) | GameObject + BoxCollider2D + SpriteRenderer |
+| **Spinner** | 중심 | Circle (가변 radius) | 0.5, 0.5 | `systems/SpinnerSystem.ts` (entity 분리 미적용) | GameObject + CircleCollider2D + 회전 컴포넌트 |
+| **Wall** | implicit (playfield edge) | playfield AABB 경계 | — | `entities/Wall.ts` — `reflectFromBall` | PlayfieldRoot 자식 4개 BoxCollider2D edge |
+
+원칙:
+- 각 entity 의 collision 응답(반사, push-out, attach) 은 해당 entity 모듈에 위치. 다른 곳에서 inline 반사 금지.
+- entity 모듈은 `bounds()` 를 단일 진실로 노출. 충돌 검사 + 렌더러 + Stage Editor 가 모두 같은 함수에서 파생.
+- 물리 튜닝 (반사각, push-out epsilon, sub-step 정밀도) 은 `GameplayConfig.physics` 데이터로 (§14-4-physics 참조).
+
 14-4. BarState
 type BarState = {
   x: number;
@@ -999,18 +1026,42 @@ type ItemDefinition = {
 
 역할:
 
-전역 수치 설정
+전역 수치 설정. **물리 튜닝 값을 포함** — 코드 const 가 아니라 데이터로 두어 디자이너가 JSON 한 줄로 게임 느낌 조정 가능.
 
 예시 스키마:
+
+type PhysicsConfig = {
+  subStepSize: number;    // sub-step 1회당 진행 픽셀
+  maxSubSteps: number;    // 한 틱 최대 sub-step (폭주 방지)
+  pushOutEpsilon: number; // 충돌 후 push-out 거리 (벽/블럭 공통)
+  minAngleDeg: number;    // 반사 후 축으로부터의 최소 각도 (무한 핑퐁 방지)
+  barContactBias: number; // 바 반사 contactX → vx 변환 계수
+};
 
 type GameplayConfig = {
   initialLives: number;
   baseBarWidth: number;
   barMoveSpeed: number;
+  ballInitialSpeed: number;
+  ballInitialAngleDeg: number;
   roundIntroDurationMs: number;
   blockHitFlashDurationMs: number;
   barBreakDurationMs: number;
+  expandMultiplier: number;
+  physics: PhysicsConfig;
 };
+
+**§14-4-physics 물리 튜닝 가이드:**
+
+| 필드 | 기본값 | 영향 |
+|---|---|---|
+| `subStepSize` | 4 | 작을수록 터널링 안전, 비용↑. 4 = block 두께(24)의 1/6 → 기하학적 터널링 불가 |
+| `maxSubSteps` | 32 | 한 틱당 최대 이동 거리 = 32×4=128px. 30fps 에서 ~3900 px/s 까지 커버 |
+| `pushOutEpsilon` | 0.5 | 충돌 후 strict separation 보장. 0 이면 미세 overlap 잔존, 너무 크면 시각적 jerk |
+| `minAngleDeg` | 15 | 공이 수평/수직에 평행하게 갇히는 무한 핑퐁 방지 |
+| `barContactBias` | 0.7 | 1.0 에 가까울수록 바 가장자리 반사가 가파름. 0.5 = 부드러움, 1.0 = 거의 수평 |
+
+이 값들을 만지면 게임 *느낌* 이 직접 바뀐다. Unity 포팅 시 ScriptableObject 한 필드로 그대로 대응.
 15-5. UITextTable
 
 역할:
