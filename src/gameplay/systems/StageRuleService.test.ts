@@ -10,6 +10,8 @@ function makeState(overrides: Partial<GameplayRuntimeState> = {}): GameplayRunti
     bar: { x: 480, y: 660, width: 120, moveSpeed: 420, activeEffect: 'none' },
     balls: [],
     blocks: [],
+    borders: [],
+    doors: [],
     itemDrops: [],
     isStageCleared: false,
     magnetRemainingTime: 0,

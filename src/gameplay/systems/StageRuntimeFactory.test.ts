@@ -314,10 +314,10 @@ describe('createGameplayRuntimeFromStageDefinition — spinner spawn 초기화',
 
 // ---------------------------------------------------------------------------
 // StageRuntimeFactory — circleCenterX/Y clamp 테스트
-// (canvas 720x720, CIRCLE_RADIUS=60, CIRCLE_CLAMP_MARGIN=10,
+// (playfield 720x900, CIRCLE_RADIUS=60, CIRCLE_CLAMP_MARGIN=10,
 //  MIN_CIRCLE_CENTER_Y=380, BAR_CLEARANCE=80)
 // circleCenterX ∈ [70, 650]
-// circleCenterY ∈ [380, 580]
+// circleCenterY ∈ [380, 760]  (900 - 60 - 80)
 // ---------------------------------------------------------------------------
 
 describe('createGameplayRuntimeFromStageDefinition — spinner clamp', () => {
@@ -348,13 +348,13 @@ describe('createGameplayRuntimeFromStageDefinition — spinner clamp', () => {
     expect(state.spinnerStates[0]!.circleCenterX).toBe(360);
   });
 
-  it('descentEndY=650 → circleCenterY clamped to 580', () => {
+  it('descentEndY=800 → circleCenterY clamped to 760 (upper bound)', () => {
     const stage: StageDefinition = {
       ...stage1,
-      spinners: [{ definitionId: 'spinner_cube', x: 360, y: 650 }],
+      spinners: [{ definitionId: 'spinner_cube', x: 360, y: 800 }],
     };
     const state = createGameplayRuntimeFromStageDefinition(stage, config, BlockDefinitionTable, 3);
-    expect(state.spinnerStates[0]!.circleCenterY).toBe(580);
+    expect(state.spinnerStates[0]!.circleCenterY).toBe(760);
   });
 
   it('descentEndY=50 → circleCenterY clamped to 380', () => {

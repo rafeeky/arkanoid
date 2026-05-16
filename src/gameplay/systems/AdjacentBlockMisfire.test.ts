@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import { moveBallWithCollisions } from './MovementSystem';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -81,7 +82,7 @@ describe('블록 A top-right 모서리 접근 시 공이 블록 내부에 진입
     };
 
     const dt = 0.1;
-    const result = moveBallWithCollisions(ball, dt, all2x2);
+    const result = moveBallWithCollisions(ball, dt, all2x2, [], [], defaultPhysicsConfig);
 
     // 공이 어느 블록 내부에도 없어야 한다
     for (const block of all2x2) {
@@ -104,7 +105,7 @@ describe('블록 A top-right 모서리 접근 시 공이 블록 내부에 진입
 describe('diagonal overlap 구역에서 공이 블록 내부에 진입하지 않음', () => {
   it('x=103에서 수직 하강 후 공이 블록 내부에 없다', () => {
     const ball: BallState = { id: 'ball_0', x: 103, y: 60, vx: 0, vy: 300, isActive: true };
-    const result = moveBallWithCollisions(ball, 0.1, all2x2);
+    const result = moveBallWithCollisions(ball, 0.1, all2x2, [], [], defaultPhysicsConfig);
     for (const block of all2x2) {
       expect(isBallCenterInsideBlock(result.ball, block)).toBe(false);
     }
@@ -112,7 +113,7 @@ describe('diagonal overlap 구역에서 공이 블록 내부에 진입하지 않
 
   it('x=109에서 수직 하강 후 공이 블록 내부에 없다', () => {
     const ball: BallState = { id: 'ball_0', x: 109, y: 60, vx: 0, vy: 300, isActive: true };
-    const result = moveBallWithCollisions(ball, 0.1, all2x2);
+    const result = moveBallWithCollisions(ball, 0.1, all2x2, [], [], defaultPhysicsConfig);
     for (const block of all2x2) {
       expect(isBallCenterInsideBlock(result.ball, block)).toBe(false);
     }
@@ -120,7 +121,7 @@ describe('diagonal overlap 구역에서 공이 블록 내부에 진입하지 않
 
   it('x=106(중앙)에서 수직 하강 후 C/D(하단 행)는 내부 진입 없음', () => {
     const ball: BallState = { id: 'ball_0', x: 106, y: 60, vx: 0, vy: 300, isActive: true };
-    const result = moveBallWithCollisions(ball, 0.1, all2x2);
+    const result = moveBallWithCollisions(ball, 0.1, all2x2, [], [], defaultPhysicsConfig);
     expect(isBallCenterInsideBlock(result.ball, blockC)).toBe(false);
     expect(isBallCenterInsideBlock(result.ball, blockD)).toBe(false);
   });
@@ -132,7 +133,7 @@ describe('diagonal overlap 구역에서 공이 블록 내부에 진입하지 않
 describe('4px 간격 블록 사이에서 수직 진입 시 블록 내부 진입 없음', () => {
   it('간격 정중앙(x=106)에서 하강 시 C/D는 내부 진입 없음', () => {
     const ball: BallState = { id: 'ball_0', x: 106, y: 50, vx: 0, vy: 300, isActive: true };
-    const result = moveBallWithCollisions(ball, 0.1, all2x2);
+    const result = moveBallWithCollisions(ball, 0.1, all2x2, [], [], defaultPhysicsConfig);
     for (const block of all2x2) {
       expect(isBallCenterInsideBlock(result.ball, block)).toBe(false);
     }
@@ -149,14 +150,14 @@ describe('4px 간격 블록 사이에서 수직 진입 시 블록 내부 진입 
 describe('y축 overlap 구역에서 공이 블록 내부에 진입하지 않음', () => {
   it('x=72(A/C center), y=130에서 위로 상승 후 공이 블록 내부에 없다', () => {
     const ball: BallState = { id: 'ball_0', x: 72, y: 130, vx: 0, vy: -300, isActive: true };
-    const result = moveBallWithCollisions(ball, 0.1, [blockA, blockC]);
+    const result = moveBallWithCollisions(ball, 0.1, [blockA, blockC], [], [], defaultPhysicsConfig);
     expect(isBallCenterInsideBlock(result.ball, blockA)).toBe(false);
     expect(isBallCenterInsideBlock(result.ball, blockC)).toBe(false);
   });
 
   it('x=72, y=95에서 수직 하강 후 공이 블록 내부에 없다', () => {
     const ball: BallState = { id: 'ball_0', x: 72, y: 95, vx: 0, vy: 300, isActive: true };
-    const result = moveBallWithCollisions(ball, 0.1, [blockA, blockC]);
+    const result = moveBallWithCollisions(ball, 0.1, [blockA, blockC], [], [], defaultPhysicsConfig);
     expect(isBallCenterInsideBlock(result.ball, blockA)).toBe(false);
     expect(isBallCenterInsideBlock(result.ball, blockC)).toBe(false);
   });
@@ -186,7 +187,7 @@ describe('2x2 블록 그리드 100 tick 시뮬레이션 — 블록 내부 진입
         for (let tick = 0; tick < 100; tick++) {
           if (ball.y < 0 || ball.y > 720) break;
 
-          const result = moveBallWithCollisions(ball, 1 / 60, currentBlocks);
+          const result = moveBallWithCollisions(ball, 1 / 60, currentBlocks, [], [], defaultPhysicsConfig);
           ball = result.ball;
 
           for (const f of result.blockFacts) {

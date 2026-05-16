@@ -35,6 +35,8 @@ function makeGameplayState(
     bar: makeBar(barOverrides),
     balls: [],
     blocks: [],
+    borders: [],
+    doors: [],
     itemDrops: [],
     isStageCleared: false,
     magnetRemainingTime: extra.magnetRemainingTime ?? 0,

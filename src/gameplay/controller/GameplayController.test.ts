@@ -5,6 +5,7 @@ import type { StageDefinition } from '../../definitions/types/StageDefinition';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { ItemDefinition } from '../../definitions/types/ItemDefinition';
 import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import type { GameplayRuntimeState } from '../state/GameplayRuntimeState';
 import type { InputSnapshot } from '../../input/InputSnapshot';
 
@@ -19,7 +20,7 @@ const config: GameplayConfig = {
   roundIntroDurationMs: 1500,
   blockHitFlashDurationMs: 120,
   barBreakDurationMs: 700,
-  expandMultiplier: 1.5,
+  expandMultiplier: 1.5,  physics: defaultPhysicsConfig,
 };
 
 const blockDefinitions: Record<string, BlockDefinition> = {
@@ -197,7 +198,7 @@ describe('GameplayController - 바닥 낙하 → 라이프 감소', () => {
     const baseBall = getBall(initialState);
     const modState: GameplayRuntimeState = {
       ...initialState,
-      balls: [{ ...baseBall, id: 'ball_0', x: 480, y: 730, vx: 0, vy: 100, isActive: true }],
+      balls: [{ ...baseBall, id: 'ball_0', x: 480, y: 950, vx: 0, vy: 100, isActive: true }],
     };
     const ctrl = new GameplayController(modState, deps);
     ctrl.tick(noInput, 1 / 60);
@@ -214,7 +215,7 @@ describe('GameplayController - 바닥 낙하 → 라이프 감소', () => {
     const baseBall = getBall(initialState);
     const modState: GameplayRuntimeState = {
       ...initialState,
-      balls: [{ ...baseBall, id: 'ball_0', x: 480, y: 730, vx: 0, vy: 100, isActive: true }],
+      balls: [{ ...baseBall, id: 'ball_0', x: 480, y: 950, vx: 0, vy: 100, isActive: true }],
     };
     const ctrl = new GameplayController(modState, deps);
     const events = ctrl.tick(noInput, 1 / 60);
@@ -235,7 +236,7 @@ describe('GameplayController - 바닥 낙하 → 라이프 감소', () => {
     const baseBall = getBall(initialState);
     const modState: GameplayRuntimeState = {
       ...initialState,
-      balls: [{ ...baseBall, id: 'ball_0', x: 480, y: 730, vx: 0, vy: 100, isActive: true }],
+      balls: [{ ...baseBall, id: 'ball_0', x: 480, y: 950, vx: 0, vy: 100, isActive: true }],
     };
     const ctrl = new GameplayController(modState, deps);
     const events = ctrl.tick(noInput, 1 / 60);
@@ -349,6 +350,8 @@ describe('터널링 회귀 테스트 — swept AABB 충돌', () => {
         // Swept AABB should detect entry into block's expanded zone.
         { id: 'ball_0', x: 183, y: blockY + 12, vx: 600, vy: 0, isActive: true },
       ],
+      borders: [],
+      doors: [],
       itemDrops: [],
       isStageCleared: false,
       magnetRemainingTime: 0,
@@ -384,6 +387,8 @@ describe('터널링 회귀 테스트 — swept AABB 충돌', () => {
         // Ball approaching first block from the left
         { id: 'ball_0', x: 183, y: 292, vx: 600, vy: 0, isActive: true },
       ],
+      borders: [],
+      doors: [],
       itemDrops: [],
       isStageCleared: false,
       magnetRemainingTime: 0,

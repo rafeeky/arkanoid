@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import { moveBallWithCollisions } from './MovementSystem';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -72,7 +73,7 @@ describe('반사 후 위치 보정 (position correction)', () => {
     const block = makeBlock({ x: 68, y: 210 }); // block x centered around ball x=100
 
     const dt = 1 / 60; // ~16.7 ms
-    const { ball: result } = moveBallWithCollisions(ball, dt, [block]);
+    const { ball: result } = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
 
     // Velocity must be reflected upward
     expect(result.vy).toBeLessThan(0);
@@ -94,7 +95,7 @@ describe('반사 후 위치 보정 (position correction)', () => {
     const block = makeBlock({ x: 200, y: 210 });
 
     const dt = 1 / 60;
-    const { ball: result } = moveBallWithCollisions(ball, dt, [block]);
+    const { ball: result } = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
 
     // Velocity must be reflected leftward
     expect(result.vx).toBeLessThan(0);
@@ -120,13 +121,13 @@ describe('연속 2프레임 재충돌 방지', () => {
     const dt = 1 / 60;
 
     // Frame 1: collision + reflection
-    const frame1 = moveBallWithCollisions(ball, dt, [block]);
+    const frame1 = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
     expect(frame1.blockFacts.length).toBeGreaterThanOrEqual(1);
     const hitBlockId = frame1.blockFacts[0]?.blockId;
     expect(hitBlockId).toBe(block.id);
 
     // Frame 2: ball should be moving away — same block must NOT be hit
-    const frame2 = moveBallWithCollisions(frame1.ball, dt, [block]);
+    const frame2 = moveBallWithCollisions(frame1.ball, dt, [block], [], [], defaultPhysicsConfig);
     const reHit = frame2.blockFacts.some((f) => f.blockId === block.id);
     expect(reHit).toBe(false);
   });
@@ -145,7 +146,7 @@ describe('파괴된 블록 ghosting 방지', () => {
     const destroyedBlock = makeBlock({ x: 68, y: 210, isDestroyed: true });
 
     const dt = 1 / 60;
-    const { blockFacts } = moveBallWithCollisions(ball, dt, [destroyedBlock]);
+    const { blockFacts } = moveBallWithCollisions(ball, dt, [destroyedBlock], [], [], defaultPhysicsConfig);
 
     expect(blockFacts.length).toBe(0);
   });
@@ -158,7 +159,7 @@ describe('파괴된 블록 ghosting 방지', () => {
     const activeBlock = makeBlock({ id: 'active', x: 68, y: 260, isDestroyed: false });
 
     const dt = 1 / 15; // larger dt so ball can reach the second block
-    const { blockFacts } = moveBallWithCollisions(ball, dt, [destroyedBlock, activeBlock]);
+    const { blockFacts } = moveBallWithCollisions(ball, dt, [destroyedBlock, activeBlock], [], [], defaultPhysicsConfig);
 
     const hitIds = blockFacts.map((f) => f.blockId);
     expect(hitIds).not.toContain('destroyed');
@@ -184,10 +185,10 @@ describe('t=0 케이스: 공이 블록 내부에서 시작', () => {
     const dt = 1 / 60;
 
     // Frame 1: t=0 hit — must reflect and push out
-    const frame1 = moveBallWithCollisions(ball, dt, [block]);
+    const frame1 = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
 
     // Frame 2: must NOT re-hit the same block
-    const frame2 = moveBallWithCollisions(frame1.ball, dt, [block]);
+    const frame2 = moveBallWithCollisions(frame1.ball, dt, [block], [], [], defaultPhysicsConfig);
     const reHit = frame2.blockFacts.some((f) => f.blockId === block.id);
     expect(reHit).toBe(false);
   });

@@ -4,6 +4,7 @@ import type { BarState } from '../state/BarState';
 import type { BallState } from '../state/BallState';
 import type { ItemDropState } from '../state/ItemDropState';
 import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 
 const baseConfig: GameplayConfig = {
   initialLives: 3,
@@ -14,7 +15,7 @@ const baseConfig: GameplayConfig = {
   roundIntroDurationMs: 1500,
   blockHitFlashDurationMs: 120,
   barBreakDurationMs: 700,
-  expandMultiplier: 1.5,
+  expandMultiplier: 1.5,  physics: defaultPhysicsConfig,
 };
 
 const baseBar: BarState = {
@@ -186,7 +187,7 @@ describe('moveAttachedBallToBar', () => {
 describe('moveBallWithCollisions — 블록 충돌 기본 동작', () => {
   it('블록이 없으면 dt*v 만큼 이동한다', () => {
     const dt = 1 / 60;
-    const result = moveBallWithCollisions(baseBall, dt, []);
+    const result = moveBallWithCollisions(baseBall, dt, [], [], [], defaultPhysicsConfig);
     expect(result.ball.x).toBeCloseTo(baseBall.x + baseBall.vx * dt, 2);
     expect(result.ball.y).toBeCloseTo(baseBall.y + baseBall.vy * dt, 2);
     expect(result.blockFacts.length).toBe(0);
@@ -194,7 +195,7 @@ describe('moveBallWithCollisions — 블록 충돌 기본 동작', () => {
 
   it('비활성 공은 그대로 반환된다', () => {
     const inactiveBall: BallState = { ...baseBall, isActive: false };
-    const result = moveBallWithCollisions(inactiveBall, 1 / 60, []);
+    const result = moveBallWithCollisions(inactiveBall, 1 / 60, [], [], [], defaultPhysicsConfig);
     expect(result.ball).toBe(inactiveBall);
     expect(result.blockFacts.length).toBe(0);
   });
@@ -213,7 +214,7 @@ describe('moveBallWithCollisions — 블록 충돌 기본 동작', () => {
     // 블록 바로 위에서 시작해서 한 틱에 닿도록 설정
     const ball: BallState = { ...baseBall, x: 480, y: 310, vx: 0, vy: -400 };
     // dt=1/30 → dy=13.3px, y=310-13.3=296.7 → expanded top=292 통과
-    const result = moveBallWithCollisions(ball, 1 / 30, [block]);
+    const result = moveBallWithCollisions(ball, 1 / 30, [block], [], [], defaultPhysicsConfig);
     expect(result.blockFacts.length).toBeGreaterThanOrEqual(1);
     expect(result.ball.vy).toBeGreaterThan(0); // 반사 후 아래 방향
   });
@@ -228,7 +229,7 @@ describe('moveBallWithCollisions — 블록 충돌 기본 동작', () => {
       definitionId: 'basic',
     };
     const ball: BallState = { ...baseBall, x: 480, y: 380, vx: 0, vy: -400 };
-    const result = moveBallWithCollisions(ball, 1 / 60, [destroyedBlock]);
+    const result = moveBallWithCollisions(ball, 1 / 60, [destroyedBlock], [], [], defaultPhysicsConfig);
     expect(result.blockFacts.length).toBe(0);
   });
 
@@ -242,7 +243,7 @@ describe('moveBallWithCollisions — 블록 충돌 기본 동작', () => {
       definitionId: 'basic',
     };
     const ball: BallState = { ...baseBall, x: 480, y: 500, vx: 0, vy: -1200 };
-    const result = moveBallWithCollisions(ball, 1 / 60, [block]);
+    const result = moveBallWithCollisions(ball, 1 / 60, [block], [], [], defaultPhysicsConfig);
     // 공이 블록 내부에 없어야 함
     const inside =
       result.ball.x > block.x &&

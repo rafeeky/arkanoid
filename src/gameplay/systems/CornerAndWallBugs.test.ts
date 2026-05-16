@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import { moveBallWithCollisions } from './MovementSystem';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -80,7 +81,7 @@ describe('블록 코너 대각선 진입 후 통과 안 함', () => {
     });
 
     const dt = 1 / 60;
-    const result = moveBallWithCollisions(ball, dt, [block]);
+    const result = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
 
     // 반사 후 공 중심이 블록 AABB 내부에 있으면 버그
     expect(isBallCenterInsideBlock(result.ball, block)).toBe(false);
@@ -111,7 +112,7 @@ describe('블록 코너 대각선 진입 후 통과 안 함', () => {
 
     // 5 tick 시뮬레이션
     for (let tick = 0; tick < 5; tick++) {
-      const result = moveBallWithCollisions(currentBall, dt, blocks);
+      const result = moveBallWithCollisions(currentBall, dt, blocks, [], [], defaultPhysicsConfig);
       currentBall = result.ball;
 
       // 블록이 파괴됐으면 그 이후 틱에서는 제외
@@ -158,7 +159,7 @@ describe('벽 근처 블록 연쇄 충돌에서 공이 playfield 밖으로 나�
     });
 
     const dt = 1 / 30; // 30fps — 더 큰 dt
-    const result = moveBallWithCollisions(ball, dt, [block]);
+    const result = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
 
     // 핵심: 공이 playfield 밖으로 나가지 않아야 한다
     expect(result.ball.x).toBeGreaterThanOrEqual(0);
@@ -184,7 +185,7 @@ describe('벽 근처 블록 연쇄 충돌에서 공이 playfield 밖으로 나�
     const blocks: BlockState[] = [block];
 
     for (let tick = 0; tick < 10; tick++) {
-      const result = moveBallWithCollisions(currentBall, 1 / 60, blocks);
+      const result = moveBallWithCollisions(currentBall, 1 / 60, blocks, [], [], defaultPhysicsConfig);
       currentBall = result.ball;
 
       // 매 tick 후 x 범위 검증
@@ -221,7 +222,7 @@ describe('벽 반사 후 다음 틱에서 블록 통과 없음', () => {
     });
 
     const dt = 1 / 60;
-    const result = moveBallWithCollisions(ball, dt, [block]);
+    const result = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
 
     // 반사가 없을 수도 있음 (블록까지 거리가 먼 경우)
     // 핵심: 공이 블록 내부에 있으면 안 됨
@@ -249,7 +250,7 @@ describe('벽 반사 후 다음 틱에서 블록 통과 없음', () => {
     let blocks: BlockState[] = [block];
 
     for (let tick = 0; tick < 10; tick++) {
-      const result = moveBallWithCollisions(currentBall, 1 / 60, blocks);
+      const result = moveBallWithCollisions(currentBall, 1 / 60, blocks, [], [], defaultPhysicsConfig);
       currentBall = result.ball;
 
       if (result.blockFacts.length > 0) {
@@ -295,7 +296,7 @@ describe('블록 2개 tight 배치에서 모서리 충돌', () => {
     });
 
     const dt = 1 / 60;
-    const result = moveBallWithCollisions(ball, dt, blocks);
+    const result = moveBallWithCollisions(ball, dt, blocks, [], [], defaultPhysicsConfig);
 
     for (const b of blocks) {
       expect(isBallCenterInsideBlock(result.ball, b)).toBe(false);
@@ -319,7 +320,7 @@ describe('블록 2개 tight 배치에서 모서리 충돌', () => {
     });
 
     const dt = 1 / 60;
-    const result = moveBallWithCollisions(ball, dt, blocks);
+    const result = moveBallWithCollisions(ball, dt, blocks, [], [], defaultPhysicsConfig);
 
     for (const b of blocks) {
       expect(isBallCenterInsideBlock(result.ball, b)).toBe(false);
@@ -353,7 +354,7 @@ describe('swept 이동 후 공이 항상 playfield 내에 있음', () => {
     let currentBlocks = [...blocks];
 
     for (let tick = 0; tick < 100; tick++) {
-      const result = moveBallWithCollisions(ball, 1 / 60, currentBlocks);
+      const result = moveBallWithCollisions(ball, 1 / 60, currentBlocks, [], [], defaultPhysicsConfig);
       ball = result.ball;
 
       if (result.blockFacts.length > 0) {
@@ -388,7 +389,7 @@ describe('swept 이동 후 공이 항상 playfield 내에 있음', () => {
     let currentBlocks = [...blocks];
 
     for (let tick = 0; tick < 100; tick++) {
-      const result = moveBallWithCollisions(ball, 1 / 60, currentBlocks);
+      const result = moveBallWithCollisions(ball, 1 / 60, currentBlocks, [], [], defaultPhysicsConfig);
       ball = result.ball;
 
       if (result.blockFacts.length > 0) {

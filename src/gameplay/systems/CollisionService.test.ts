@@ -20,6 +20,8 @@ function makeState(overrides: Partial<GameplayRuntimeState> = {}): GameplayRunti
     },
     balls: [],
     blocks: [],
+    borders: [],
+    doors: [],
     itemDrops: [],
     isStageCleared: false,
     magnetRemainingTime: 0,
@@ -95,7 +97,7 @@ describe('BallHitWall detection', () => {
 
 describe('BallHitFloor detection', () => {
   it('공이 y > 720이면 BallHitFloor를 감지한다', () => {
-    const ball = activeBall({ x: 400, y: 730 });
+    const ball = activeBall({ x: 400, y: 950 });
     const state = makeState({ balls: [ball] });
     const facts = detectCollisions(state, state);
     expect(facts).toContainEqual({ type: 'BallHitFloor', ballId: 'ball_0' });
@@ -280,7 +282,7 @@ describe('ItemFellOffFloor detection', () => {
       id: 'item_0',
       itemType: 'expand',
       x: 300,
-      y: 730,
+      y: 950,
       fallSpeed: 160,
       isCollected: false,
     };
@@ -294,7 +296,7 @@ describe('ItemFellOffFloor detection', () => {
       id: 'item_0',
       itemType: 'expand',
       x: 300,
-      y: 730,
+      y: 950,
       fallSpeed: 160,
       isCollected: true,
     };

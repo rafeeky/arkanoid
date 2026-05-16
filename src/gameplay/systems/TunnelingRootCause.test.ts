@@ -17,6 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import { moveBallWithCollisions } from './MovementSystem';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -97,7 +98,7 @@ describe('Root Cause 재현: 블록→벽→블록 재접근 시나리오', () =
       isActive: true,
     };
 
-    const result = moveBallWithCollisions(ball, 0.016, [block]);
+    const result = moveBallWithCollisions(ball, 0.016, [block], [], [], defaultPhysicsConfig);
 
     const inside = isBallInsideBlock(result.ball, block);
     if (inside) {
@@ -177,7 +178,7 @@ describe('Root Cause 재현: 블록→벽→블록 재접근 시나리오', () =
       isActive: true,
     };
 
-    const result = moveBallWithCollisions(ball, 0.016, [block]);
+    const result = moveBallWithCollisions(ball, 0.016, [block], [], [], defaultPhysicsConfig);
 
     const inside = isBallInsideBlock(result.ball, block);
     if (inside) {
@@ -223,7 +224,7 @@ describe('Root Cause 재현: 블록→벽→블록 재접근 시나리오', () =
       isActive: true,
     };
 
-    const result = moveBallWithCollisions(ball, 0.016, [block]);
+    const result = moveBallWithCollisions(ball, 0.016, [block], [], [], defaultPhysicsConfig);
 
     const inside = isBallInsideBlock(result.ball, block);
     if (inside) {
@@ -271,7 +272,7 @@ describe('alreadyInside 케이스 push-out 올바름 확인', () => {
 
     for (const tc of testCases) {
       const ball: BallState = { id: 'ball_0', ...tc, isActive: true };
-      const result = moveBallWithCollisions(ball, 0.016, [block]);
+      const result = moveBallWithCollisions(ball, 0.016, [block], [], [], defaultPhysicsConfig);
 
       const inside = isBallInsideBlock(result.ball, block);
       if (inside) {
@@ -325,7 +326,7 @@ describe('free-advance 구간 새 블록 통과 확인', () => {
       isActive: true,
     };
 
-    const result = moveBallWithCollisions(ball, 0.016, [block1, block2]);
+    const result = moveBallWithCollisions(ball, 0.016, [block1, block2], [], [], defaultPhysicsConfig);
 
     expect(isBallInsideBlock(result.ball, block1)).toBe(false);
     expect(isBallInsideBlock(result.ball, block2)).toBe(false);
@@ -364,7 +365,7 @@ describe('free-advance 구간 새 블록 통과 확인', () => {
     let detail = '';
 
     for (let tick = 0; tick < 20; tick++) {
-      const result = moveBallWithCollisions(current, 0.016, currentBlocks);
+      const result = moveBallWithCollisions(current, 0.016, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
 
       for (const f of result.blockFacts) {

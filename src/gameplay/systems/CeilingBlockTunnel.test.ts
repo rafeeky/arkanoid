@@ -17,6 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import { moveBallWithCollisions } from './MovementSystem';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -71,7 +72,7 @@ describe('MVP1 regression: 천장 반사 직후 블록 통과 (관측 1~2회)', 
     let tunnelDetected = false;
 
     for (let tick = 0; tick < 10; tick++) {
-      const result = moveBallWithCollisions(current, DT, blocks);
+      const result = moveBallWithCollisions(current, DT, blocks, [], [], defaultPhysicsConfig);
       hitCount += result.blockFacts.filter((f) => f.blockId === 'b_0').length;
       current = result.ball;
 
@@ -116,7 +117,7 @@ describe('MVP1 regression: 천장 반사 직후 블록 통과 (관측 1~2회)', 
     const blocks = [block];
 
     // dt = 1/30 (느린 프레임)
-    const result = moveBallWithCollisions(ball, 1 / 30, blocks);
+    const result = moveBallWithCollisions(ball, 1 / 30, blocks, [], [], defaultPhysicsConfig);
 
     // 블록 AABB 내부에 공이 위치해서는 안 됨
     const bx = block.x;

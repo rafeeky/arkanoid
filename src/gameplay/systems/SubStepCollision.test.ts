@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import { moveBallWithCollisions } from './MovementSystem';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -67,7 +68,7 @@ describe('고속 공 터널링 방지', () => {
 
     const dt = 0.033; // 30fps 최악 시나리오
 
-    const result = moveBallWithCollisions(ball, dt, [block]);
+    const result = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
 
     // 공이 블록 내부에 없어야 함
     expect(isBallCenterInsideBlock(result.ball, block)).toBe(false);
@@ -102,7 +103,7 @@ describe('고속 공 터널링 방지', () => {
 
     const dt = 1 / 60;
 
-    const result = moveBallWithCollisions(ball, dt, [block]);
+    const result = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
 
     expect(isBallCenterInsideBlock(result.ball, block)).toBe(false);
   });
@@ -126,7 +127,7 @@ describe('고속 공 터널링 방지', () => {
       isActive: true,
     };
 
-    const result = moveBallWithCollisions(ball, 0.016, [block]);
+    const result = moveBallWithCollisions(ball, 0.016, [block], [], [], defaultPhysicsConfig);
     expect(isBallCenterInsideBlock(result.ball, block)).toBe(false);
   });
 });
@@ -168,7 +169,7 @@ describe('수직 경로 연속 블록 — 한 틱 한 블록 반사', () => {
     for (let tick = 0; tick < 50; tick++) {
       if (current.y < 0 || current.y > CANVAS_HEIGHT) break;
 
-      const result = moveBallWithCollisions(current, 1 / 60, currentBlocks);
+      const result = moveBallWithCollisions(current, 1 / 60, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
 
       // 한 틱에 hit된 블록 수 확인 — 1개 이하여야 함
@@ -218,7 +219,7 @@ describe('수직 경로 연속 블록 — 한 틱 한 블록 반사', () => {
     for (let tick = 0; tick < 30; tick++) {
       if (current.y < 0) break;
 
-      const result = moveBallWithCollisions(current, 1 / 60, currentBlocks);
+      const result = moveBallWithCollisions(current, 1 / 60, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
 
       const uniqueHits = new Set(result.blockFacts.map((f) => f.blockId));
@@ -305,7 +306,7 @@ describe('100 tick 시뮬레이션 — 공이 블록 내부에 절대 머물지 
         if (current.y - BALL_RADIUS > CANVAS_HEIGHT) break;
         if (current.y < 0) break;
 
-        const result = moveBallWithCollisions(current, 1 / 60, currentBlocks);
+        const result = moveBallWithCollisions(current, 1 / 60, currentBlocks, [], [], defaultPhysicsConfig);
         current = result.ball;
 
         // 블록 파괴 반영
@@ -354,7 +355,7 @@ describe('sub-step 경계 조건', () => {
       id: 'b', x: 448, y: 400, remainingHits: 1, isDestroyed: false, definitionId: 'basic',
     };
 
-    const result = moveBallWithCollisions(ball, 1 / 60, [block]);
+    const result = moveBallWithCollisions(ball, 1 / 60, [block], [], [], defaultPhysicsConfig);
     expect(result.ball).toBe(ball); // reference equality — unchanged
     expect(result.blockFacts.length).toBe(0);
     expect(result.wallFacts.length).toBe(0);
@@ -378,7 +379,7 @@ describe('sub-step 경계 조건', () => {
       definitionId: 'basic',
     };
 
-    const result = moveBallWithCollisions(ball, 1 / 60, [destroyedBlock]);
+    const result = moveBallWithCollisions(ball, 1 / 60, [destroyedBlock], [], [], defaultPhysicsConfig);
     expect(result.blockFacts.length).toBe(0);
   });
 
@@ -393,7 +394,7 @@ describe('sub-step 경계 조건', () => {
     };
     const dt = 1 / 60;
 
-    const result = moveBallWithCollisions(ball, dt, []);
+    const result = moveBallWithCollisions(ball, dt, [], [], [], defaultPhysicsConfig);
     expect(result.ball.x).toBeCloseTo(480 + 100 * dt, 5);
     expect(result.ball.y).toBeCloseTo(400 - 100 * dt, 5);
     expect(result.blockFacts.length).toBe(0);
@@ -429,14 +430,14 @@ describe('반사 후 재진입 방지', () => {
     const dt = 1 / 20;  // 큰 dt로 확실히 블록에 닿게
 
     // 첫 번째 틱: 충돌 + 반사
-    const frame1 = moveBallWithCollisions(ball, dt, [block]);
+    const frame1 = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
     expect(frame1.blockFacts.length).toBeGreaterThanOrEqual(1);
     expect(frame1.ball.vy).toBeGreaterThan(0); // 위→아래로 반사
 
     // 두 번째 틱: 같은 블록과 재충돌 없어야 함 (ball이 이미 위로 이동 중)
     // 반사 후 vy > 0이므로 공이 아래로 이동 → 블록 하단으로 가야 함
     // 그러나 공이 블록 바로 위에서 반사됐으므로 블록 밖에 있어야 함
-    const frame2 = moveBallWithCollisions(frame1.ball, dt, [block]);
+    const frame2 = moveBallWithCollisions(frame1.ball, dt, [block], [], [], defaultPhysicsConfig);
     expect(isBallCenterInsideBlock(frame2.ball, block)).toBe(false);
   });
 
@@ -462,7 +463,7 @@ describe('반사 후 재진입 방지', () => {
     };
 
     const dt = 1 / 60;
-    const result = moveBallWithCollisions(ball, dt, [block]);
+    const result = moveBallWithCollisions(ball, dt, [block], [], [], defaultPhysicsConfig);
 
     // 결과 공이 블록 내부에 없어야 함
     expect(isBallCenterInsideBlock(result.ball, block)).toBe(false);

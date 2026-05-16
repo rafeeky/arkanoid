@@ -39,6 +39,8 @@ describe('WallVerticalStall — 우측 벽 충돌 후 공이 수직 상승 또�
     const state = ctx.getGameplayState() as GameplayRuntimeState;
     ctx._setGameplayState({
       ...state,
+      // border 와의 상호작용은 별도 테스트. 여기서는 순수 wall 반사만 검증.
+      borders: [],
       balls: [
         {
           id: 'ball_1',
@@ -87,6 +89,8 @@ describe('WallVerticalStall — 우측 벽 충돌 후 공이 수직 상승 또�
     const state = ctx.getGameplayState() as GameplayRuntimeState;
     ctx._setGameplayState({
       ...state,
+      // border 와의 상호작용은 별도 테스트. 여기서는 순수 wall 반사만 검증.
+      borders: [],
       balls: [
         {
           id: 'ball_1',
@@ -132,6 +136,8 @@ describe('WallVerticalStall — 우측 벽 충돌 후 공이 수직 상승 또�
     // x=949 → 949+4.8=953.8 > 952 → 이번 틱에 벽 충돌 확실.
     ctx._setGameplayState({
       ...state,
+      // border 와의 상호작용은 별도 테스트. 여기서는 순수 wall 반사만 검증.
+      borders: [],
       balls: [
         {
           id: 'ball_1',
@@ -165,6 +171,8 @@ describe('WallVerticalStall — 우측 벽 충돌 후 공이 수직 상승 또�
     // x=11 → 11-4.8=6.2 < 8 → 이번 틱에 벽 충돌 확실.
     ctx._setGameplayState({
       ...state,
+      // border 와의 상호작용은 별도 테스트. 여기서는 순수 wall 반사만 검증.
+      borders: [],
       balls: [
         {
           id: 'ball_1',

@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import { moveBallWithCollisions } from './MovementSystem';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -117,7 +118,7 @@ describe('의심 3: 반사 후 다음 블록 검출 실패 시나리오', () => 
     const result1 = moveBallWithCollisions(
       { id: 'b0', x: 492, y: 240, vx: 0, vy: -3000, isActive: true },
       0.016,
-      [blockAv2, blockBv2],
+      [blockAv2, blockBv2], [], [], defaultPhysicsConfig,
     );
     // 공이 블록 내부에 없어야 함
     expect(isBallInsideBlock(result1.ball, blockAv2)).toBe(false);
@@ -158,7 +159,7 @@ describe('의심 3: 반사 후 다음 블록 검출 실패 시나리오', () => 
     let tunnelInfo = '';
 
     for (let tick = 0; tick < 20; tick++) {
-      const result = moveBallWithCollisions(current, 0.016, currentBlocks);
+      const result = moveBallWithCollisions(current, 0.016, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
 
       for (const f of result.blockFacts) {
@@ -228,7 +229,7 @@ describe('의심 1: MAX_BOUNCE_COUNT=4 cap 이후 블록 통과', () => {
     let tunnelInfo = '';
 
     for (let tick = 0; tick < 30; tick++) {
-      const result = moveBallWithCollisions(current, 0.016, currentBlocks);
+      const result = moveBallWithCollisions(current, 0.016, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
 
       for (const f of result.blockFacts) {
@@ -279,7 +280,7 @@ describe('의심 1: MAX_BOUNCE_COUNT=4 cap 이후 블록 통과', () => {
       isActive: true,
     };
 
-    const result = moveBallWithCollisions(ball, 0.016, blocks);
+    const result = moveBallWithCollisions(ball, 0.016, blocks, [], [], defaultPhysicsConfig);
 
     // 공이 블록들을 모두 통과한 후의 위치 확인
     for (const b of blocks) {
@@ -337,7 +338,7 @@ describe('의심 4: sanityCheck 경계 판정', () => {
       isActive: true,
     };
 
-    const result = moveBallWithCollisions(ball, 0.016, [block]);
+    const result = moveBallWithCollisions(ball, 0.016, [block], [], [], defaultPhysicsConfig);
 
     // 반사 후 공이 블록 내부에 없어야 함
     const inside = isBallInsideBlock(result.ball, block);
@@ -392,7 +393,7 @@ describe('실제 게임 속도 기준 터널링 재현', () => {
     for (let tick = 0; tick < 300; tick++) {
       if (!current.isActive || current.y > 720) break;
 
-      const result = moveBallWithCollisions(current, 1 / 60, currentBlocks);
+      const result = moveBallWithCollisions(current, 1 / 60, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
 
       for (const f of result.blockFacts) {

@@ -17,6 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import { moveBallWithCollisions } from './MovementSystem';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -89,7 +90,7 @@ describe('터널링 재현 — 고속 공 단일 틱 다중 통과', () => {
     let tunnelDetail = '';
 
     for (let tick = 0; tick < 60; tick++) {
-      const result = moveBallWithCollisions(current, 0.016, currentBlocks);
+      const result = moveBallWithCollisions(current, 0.016, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
 
       // 히트된 블록 파괴
@@ -157,7 +158,7 @@ describe('터널링 재현 — 고속 공 단일 틱 다중 통과', () => {
     let maxBlocksDestroyedInOneTick = 0;
 
     for (let tick = 0; tick < 30; tick++) {
-      const result = moveBallWithCollisions(current, dt, currentBlocks);
+      const result = moveBallWithCollisions(current, dt, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
 
       const destroyedThisTick = result.blockFacts.length;
@@ -221,7 +222,7 @@ describe('hitBlockIds skip 후 free-advance 버그', () => {
       isActive: true,
     };
 
-    const result = moveBallWithCollisions(ball, 0.016, [block]);
+    const result = moveBallWithCollisions(ball, 0.016, [block], [], [], defaultPhysicsConfig);
 
     // 공이 블록 내부에 있으면 안 됨
     const inside = isBallInsideBlock(result.ball, block);
@@ -262,7 +263,7 @@ describe('한 틱 다중 블록 파괴 방지', () => {
     for (let tick = 0; tick < 200; tick++) {
       if (!current.isActive || current.y < 0) break;
 
-      const result = moveBallWithCollisions(current, 0.016, currentBlocks);
+      const result = moveBallWithCollisions(current, 0.016, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
       maxPerTick.push(result.blockFacts.length);
 
@@ -305,7 +306,7 @@ describe('한 틱 다중 블록 파괴 방지', () => {
     for (let tick = 0; tick < 200; tick++) {
       if (!current.isActive || current.y < 0) break;
 
-      const result = moveBallWithCollisions(current, 0.016, currentBlocks);
+      const result = moveBallWithCollisions(current, 0.016, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
 
       if (result.blockFacts.length > maxDestroyedPerTick) {
@@ -371,7 +372,7 @@ describe('free-advance 가드 (수정 A)', () => {
       isActive: true,
     };
 
-    const result = moveBallWithCollisions(ball, 0.016, [block]);
+    const result = moveBallWithCollisions(ball, 0.016, [block], [], [], defaultPhysicsConfig);
 
     const inside = isBallInsideBlock(result.ball, block);
     if (inside) {
@@ -419,7 +420,7 @@ describe('수직 블록 스택 관통 금지', () => {
     let tunnelDetail = '';
 
     for (let tick = 0; tick < 30; tick++) {
-      const result = moveBallWithCollisions(current, dt, currentBlocks);
+      const result = moveBallWithCollisions(current, dt, currentBlocks, [], [], defaultPhysicsConfig);
       current = result.ball;
 
       for (const fact of result.blockFacts) {

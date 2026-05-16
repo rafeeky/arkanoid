@@ -14,6 +14,8 @@ function makeState(overrides: Partial<GameplayRuntimeState> = {}): GameplayRunti
     blocks: [
       { id: 'blk-0', x: 100, y: 100, remainingHits: 1, isDestroyed: false, definitionId: 'def-0' },
     ],
+    borders: [],
+    doors: [],
     itemDrops: [],
     isStageCleared: false,
     magnetRemainingTime: 0,

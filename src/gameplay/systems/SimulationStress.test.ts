@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import { moveBallWithCollisions } from './MovementSystem';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -129,7 +130,7 @@ function runSimulation(
     if (ball.y - BALL_RADIUS > CANVAS_HEIGHT) break;
 
     // Move with block collisions (swept AABB)
-    const result = moveBallWithCollisions(ball, dt, currentBlocks);
+    const result = moveBallWithCollisions(ball, dt, currentBlocks, [], [], defaultPhysicsConfig);
     ball = result.ball;
 
     // Destroy any hit blocks so they don't re-collide

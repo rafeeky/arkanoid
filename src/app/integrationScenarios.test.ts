@@ -43,7 +43,7 @@ function injectBallBelowFloor(ctx: Awaited<ReturnType<typeof createAppContext>>)
   ctx._setGameplayState({
     ...state,
     balls: state.balls.map((b, i) =>
-      i === 0 ? { ...b, isActive: true, x: 480, y: 730, vx: 0, vy: 300 } : b,
+      i === 0 ? { ...b, isActive: true, x: 480, y: 950, vx: 0, vy: 300 } : b,
     ),
   });
 }

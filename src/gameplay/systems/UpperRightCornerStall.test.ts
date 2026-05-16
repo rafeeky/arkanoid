@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import { moveBallWithCollisions, sanityCheckBallBlockSeparation } from './MovementSystem';
 import type { BallState } from '../state/BallState';
 import type { BlockState } from '../state/BlockState';
@@ -62,7 +63,7 @@ describe('우측 상단 구역 공 멈춤 버그 재현', () => {
     const initialSpeed = speed(ball);
 
     for (let tick = 0; tick < 10; tick++) {
-      const result = moveBallWithCollisions(ball, 1 / 60, blocks);
+      const result = moveBallWithCollisions(ball, 1 / 60, blocks, [], [], defaultPhysicsConfig);
       ball = result.ball;
 
       // 블록 파괴
@@ -90,7 +91,7 @@ describe('우측 상단 구역 공 멈춤 버그 재현', () => {
     const initialSpeed = speed(ball);
 
     for (let tick = 0; tick < 20; tick++) {
-      const result = moveBallWithCollisions(ball, 1 / 60, blocks);
+      const result = moveBallWithCollisions(ball, 1 / 60, blocks, [], [], defaultPhysicsConfig);
       ball = result.ball;
     }
 
@@ -115,7 +116,7 @@ describe('우측 상단 구역 공 멈춤 버그 재현', () => {
 
     // 30 tick 시뮬레이션
     for (let tick = 0; tick < 30; tick++) {
-      const result = moveBallWithCollisions(ball, 1 / 60, blocks);
+      const result = moveBallWithCollisions(ball, 1 / 60, blocks, [], [], defaultPhysicsConfig);
       ball = result.ball;
 
       if (result.blockFacts.length > 0) {
@@ -150,7 +151,7 @@ describe('sanityCheckBallBlockSeparation velocity 반전 방향 정확성', () =
     const block = makeBlock({ id: 'b0', x: 400, y: 200 });
     const ballMovingAway = makeBall({ x: 420, y: 212, vx: -200, vy: 100 });
 
-    const r = sanityCheckBallBlockSeparation(ballMovingAway, [block]);
+    const r = sanityCheckBallBlockSeparation(ballMovingAway, [block], defaultPhysicsConfig);
     expect(r.wasInside).toBe(true);
 
     // 수정 후: push-out 방향과 velocity가 이미 일치 → vx 부호가 유지되어야 한다
@@ -165,7 +166,7 @@ describe('sanityCheckBallBlockSeparation velocity 반전 방향 정확성', () =
     const block = makeBlock({ id: 'b0', x: 400, y: 200 });
     const ballMovingAway = makeBall({ x: 432, y: 205, vx: 100, vy: -300 });
 
-    const r = sanityCheckBallBlockSeparation(ballMovingAway, [block]);
+    const r = sanityCheckBallBlockSeparation(ballMovingAway, [block], defaultPhysicsConfig);
     expect(r.wasInside).toBe(true);
 
     // 수정 후: vy=-300은 이미 위로 → 반전 없이 유지
@@ -180,7 +181,7 @@ describe('sanityCheckBallBlockSeparation velocity 반전 방향 정확성', () =
     // 공 중심을 블록 내부에 위치시킴
     const ballInside = makeBall({ x: 432, y: 212, vx: 200, vy: -300 });
 
-    const r1 = sanityCheckBallBlockSeparation(ballInside, [block]);
+    const r1 = sanityCheckBallBlockSeparation(ballInside, [block], defaultPhysicsConfig);
     expect(r1.wasInside).toBe(true);
 
     // push-out 후 공이 블록 AABB 밖에 있어야 한다
@@ -215,9 +216,9 @@ describe('연속 틱에서 블록 내부 공의 탈출', () => {
     let escapedTick = -1;
 
     for (let tick = 0; tick < 20; tick++) {
-      const result = moveBallWithCollisions(ball, 1 / 60, blocks);
+      const result = moveBallWithCollisions(ball, 1 / 60, blocks, [], [], defaultPhysicsConfig);
       // sanityCheck도 함께 (GameplayController 흐름)
-      const sanity = sanityCheckBallBlockSeparation(result.ball, blocks);
+      const sanity = sanityCheckBallBlockSeparation(result.ball, blocks, defaultPhysicsConfig);
       ball = sanity.ball;
 
       if (result.blockFacts.length > 0 || sanity.wasInside) {

@@ -8,6 +8,7 @@ import type { ItemDropState } from '../state/ItemDropState';
 import type { BlockDefinition } from '../../definitions/types/BlockDefinition';
 import type { ItemDefinition } from '../../definitions/types/ItemDefinition';
 import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import type { CollisionFact } from './CollisionService';
 
 // --- Fixtures ---
@@ -21,7 +22,7 @@ const config: GameplayConfig = {
   roundIntroDurationMs: 1500,
   blockHitFlashDurationMs: 120,
   barBreakDurationMs: 700,
-  expandMultiplier: 1.5,
+  expandMultiplier: 1.5,  physics: defaultPhysicsConfig,
 };
 
 const blockDefinitions: Record<string, BlockDefinition> = {
@@ -50,6 +51,8 @@ function makeState(overrides: Partial<GameplayRuntimeState> = {}): GameplayRunti
     bar: { x: 480, y: 660, width: 120, moveSpeed: 420, activeEffect: 'none' },
     balls: [],
     blocks: [],
+    borders: [],
+    doors: [],
     itemDrops: [],
     isStageCleared: false,
     magnetRemainingTime: 0,
@@ -287,7 +290,7 @@ describe('ItemFellOffFloor resolution', () => {
       id: 'item_0',
       itemType: 'expand',
       x: 300,
-      y: 730,
+      y: 950,
       fallSpeed: 160,
       isCollected: false,
     };

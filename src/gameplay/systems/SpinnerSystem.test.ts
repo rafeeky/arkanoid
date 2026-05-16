@@ -600,15 +600,17 @@ describe('SpinnerSystem.handleBallCollisions — triangle', () => {
   const system = new SpinnerSystem(spinnerDefs);
 
   it('공이 triangle spinner와 겹칠 때 충돌을 감지한다', () => {
+    // tetrahedron silhouette: top at (0, -h)=(0, -39.2), spinner at (360, 300).
+    // top world = (360, 260.8). 공이 위에서 접근해 top vertex 와 정확히 부딪힘.
     const spinner = makeCirclingSpinner({ id: 's0', definitionId: 'spinner_triangle', x: 360, y: 300 });
-    const ball = makeBall({ x: 360, y: 282, vx: 0, vy: 200 });
+    const ball = makeBall({ x: 360, y: 254, vx: 0, vy: 200 });
     const result = system.handleBallCollisions(ball, [spinner]);
     expect(result.collided).toBe(true);
   });
 
-  it('공이 triangle spinner에서 반사된다', () => {
+  it('공이 triangle spinner top vertex 에서 위쪽으로 반사된다', () => {
     const spinner = makeCirclingSpinner({ id: 's0', definitionId: 'spinner_triangle', x: 360, y: 300 });
-    const ball = makeBall({ x: 360, y: 282, vx: 0, vy: 200 });
+    const ball = makeBall({ x: 360, y: 254, vx: 0, vy: 200 });
     const result = system.handleBallCollisions(ball, [spinner]);
     expect(result.nextBall.vy).toBeLessThan(0);
   });

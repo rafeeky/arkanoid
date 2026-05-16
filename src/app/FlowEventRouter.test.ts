@@ -9,6 +9,7 @@ import type { GameplayEvent } from '../gameplay/events/gameplayEvents';
 import type { ISaveRepository } from '../persistence/ISaveRepository';
 import type { GameplayRuntimeState } from '../gameplay/state/GameplayRuntimeState';
 import type { GameplayConfig } from '../definitions/types/GameplayConfig';
+import { defaultPhysicsConfig } from '../definitions/types/GameplayConfig';
 import type { StageDefinition } from '../definitions/types/StageDefinition';
 import type { SaveData } from '../persistence/SaveData';
 
@@ -107,8 +108,10 @@ function makeMinimalState(overrides: {
       moveSpeed: 300,
       activeEffect: 'none',
     },
-    balls: [{ id: 'b0', x: 480, y: 734, vx: 0, vy: 0, isActive: false }],
+    balls: [{ id: 'b0', x: 480, y: 950, vx: 0, vy: 0, isActive: false }],
     blocks: [],
+    borders: [],
+    doors: [],
     itemDrops: [],
     isStageCleared: false,
     magnetRemainingTime: 0,
@@ -128,7 +131,7 @@ const minimalConfig: GameplayConfig = {
   roundIntroDurationMs: 2000,
   blockHitFlashDurationMs: 200,
   barBreakDurationMs: 700,
-  expandMultiplier: 1.5,
+  expandMultiplier: 1.5,  physics: defaultPhysicsConfig,
 };
 
 const minimalStageDefinition: StageDefinition = {
@@ -142,6 +145,8 @@ const minimalStageDefinition: StageDefinition = {
   ballInitialSpeed: 300,
   ballInitialAngleDeg: -60,
   blocks: [],
+  borders: [],
+  doors: [],
 };
 
 // ---------------------------------------------------------------------------

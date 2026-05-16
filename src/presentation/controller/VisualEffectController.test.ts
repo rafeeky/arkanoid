@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { VisualEffectController } from './VisualEffectController';
 import type { GameplayConfig } from '../../definitions/types/GameplayConfig';
+import { defaultPhysicsConfig } from '../../definitions/types/GameplayConfig';
 import type { IntroSequenceEntry } from '../../definitions/types/IntroSequenceEntry';
 import type { PresentationEvent } from '../events/presentationEvents';
 
@@ -13,7 +14,7 @@ const config: GameplayConfig = {
   roundIntroDurationMs: 1500,
   blockHitFlashDurationMs: 120,
   barBreakDurationMs: 700,
-  expandMultiplier: 1.5,
+  expandMultiplier: 1.5,  physics: defaultPhysicsConfig,
 };
 
 const noOp = (_e: PresentationEvent): void => {};

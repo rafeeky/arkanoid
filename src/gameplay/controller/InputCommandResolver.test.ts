@@ -43,6 +43,8 @@ function makeState(
       },
     ],
     blocks: [],
+    borders: [],
+    doors: [],
     itemDrops: [],
     isStageCleared: false,
     magnetRemainingTime: 0,
