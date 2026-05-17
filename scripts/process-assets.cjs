@@ -1,18 +1,19 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 /**
- * process-assets.js — sharp 기반 자산 후처리 일괄 스크립트.
+ * process-assets.cjs — sharp 기반 자산 후처리 일괄 스크립트.
  *
- * 입력: public/assets/sheets/ 의 원본 시트들 (ChatGPT 생성, 흰 배경)
- * 출력: public/assets/<category>/<name>.png — 개별 누끼 PNG (alpha 채널)
+ * 입력: assets-raw/<category>/*.png — 원본 raw 자산 (프로젝트 내, 영문 파일명)
+ * 출력: public/assets/<category>/*.png — 후처리된 게임 자산
  *
  * 처리:
- *   1. 시트별 sub-region 추출 (extract)
- *   2. 흰 배경 제거 → 투명 (R,G,B > THRESHOLD 인 픽셀 alpha=0)
- *   3. 마스코트는 추가로 auto-trim + center (프레임 간 jitter 제거)
+ *   1. flood-fill 누끼 (흰 캐릭터 내부 흰색 보존)
+ *   2. 마스코트는 추가로 auto-trim + center (프레임 간 jitter 제거)
+ *   3. 일부 자산은 단순 copy (이미 alpha 누끼됨)
  *
- * 좌표는 시각 인스펙션 best-guess. 결과가 어긋나면 이 파일의 좌표만 조정.
+ * 모든 경로는 프로젝트 상대 (외부 OneDrive 등 의존 없음).
+ * 새 raw 자산 추가 시 assets-raw/<category>/ 에 영문 파일명으로 넣고 이 파일의 매핑만 갱신.
  *
- * 사용: node scripts/process-assets.js
+ * 사용: node scripts/process-assets.cjs
  */
 
 const sharp = require('sharp');
@@ -20,11 +21,9 @@ const fs = require('fs/promises');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const SHEETS = path.join(ROOT, 'public/assets/sheets');
-const OUT = path.join(ROOT, 'public/assets');
-// 마스코트 4프레임 + 해금 portrait 의 원본 위치 (사용자 OneDrive 폴더).
-// 파일명 한국어 — 파일 시스템 인코딩 그대로 사용.
-const MASCOT_SRC = '/mnt/c/Users/rimse/OneDrive/바탕 화면/알카노이드리소스';
+const RAW = path.join(ROOT, 'assets-raw');               // 원본 raw 자산 (프로젝트 내, 영문 파일명)
+const SHEETS = path.join(ROOT, 'public/assets/sheets');  // 옛 시트 (gameover/gameclear 추출용)
+const OUT = path.join(ROOT, 'public/assets');            // 최종 출력
 
 const WHITE_THRESHOLD = 235; // R,G,B > this → 투명 처리
 
@@ -160,7 +159,7 @@ async function main() {
   // ── 배경: title + stage 1-3 은 bg/ 폴더 개별 PNG (941×1672) → 1080×1920 리사이즈. ──
   //         gameover / gameclear 는 새 자산 미지급으로 sheet_backgrounds 에서 추출 유지.
   console.log('[backgrounds]');
-  const bgSrcDir = path.join(MASCOT_SRC, 'bg');
+  const bgSrcDir = path.join(RAW, 'bg');
   const bgFiles = [
     { src: 'bg_title.png',    dst: 'bg_title.png'    },
     { src: 'bg_stage01.png',  dst: 'bg_stage_01.png' },
@@ -206,7 +205,7 @@ async function main() {
     { src: 'seraphin_4frames.png',   dst: 'seraphin'   },
   ];
   for (const m of mascotFiles) {
-    const sheetPath = path.join(MASCOT_SRC, m.src);
+    const sheetPath = path.join(RAW, 'mascots', m.src);
     for (let i = 0; i < 4; i++) {
       await extractMascotFrame(
         sheetPath,
@@ -219,18 +218,18 @@ async function main() {
 
   // ── 해금 portrait — 캐러셀 잠금해제 미리보기. 단일 PNG (~1620×971) ──
   // 누끼(flood-fill) + trim + center 처리. 사이즈 900×900 (이전 360 × 2.5).
-  // 해금_햄스터 = kongming, 해금_눈토끼 = snowrabbit, 해금_사신 = reaper.
+  // 파일명: unlock_<id>.png (한글 → 영문화). hamster=kongming, snowrabbit=눈토끼, reaper=사신.
   console.log('[portraits]');
   const PORTRAIT_SIZE = 900;
   const portraitFiles = [
-    { src: '해금_알바트로스.png', dst: 'albatross'  },
-    { src: '해금_햄스터.png',     dst: 'kongming'   },
-    { src: '해금_눈토끼.png',     dst: 'snowrabbit' },
-    { src: '해금_사신.png',       dst: 'reaper'     },
-    { src: '해금_세라핀.png',     dst: 'seraphin'   },
+    { src: 'unlock_albatross.png',  dst: 'albatross'  },
+    { src: 'unlock_hamster.png',    dst: 'kongming'   },
+    { src: 'unlock_snowrabbit.png', dst: 'snowrabbit' },
+    { src: 'unlock_reaper.png',     dst: 'reaper'     },
+    { src: 'unlock_seraphin.png',   dst: 'seraphin'   },
   ];
   for (const p of portraitFiles) {
-    const srcPath = path.join(MASCOT_SRC, p.src);
+    const srcPath = path.join(RAW, 'portraits', p.src);
     const meta = await sharp(srcPath).metadata();
     await extractMascotFrame(
       srcPath,
@@ -242,8 +241,8 @@ async function main() {
 
   // ── Slider 스프라이트 — 흰 배경 PNG. flood-fill 누끼 + 리사이즈. ──
   console.log('[slider]');
-  const sliderTrackSrc = path.join(MASCOT_SRC, 'slider_track.png');
-  const sliderKnobSrc  = path.join(MASCOT_SRC, 'slider_knob.png');
+  const sliderTrackSrc = path.join(RAW, 'slider', 'slider_track.png');
+  const sliderKnobSrc  = path.join(RAW, 'slider', 'slider_knob.png');
   const sliderOutDir = path.join(OUT, 'ui');
   await fs.mkdir(sliderOutDir, { recursive: true });
   {
@@ -270,13 +269,13 @@ async function main() {
   const spinnerOutDir = path.join(OUT, 'spinners');
   await fs.mkdir(spinnerOutDir, { recursive: true });
   for (const f of ['spinner_cube.png', 'spinner_triangle.png']) {
-    await fs.copyFile(path.join(MASCOT_SRC, f), path.join(spinnerOutDir, f));
+    await fs.copyFile(path.join(RAW, 'spinners', f), path.join(spinnerOutDir, f));
     console.log('  ✓', path.relative(ROOT, path.join(spinnerOutDir, f)));
   }
 
   // ── Ball 스프라이트 — 16×16, alpha 누끼됨. ──
   console.log('[ball]');
-  const ballSrcDir = path.join(MASCOT_SRC, 'ball_item_sprites/public/assets/sprites');
+  const ballSrcDir = path.join(RAW, 'ball');
   const gameplayOutDir = path.join(OUT, 'gameplay');
   await fs.mkdir(gameplayOutDir, { recursive: true });
   await fs.copyFile(path.join(ballSrcDir, 'ball.png'), path.join(gameplayOutDir, 'ball.png'));
@@ -285,7 +284,7 @@ async function main() {
   // ── Item 스프라이트 — 흰 배경 1774×887. flood-fill 누끼 + 192×96 으로 다운스케일. ──
   // 게임 표시 사이즈는 24×12 (renderer 에서 setDisplaySize). 큰 사이즈로 저장해 다운스케일 시 매끄럽게.
   console.log('[items]');
-  const itemSrcDir = path.join(MASCOT_SRC, 'items');
+  const itemSrcDir = path.join(RAW, 'items');
   for (const f of ['item_expand.png', 'item_magnet.png', 'item_laser.png']) {
     const buf = await sharp(path.join(itemSrcDir, f)).png().toBuffer();
     const trans = await whiteFloodFillToTransparent(buf);
@@ -297,7 +296,7 @@ async function main() {
 
   // ── Bar 스프라이트 — 120×16, alpha 누끼됨. 4종 (normal/expand/magnet/laser). ──
   console.log('[bars]');
-  const barSrcDir = path.join(MASCOT_SRC, 'bar_sprites/public/assets/sprites');
+  const barSrcDir = path.join(RAW, 'bars');
   const barFiles = [
     'bar_normal.png',
     'bar_expand_tint.png',
@@ -315,10 +314,7 @@ async function main() {
   // 소스: border_door_sprites/public/assets/sprites/borders/*.png
   // 출력: public/assets/borders/*.png
   console.log('[borders]');
-  const borderSrcDir = path.join(
-    MASCOT_SRC,
-    'border_door_sprites/public/assets/sprites/borders',
-  );
+  const borderSrcDir = path.join(RAW, 'borders');
   const borderFiles = [
     'border_horizontal.png',
     'border_vertical.png',
@@ -344,7 +340,7 @@ async function main() {
   //   red    → laser_drop   (레이저 효과 빨강)
   //   purple → tough        (단단함 짙은 보라)
   console.log('[blocks]');
-  const blockSrcDir = path.join(MASCOT_SRC, 'block/blocks');
+  const blockSrcDir = path.join(RAW, 'blocks');
   const blockMap = [
     { src: 'block_mint.png',   dst: 'block_basic.png'       },
     { src: 'block_yellow.png', dst: 'block_basic_drop.png'  },
@@ -360,6 +356,17 @@ async function main() {
       path.join(blockOutDir, b.dst),
     );
     console.log('  ✓', path.relative(ROOT, path.join(blockOutDir, b.dst)));
+  }
+
+  // ── Intro story 일러스트 — alpha 누끼 / 리사이즈 없이 단순 복사. ──
+  console.log('[intro]');
+  const introSrcDir = path.join(RAW, 'intro');
+  const introOutDir = path.join(OUT, 'intro');
+  await fs.mkdir(introOutDir, { recursive: true });
+  for (let i = 1; i <= 4; i++) {
+    const f = `intro_story_${String(i).padStart(2, '0')}.png`;
+    await fs.copyFile(path.join(introSrcDir, f), path.join(introOutDir, f));
+    console.log('  ✓', path.relative(ROOT, path.join(introOutDir, f)));
   }
 
   console.log('done.');

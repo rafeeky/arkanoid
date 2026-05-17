@@ -9,6 +9,17 @@ import type { IntroSequenceEntry } from '../../definitions/types/IntroSequenceEn
 import type { VisualEffectController } from '../controller/VisualEffectController';
 
 import { ScreenPresenter } from '../controller/ScreenPresenter';
+
+/** 화면(currentScreen) → 배경 텍스처 키 매핑. inGame/roundIntro 는 별도 처리(playfieldBg). */
+const BG_KEY_BY_SCREEN: Record<ScreenState['currentScreen'], string> = {
+  title:      'bg_title',
+  introStory: 'bg_title',
+  roundIntro: 'bg_title', // unused — inGame/roundIntro 는 위에서 early-return
+  inGame:     'bg_title', // unused
+  gameOver:   'bg_gameover',
+  gameClear:  'bg_gameclear',
+};
+
 import { HUDPresenter } from '../controller/HUDPresenter';
 import { GameplayConfigTable } from '../../definitions/tables/GameplayConfigTable';
 import { getMascotById } from '../../definitions/tables/MascotTable';
@@ -164,14 +175,8 @@ export class SceneRenderer {
       return;
     }
     this.playfieldBg.setVisible(false);
-    let key = 'bg_title';
-    if (screen === 'gameOver') {
-      key = 'bg_gameover';
-    } else if (screen === 'gameClear') {
-      key = 'bg_gameclear';
-    } else if (screen === 'introStory') {
-      key = 'bg_title';
-    }
+    // OCP: screen → bg key 테이블 매핑 (새 화면 추가 시 BG_KEY_BY_SCREEN 한 곳만 갱신).
+    const key = BG_KEY_BY_SCREEN[screen] ?? 'bg_title';
     this.backgroundImage.setTexture(key).setVisible(true);
   }
 
