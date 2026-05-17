@@ -36,8 +36,9 @@ export const BALL_RADIUS = 8;
 export const INITIAL_LAUNCH_OFFSET_X = 30;
 
 // ─── 아이템 드랍 ─────────────────────────────────────────────────────
-export const ITEM_WIDTH = 24;
-export const ITEM_HEIGHT = 12;
+// 2026-05-17: 24×12 → 72×36 (3배). 시각 + 충돌 판정 모두 SSOT 로 일괄 갱신.
+export const ITEM_WIDTH = 72;
+export const ITEM_HEIGHT = 36;
 
 // ─── 테두리 (BorderBlock) ──────────────────────────────────────────────
 /** 테두리의 긴 변 (= 일반 블럭 가로). 한 셀이 차지하는 길이. */

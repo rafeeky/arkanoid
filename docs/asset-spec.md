@@ -111,6 +111,7 @@
 | ID | 용도 | 크기 |
 |---|---|---|
 | `bg_title` | Title 화면 | 1080×1920 |
+| `bg_intro_story` | IntroStory 4페이지 공통 배경 | 1080×1920 (어둡고 별빛 — 알바트로스가 비행하는 바다/하늘 분위기) |
 | `bg_stage_01` | Stage 1 | 1080×1920 |
 | `bg_stage_02` | Stage 2 | 1080×1920 |
 | `bg_stage_03` | Stage 3 | 1080×1920 |
@@ -119,6 +120,22 @@
 
 **파일 경로:** `public/assets/backgrounds/<id>.jpg` (또는 png)
 **스타일:** 우주 / 별 / 그라데이션 어두운 톤 (참조: Block Blast 스크린샷)
+
+### 1-9b. 인트로 스토리 일러스트 (페이지별 사진)
+
+타이틀 → IntroStory 전이 시 4페이지 텍스트와 함께 페이지별 일러스트.
+
+| ID | 페이지 / 텍스트 | 크기 | 위치 (플레이필드 로컬 좌표 0..720) |
+|---|---|---|---|
+| `intro_story_01` | "알바트로스는 날개를 펼치면 3.5미터에 이르는 놀라운 비행 능력을 가진 새입니다." | **480×220** | 중심 (360, 530) |
+| `intro_story_02` | "알바트로스는 바다 위를 수천 킬로미터 비행하며 먹이를 찾습니다." | 480×220 | 중심 (360, 530) |
+| `intro_story_03` | "일부 알바트로스는 먹이를 찾아 한 번에 지구를 한 바퀴 돌기도 합니다." | 480×220 | 중심 (360, 530) |
+| `intro_story_04` | "알바트로스의 놀라운 비행 능력을 기억해 주세요!" | 480×220 | 중심 (360, 530) |
+
+**텍스트 위치:** 일러스트 위쪽 (플레이필드 y=200) — 페이지마다 동일.
+
+**파일 경로:** `public/assets/intro/intro_story_<NN>.png`
+**스타일:** 알바트로스가 등장하는 4개 장면 (날개펼침/바다비행/지구일주/감동결말). 일러스트 톤은 마스코트와 동일한 픽셀아트 스타일 또는 부드러운 디지털 페인팅.
 
 ### 1-10. UI 아이콘
 
@@ -171,14 +188,16 @@
 | `font_dev_overlay` | Dev 오버레이 (block ID, vx/vy 등) | 10~12 | monospace |
 | `font_gameover` | "GAME OVER" / "GAME CLEAR" | 72 | sans-serif, bold |
 
-**현재 사용 폰트:** `monospace` (브라우저 기본) 만 사용. 커스텀 폰트 미사용.
+**현재 사용 폰트 (2026-05-17 도입):** **DNFBitBitv2** (`public/assets/fonts/DNFBitBitv2.{otf,ttf}`).
+- 픽셀아트 스타일 비트맵 폰트. 한글 + 영문 지원.
+- `index.html` 에 `@font-face` 등록되어 있고, 모든 Phaser 텍스트가 `fontFamily: 'DNFBitBitv2, monospace'` 로 사용.
+- 단, Dev 오버레이 (`DevOverlayRenderer.ts`) 는 의도적으로 기본 `monospace` 유지 (작은 디버그 용이라 픽셀아트 부적합).
 
-**한글 지원 필수.** 추천 (CC/OFL 라이선스):
-- 본고딕 (Noto Sans CJK / Source Han Sans)
-- 카페24 폰트 (CC BY-NC 무료, 상업 사용 시 확인)
-- 갈무리 (픽셀아트)
+**추가 폰트 필요 시 (확장):**
+- 본고딕 (Noto Sans CJK) — 한글 본문 가독성
+- Galmuri — 픽셀아트 한글 대안
 
-**파일 경로:** `public/assets/fonts/<font-family>.ttf` 또는 `.woff2`
+**파일 경로:** `public/assets/fonts/<font-family>.{ttf,otf,woff2}`
 
 ---
 

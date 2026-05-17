@@ -25,6 +25,7 @@ import type { DevContext } from '../../app/dev/DevContext';
 import { DevOverlayRenderer } from './DevOverlayRenderer';
 import { DevInputSource } from '../../input/DevInputSource';
 import { PointerInputSource } from '../../input/PointerInputSource';
+import { preloadAssets } from '../../assets/AssetLoader';
 
 export type GameSceneInitData = {
   appContext: AppContext;
@@ -128,9 +129,9 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
   preload(): void {
-    // 기본 구현: 아무 동작 없음. 서브클래스에서 override 가능.
+    // 모든 자산 (배경/블록/마스코트 프레임/portrait/intro story) 일괄 로드.
+    preloadAssets(this);
   }
 
   create(): void {
@@ -140,9 +141,13 @@ export class GameScene extends Phaser.Scene {
     //   Phaser camera 는 origin(0.5, 0.5) 기본이라 zoom 이 카메라 중앙 기준 — centerOn 이 가장 깔끔.
     // - ui camera: HUD / Title / Pause overlay 용. zoom 1, scroll 0.
     //   기본 transparent — main 위에 합성됨.
+
     const ZOOM = 1.5;
     this.cameras.main.setZoom(ZOOM);
     this.cameras.main.centerOn(PLAYFIELD_WIDTH / 2, PLAYFIELD_HEIGHT / 2);
+    // 스테이지(inGame/roundIntro) 에서는 배경 이미지가 숨겨져 이 색이 노출된다.
+    // 그 외 화면에서는 배경 이미지가 카메라 뷰포트를 덮으므로 이 색은 보이지 않음.
+    this.cameras.main.setBackgroundColor('#87ceeb');
 
     this.uiCam = this.cameras.add(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     this.uiCam.setName('ui');
@@ -190,7 +195,12 @@ export class GameScene extends Phaser.Scene {
     const dt = deltaMs / 1000;
     const kbInput = this.keyboardInputSource.readSnapshot();
     const targetBarX = this.pointerInputSource.readTargetBarX();
-    const input = targetBarX !== undefined ? { ...kbInput, targetBarX } : kbInput;
+    // 슬라이더 첫 터치 = SPACE 등가 (공 발사 / 자석 해제). 키보드 SPACE 와 OR.
+    const launchTap = this.pointerInputSource.consumeLaunchJustPressed();
+    const mergedKb = launchTap
+      ? { ...kbInput, spaceJustPressed: true }
+      : kbInput;
+    const input = targetBarX !== undefined ? { ...mergedKb, targetBarX } : mergedKb;
     const flowKindBefore = this.appContext.getFlowState().kind;
 
     // Dev 모드 전용: introStory 중 space 입력이면 즉시 intro 스킵.
@@ -317,6 +327,13 @@ export class GameScene extends Phaser.Scene {
   private classifyCameras(): void {
     if (!this.uiCam) return;
     for (const obj of this.children.list) {
+      // 배경 이미지는 main 카메라 전용. UI 카메라가 main 위에 그려지므로
+      // 배경을 UI 에 두면 게임 오브젝트를 가린다.
+      const name = (obj as unknown as { name?: string }).name;
+      if (name === '__background__') {
+        this.uiCam.ignore(obj);
+        continue;
+      }
       // setScrollFactor(0) 호출 후 scrollFactorX/Y 가 0 으로 세팅됨.
       // Phaser GameObject 가 scrollFactorX 속성을 지원하는 타입만 처리.
       const sfx = (obj as unknown as { scrollFactorX?: number }).scrollFactorX;

@@ -10,13 +10,13 @@ describe('validateIntroSequenceTable', () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it('IntroSequenceTable has exactly 3 pages', () => {
-    expect(IntroSequenceTable).toHaveLength(3);
+  it('IntroSequenceTable has exactly 4 pages (알바트로스 스토리)', () => {
+    expect(IntroSequenceTable).toHaveLength(4);
   });
 
-  it('IntroSequenceTable pages have sequential pageIndex 0, 1, 2', () => {
+  it('IntroSequenceTable pages have sequential pageIndex 0, 1, 2, 3', () => {
     const indices = IntroSequenceTable.map((e) => e.pageIndex);
-    expect(indices).toEqual([0, 1, 2]);
+    expect(indices).toEqual([0, 1, 2, 3]);
   });
 
   it('fails on an empty table', () => {

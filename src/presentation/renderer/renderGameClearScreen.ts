@@ -20,7 +20,7 @@ export function createGameClearScreenObjects(
     .text(360, 200, '', {
       fontSize: '52px',
       color: '#ffdd44',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);
@@ -29,7 +29,7 @@ export function createGameClearScreenObjects(
     .text(360, 310, '', {
       fontSize: '30px',
       color: '#ffffff',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);
@@ -38,7 +38,7 @@ export function createGameClearScreenObjects(
     .text(360, 370, '', {
       fontSize: '24px',
       color: '#aaaaaa',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);
@@ -47,7 +47,7 @@ export function createGameClearScreenObjects(
     .text(360, 460, '', {
       fontSize: '22px',
       color: '#aaaaaa',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);

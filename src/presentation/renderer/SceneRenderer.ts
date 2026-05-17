@@ -83,6 +83,10 @@ export class SceneRenderer {
   private gameOverObjects!: GameOverScreenObjects;
   private introStoryObjects!: IntroStoryScreenObjects;
   private gameClearObjects!: GameClearScreenObjects;
+  /** 전 화면 공통 배경 이미지. 화면별로 텍스처 키만 교체. */
+  private backgroundImage!: Phaser.GameObjects.Image;
+  /** 스테이지(inGame/roundIntro) 한정 — playfield 영역(720×900) 검은 배경. */
+  private playfieldBg!: Phaser.GameObjects.Rectangle;
 
   constructor(
     scene: Phaser.Scene,
@@ -113,12 +117,62 @@ export class SceneRenderer {
    * create — Phaser.Scene.create() 에서 1회 호출. 모든 오브젝트를 미리 생성한다.
    */
   create(): void {
+    // 화면 공통 배경.
+    // 렌더링 계층 문제: UI 카메라가 main 카메라 *위에* 그려지므로 배경을 UI 카메라에 두면
+    // 게임 오브젝트(블록/공/바/스토리)를 덮어버린다. 따라서 배경은 main 카메라에 둔다.
+    // main 카메라는 playfield 중심(360, 360)에 centerOn, zoom 1.5.
+    // 1080×1920 캔버스를 zoom 1.5 로 환산한 world 크기 = 720×1280.
+    // 가로/세로 약간 여유(×1.2)를 두어 다른 종횡비 폰에서 letterbox 가 노출되지 않게 한다.
+    const ZOOM = 1.5;
+    const BG_BLEED = 1.2;
+    // main 카메라 centerOn(PLAYFIELD_WIDTH/2, PLAYFIELD_HEIGHT/2) = (360, 450).
+    // 이 지점이 캔버스 중심 (540, 960) 에 매핑되므로 배경도 같은 world 좌표에 배치.
+    this.backgroundImage = this.scene.add
+      .image(360, 450, 'bg_title')
+      .setOrigin(0.5, 0.5)
+      .setDisplaySize((1080 / ZOOM) * BG_BLEED, (1920 / ZOOM) * BG_BLEED)
+      .setDepth(-100)
+      .setName('__background__');
+
+    // playfield 검은 배경 — 스테이지에서만 visible. depth -50 (배경 위, 게임 오브젝트 아래).
+    // 위치 = playfield 중심 (360, 450) world coord, 사이즈 720×900.
+    this.playfieldBg = this.scene.add
+      .rectangle(360, 450, 720, 900, 0x000000)
+      .setOrigin(0.5, 0.5)
+      .setDepth(-50)
+      .setVisible(false);
+
     this.titleObjects = createTitleScreenObjects(this.scene, this.mascotHandlers);
     this.roundIntroObjects = createRoundIntroScreenObjects(this.scene);
     this.inGameObjects = createInGameObjects(this.scene);
     this.gameOverObjects = createGameOverScreenObjects(this.scene);
     this.introStoryObjects = createIntroStoryScreenObjects(this.scene);
     this.gameClearObjects = createGameClearScreenObjects(this.scene);
+  }
+
+  /** 현재 화면에 맞춰 배경 텍스처 교체.
+   * 스테이지(inGame/roundIntro) 에서는 배경 이미지를 숨기고 main 카메라의
+   * 단색 하늘색이 노출 + playfield 영역에 검은 사각형(playfieldBg) 으로 덮음. */
+  private updateBackground(
+    screen: ScreenState['currentScreen'],
+    stageIndex: number,
+  ): void {
+    if (screen === 'inGame' || screen === 'roundIntro') {
+      void stageIndex;
+      this.backgroundImage.setVisible(false);
+      this.playfieldBg.setVisible(true);
+      return;
+    }
+    this.playfieldBg.setVisible(false);
+    let key = 'bg_title';
+    if (screen === 'gameOver') {
+      key = 'bg_gameover';
+    } else if (screen === 'gameClear') {
+      key = 'bg_gameclear';
+    } else if (screen === 'introStory') {
+      key = 'bg_title';
+    }
+    this.backgroundImage.setTexture(key).setVisible(true);
   }
 
   /**
@@ -131,6 +185,7 @@ export class SceneRenderer {
     screenState: Readonly<ScreenState>,
   ): void {
     const screen = screenState.currentScreen;
+    this.updateBackground(screen, gameplayState.session.currentStageIndex);
 
     if (screen === 'title') {
       const vm = this.presenter.buildTitleViewModel(
@@ -249,9 +304,9 @@ export class SceneRenderer {
 }
 
 /** mascotId 로 응원 mascot placeholder 데이터 변환. */
-function cheerMascotFromState(mascotId: string): { displayName: string; placeholderColor: number; placeholderStrokeColor: number } {
+function cheerMascotFromState(mascotId: string): { id: string; displayName: string; placeholderColor: number; placeholderStrokeColor: number } {
   const m = getMascotById(mascotId);
-  return { displayName: m.displayName, placeholderColor: m.placeholderColor, placeholderStrokeColor: m.placeholderStrokeColor };
+  return { id: mascotId, displayName: m.displayName, placeholderColor: m.placeholderColor, placeholderStrokeColor: m.placeholderStrokeColor };
 }
 
 /** mascotHandlers 미주입 시 안전한 no-op 기본값. SceneRenderer 단독 테스트용. */

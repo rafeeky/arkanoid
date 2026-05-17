@@ -111,16 +111,17 @@ describe('InputCommandResolver - spaceJustPressed 분기', () => {
     expect(cmds.some((c) => c.type === 'ReleaseAttachedBalls')).toBe(false);
   });
 
-  it('laser 상태 + cooldown=0 + space → FireLaser', () => {
+  it('laser 상태 + cooldown=0 + space → FireLaser 커맨드 안 나옴 (자동 발사로 변경)', () => {
+    // 레이저는 GameplayController.tick 에서 매 틱 자동 fire — InputCommandResolver 는 관여 안 함.
     const state = makeState({
       activeEffect: 'laser',
       laserCooldownRemaining: 0,
       ballActive: true,
     });
     const cmds = resolveGameplayCommands(spaceInput, state);
-    expect(cmds.some((c) => c.type === 'FireLaser')).toBe(true);
+    expect(cmds.some((c) => c.type === 'FireLaser')).toBe(false);
+    // 활성 공이 있으므로 LaunchBall 도 안 나옴.
     expect(cmds.some((c) => c.type === 'LaunchBall')).toBe(false);
-    expect(cmds.some((c) => c.type === 'ReleaseAttachedBalls')).toBe(false);
   });
 
   it('laser 상태 + cooldown>0 + space → 커맨드 없음 (쿨타임 중)', () => {

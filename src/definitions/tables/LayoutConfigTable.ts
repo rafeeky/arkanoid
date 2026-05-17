@@ -24,27 +24,29 @@ export const LayoutConfigTable: LayoutConfig = {
     offsetX: 180,
     offsetY: 600,
   },
-  // 2026-05-16: HUD 3개(SCORE/HIGH SCORE/ROUND)를 캔버스 좌측 절반(0..720)으로
-  // 몰아넣고, 우측(720..1080)을 마스코트 자리로 비웠다.
-  //   SCORE     leftX=60   (origin 0,0)
+  // 2026-05-17 (ENVELOP 세이프 존): HUD 를 캔버스 가장자리에서 80px 안쪽으로.
+  // ENVELOP 모드는 종횡비가 다른 폰에서 가장자리가 잘릴 수 있어 60~80px 세이프 존 필수.
+  //   SCORE     leftX=80   (origin 0,0)
   //   HIGH SCORE centerX=360 (origin 0.5,0)
-  //   ROUND     rightX=660  (origin 1,0)
+  //   ROUND     rightX=660  (origin 1,0; 우측 여백 420 — 안전)
+  //   labelY=100 / valueY=170 — 상단 80px 안쪽
   hud: {
-    labelY: 80,
-    valueY: 150,
-    leftX: 60,
+    labelY: 100,
+    valueY: 170,
+    leftX: 80,
     centerX: 360,
     rightX: 660,
     labelFontPx: 36,
     valueFontPx: 52,
   },
-  // 2026-05-16 (재배치): mascot 을 ROUND 가 있던 우측 상단으로. HUD 행과 같은
-  // y 대역(80~200)에 정렬되도록 centerY=160. size 200 (캔버스 우측 360px 폭에 여유).
+  // 2026-05-17 (재배치): 우측 상단. size=200, centerX=900 → 우측 여백 80.
+  //   centerY=200 → 상단 여백 100 (200 - 100 size/2 = 100, 안쪽 80 안전).
   mascot: {
     centerX: 900,
-    centerY: 160,
+    centerY: 200,
     size: 200,
   },
+  // 좌하단. startX=80 (좌 여백 80), y=1700 (하단 여백 220 — 슬라이더와 겹치지 않음).
   livesBar: {
     startX: 80,
     y: 1700,
@@ -52,10 +54,11 @@ export const LayoutConfigTable: LayoutConfig = {
     gap: 12,
     maxDisplay: 7,
   },
-  // 모바일 한 손 엄지 조작용. 캔버스 하단 (y=1850), 가로 800px, 노브 r=40.
+  // 2026-05-17 (세이프 존 적용): 모바일 한 손 엄지 조작용. centerY=1800 (노브 r=40 → bottom=1840, 하단 80 안쪽).
+  // 가로 트랙 trackHalfWidth=400 (중심 540 → 좌우 [140..940], 좌우 여백 140 — 안전).
   // 터치/마우스로 트랙을 누르면 바가 그 위치(playfield 좌표 변환) 로 즉시 스냅.
   barSlider: {
-    centerY: 1850,
+    centerY: 1800,
     trackHalfWidth: 400,
     trackHeight: 20,
     knobRadius: 40,

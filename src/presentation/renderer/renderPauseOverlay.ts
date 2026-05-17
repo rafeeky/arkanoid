@@ -83,7 +83,7 @@ function createButton(
     .text(x, y, label, {
       fontSize,
       color: textColor,
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
       fontStyle: 'bold',
     })
     .setOrigin(0.5, 0.5)
@@ -109,7 +109,7 @@ export function createPauseOverlayObjects(
     .text(CX, TITLE_Y, 'PAUSED', {
       fontSize: '88px',
       color: '#ffffff',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
       fontStyle: 'bold',
     })
     .setOrigin(0.5, 0.5)

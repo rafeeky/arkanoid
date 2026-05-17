@@ -55,11 +55,8 @@ export function resolveGameplayCommands(
     if (state.bar.activeEffect === 'magnet' && state.attachedBallIds.length > 0) {
       commands.push({ type: 'ReleaseAttachedBalls' });
     }
-    // 우선순위 2: 레이저 상태 + 쿨타임 없음 → 발사
-    else if (state.bar.activeEffect === 'laser' && state.laserCooldownRemaining <= 0) {
-      commands.push({ type: 'FireLaser' });
-    }
-    // 우선순위 3: 비활성 공 있음 → 발사
+    // 우선순위 2: 비활성 공 있음 → 발사
+    // (레이저는 자동 발사로 변경 — GameplayController.tick 에서 매 틱 쿨타임 0 시 자동 fire)
     else if (state.balls.some((b) => !b.isActive)) {
       commands.push({ type: 'LaunchBall' });
     }

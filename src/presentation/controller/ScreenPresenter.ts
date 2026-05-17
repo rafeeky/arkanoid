@@ -100,12 +100,12 @@ export class ScreenPresenter {
     introPages: readonly IntroSequenceEntry[],
   ): IntroScreenViewModel {
     if (introPhase === 'done') {
-      return { visibleText: '', isVisible: false };
+      return { visibleText: '', isVisible: false, pageIndex: introPageIndex };
     }
 
     const page = introPages[introPageIndex];
     if (page === undefined) {
-      return { visibleText: '', isVisible: false };
+      return { visibleText: '', isVisible: false, pageIndex: introPageIndex };
     }
 
     const text = page.text;
@@ -126,7 +126,7 @@ export class ScreenPresenter {
         visibleText = '';
     }
 
-    return { visibleText, isVisible: true };
+    return { visibleText, isVisible: true, pageIndex: introPageIndex };
   }
 
   /**

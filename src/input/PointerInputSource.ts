@@ -13,6 +13,8 @@ import { LayoutConfigTable } from '../definitions/tables/LayoutConfigTable';
 export class PointerInputSource {
   private dragActive = false;
   private targetBarX: number | undefined = undefined;
+  /** 슬라이더 영역 첫 터치 edge — 한 번 read 하면 reset. 공 발사용 (SPACE 등가). */
+  private launchJustPressed = false;
 
   constructor(scene: Phaser.Scene) {
     scene.input.on('pointerdown', this.handleDown);
@@ -26,10 +28,18 @@ export class PointerInputSource {
     return this.targetBarX;
   }
 
+  /** 슬라이더 첫 터치 edge 소비 — 호출 시 reset. 매 틱 1회 호출. */
+  consumeLaunchJustPressed(): boolean {
+    const v = this.launchJustPressed;
+    this.launchJustPressed = false;
+    return v;
+  }
+
   private handleDown = (pointer: Phaser.Input.Pointer): void => {
     if (!this.isInSliderArea(pointer.x, pointer.y)) return;
     this.dragActive = true;
     this.targetBarX = this.pointerToBarX(pointer.x);
+    this.launchJustPressed = true;
   };
 
   private handleMove = (pointer: Phaser.Input.Pointer): void => {

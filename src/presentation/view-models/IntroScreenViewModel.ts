@@ -11,4 +11,6 @@ export type IntroScreenViewModel = {
   visibleText: string;
   /** done phase면 false — 오브젝트를 숨기는 신호 */
   isVisible: boolean;
+  /** 현재 페이지 인덱스 (0..N-1). 렌더러가 페이지별 일러스트 키 결정에 사용. */
+  pageIndex: number;
 };

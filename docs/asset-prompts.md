@@ -164,58 +164,62 @@ A glossy 3D jelly tetrahedron (pyramid with triangle base), viewed from front. T
 
 ---
 
-### 2-7. 마스코트 (Mascot) — 5종
+### 2-7. 마스코트 (Mascot) — 5종 (**픽셀아트** 스타일, character.png 디자인 기준)
 
-각 마스코트는 4-frame cheer/dance animation. 일관된 비례 + 위치.
+**전체 톤:** 픽셀아트(pixel art) 스타일. 모바일 캐주얼 게임에 어울리는 chibi(SD) 비례, 부드러운 16-bit 픽셀 + 외곽선 가벼움. Jelly 글로스 X (블럭과 별도 톤).
 
 **공통 base prompt:**
 ```
-[Jelly Block Style 공통 가이드 — but for character art]
+Pixel art (16-bit style) chibi character, SD proportions (head ~50% of body), big expressive eyes, cheerful smile. Clean readable pixel detail, anti-aliased edges. Character centered, fully visible, transparent background. Generate 4 frames as a horizontal sprite sheet (960×240 PNG, each frame 240×240) OR 2×2 grid (480×480).
 
-Character art for "{name}", cute and chibi-proportioned (head 1.5x body), big expressive eyes, cheerful smile, vibrant jelly-like glossy look matching the game art style. Standing in a cheer/dance pose, arms slightly raised. Generate 4 frames in a 2×2 grid (or horizontal strip):
-- frame0: arms down, neutral
-- frame1: arms half-up
-- frame2: arms fully up cheering
-- frame3: arms back to half-up
-Loop animation friendly. Transparent background. Centered, fully visible.
+Frame poses for cheer/dance:
+- frame0: arms down, idle / neutral standing
+- frame1: arms half-up, slight bounce
+- frame2: arms fully up, cheering, jumping or hop
+- frame3: arms back down, looped step
 
-Each frame: 240×240 final, generate at 512×512 per frame.
+Style reference: cute, cozy mobile game pixel art (e.g., Stardew Valley NPC quality but with chibi proportions).
 ```
 
-#### `mascot.albatross` — 알바트로스 (메인 캐릭터)
-```
-{공통 mascot base}
-
-{name} = "albatross". A cute chibi white-and-gray seabird (albatross) with large wings folded by sides, big black eyes, orange beak. Cheering pose dancing. Background: transparent.
-```
-
-#### `mascot.kongming` — 공명/제갈량
+#### `mascot.albatross` — 알바트로스 (메인 캐릭터, 잠금해제 0)
 ```
 {공통 mascot base}
 
-{name} = "kongming" (Zhuge Liang). Chibi ancient Chinese strategist character with white scholar's robe, fan in one hand, neatly-tied hair with traditional cap, sage smile. Cheering pose.
+Character: a chibi white **albatross seabird captain**. Yellow-orange beak (bird-like), big black eyes, fluffy white head feathers. Wearing a navy-blue **double-breasted naval officer jacket** with gold buttons (sleeves visible), a **white captain's hat** with black brim and gold anchor emblem. Orange/yellow webbed feet visible at bottom. Wings emerge from sides of jacket (partly folded). Cheerful, proud expression.
 ```
 
-#### `mascot.snowrabbit` — 눈토끼
+#### `mascot.kongming` — 햄스터 제갈량 (잠금해제 100 골드)
 ```
 {공통 mascot base}
 
-{name} = "snowrabbit". Chibi white rabbit with snow crystals on ear tufts, pink nose, fluffy white body, big blue eyes. Standing on hind legs cheering with paws up.
+Character: a chibi **orange-brown hamster** dressed as the ancient Chinese strategist **Zhuge Liang (제갈량)**. Round hamster face, small round black eyes, tiny pink nose, white belly. Wearing a **teal-green and gold ornate Chinese cap (jin guan / 진관)** with feather plume. Long teal-green robe with gold trim. Holding a **white feather fan (백우선)** in one paw. Scholar's serene smile.
 ```
 
-#### `mascot.reaper` — 사신
+#### `mascot.snowrabbit` — 눈토끼 (잠금해제 300 골드)
 ```
 {공통 mascot base}
 
-{name} = "reaper" — cute friendly version. Chibi grim reaper, small dark hooded cloak, tiny scythe held lightly, glowing soft purple eyes (not scary, more playful). Cheering pose.
+Character: a chibi **white snow rabbit**. Large round eyes (bright blue), pink inner ears with **soft blue snowflake/ice-crystal tufts** at ear tips, pink nose, chubby fluffy white body, tiny paws. Wearing a **bright red knitted scarf** around the neck (the scarf is the prominent accessory — clearly visible). Winter / cozy vibe. Cheerful happy expression.
 ```
 
-#### `mascot.seraphin` — 세라핀 (천사)
+#### `mascot.reaper` — 친근 사신 (잠금해제 600 골드)
 ```
 {공통 mascot base}
 
-{name} = "seraphin". Chibi six-winged angel character, white feathered wings (two pairs visible, third pair hinted), golden halo above head, soft white robe, peaceful smile. Cheering pose.
+Character: a chibi cute **friendly grim reaper**. Small **black hooded cloak** covering most of body, only a tiny round white **skull face with large glowing purple eyes** visible inside the hood (cute, not scary). Tiny hands holding a **small scythe with a long thin shaft and gray-purple blade**. Carrying a **small floating purple soul flame** as accent. Playful posture, definitely not menacing — closer to mascot-cute.
 ```
+
+#### `mascot.seraphin` — 세라핀 / 핑크 아이돌 (잠금해제 1000 골드)
+```
+{공통 mascot base}
+
+Character: a chibi **pink-haired idol girl**. Long bright **pink hair flowing**, twin tails or single ponytail, big sparkling blue eyes, blushy cheeks. Wearing a **navy-blue and gold idol stage outfit** with light blue accents, short skirt with frill, thigh-high boots. Holding a **glowing microphone or magic staff** with sparkles. **Music notes ♪ and pink sparkles** floating around her as visual flair. Energetic performing pose. Magical-girl idol vibe.
+```
+
+**Sprite sheet 출력 권장:**
+- 가로 배치: `mascot.<name>.png` 한 파일에 4프레임 가로로 (960×240).
+- 또는 개별 frame: `public/assets/mascots/<name>/frame<n>.png` (각 240×240).
+- 캔버스 인게임 cheer 표시 240×240. 타이틀 카루셀 360×360 (업스케일 — 픽셀아트는 정수배 추천: 240 → 480 으로 2배가 더 깔끔).
 
 ---
 

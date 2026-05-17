@@ -104,16 +104,44 @@ function createGame(appContext: AppContext, devContext: DevContext | undefined):
     parent: 'app',
     scene: [GameSceneBootstrap],
     scale: {
-      mode: Phaser.Scale.FIT,
+      // ENVELOP: 캔버스가 화면을 가득 채우도록 max-scale 적용. 종횡비가 다른 폰에서
+      // letterbox 대신 가장자리가 잘림. HUD/마스코트/슬라이더는 LayoutConfigTable 의
+      // 80px 안쪽 세이프 존 안에 배치되어 잘리지 않는다.
+      mode: Phaser.Scale.ENVELOP,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
     pixelArt: false,
   });
 }
 
+/**
+ * DNFBitBitv2 폰트를 Phaser 시작 *전* 에 로드 완료 보장.
+ * Phaser canvas text 는 rasterize 시점에 폰트가 로드 안 되어 있으면 fallback (monospace).
+ * @font-face 만 선언해도 Phaser 가 더 빨리 그리면 못 씀.
+ */
+async function ensureFontsLoaded(): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts) return;
+  try {
+    // 다양한 크기/스타일 일괄 prefetch (Phaser 가 사용할 사이즈 범위).
+    await Promise.all([
+      document.fonts.load("12px 'DNFBitBitv2'"),
+      document.fonts.load("24px 'DNFBitBitv2'"),
+      document.fonts.load("36px 'DNFBitBitv2'"),
+      document.fonts.load("52px 'DNFBitBitv2'"),
+      document.fonts.load("96px 'DNFBitBitv2'"),
+    ]);
+    await document.fonts.ready;
+  } catch (err) {
+    console.warn('[main] 폰트 로드 실패 — fallback monospace 사용', err);
+  }
+}
+
 // AppContext를 await한 후 Phaser 시작 — 초기 highScore 로드 완료 보장
 const saveRepo = new LocalSaveRepository('arkanoid.save.v1');
-createAppContext({ saveRepository: saveRepo }).then((appContext) => {
+Promise.all([
+  createAppContext({ saveRepository: saveRepo }),
+  ensureFontsLoaded(),
+]).then(([appContext]) => {
   // Dev 모드: DevContext 생성 (production 빌드에서는 undefined)
   // seed는 Date.now() — 세션별 고유. stageIndex는 0부터 시작.
   const devContext: DevContext | undefined = isDevMode()

@@ -344,6 +344,25 @@ export class GameplayController {
       };
     }
 
+    // 6.7b. Laser 자동 발사 — activeEffect='laser' + cooldown 0 이면 매 틱 자동 fire.
+    // (SPACE 발사 폐기. 사용자가 신경 안 써도 알아서 쏨.)
+    if (this.state.bar.activeEffect === 'laser' && this.state.laserCooldownRemaining <= 0) {
+      const laserItemDef = this.deps.itemDefinitions['laser'];
+      const fireResult = this.laserSystem.fireLaser(
+        this.state.bar,
+        this.state.laserShots,
+        laserItemDef?.laserCooldownMs,
+      );
+      this.state = {
+        ...this.state,
+        laserShots: fireResult.newShots,
+        laserCooldownRemaining: fireResult.nextCooldownMs,
+      };
+      for (const e of fireResult.events) {
+        allEvents.push(e);
+      }
+    }
+
     // 6.8. Spinner ↔ Block 충돌 처리 (phase-gate)
     if (this.state.spinnerStates.length > 0) {
       const spinnerBlockResult = this.spinnerSystem.handleBlockCollisions(

@@ -23,7 +23,7 @@ export function createGameOverScreenObjects(
     .text(360, 200, '', {
       fontSize: '56px',
       color: '#ff4444',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);
@@ -32,7 +32,7 @@ export function createGameOverScreenObjects(
     .text(360, 310, '', {
       fontSize: '28px',
       color: '#ffffff',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);
@@ -41,7 +41,7 @@ export function createGameOverScreenObjects(
     .text(360, 360, '', {
       fontSize: '24px',
       color: '#aaaaaa',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);
@@ -50,7 +50,7 @@ export function createGameOverScreenObjects(
     .text(360, 410, 'NEW HIGH SCORE!', {
       fontSize: '26px',
       color: '#ffdd44',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);
@@ -61,7 +61,7 @@ export function createGameOverScreenObjects(
     .text(360, 490, '', {
       fontSize: '22px',
       color: '#aaaaaa',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);

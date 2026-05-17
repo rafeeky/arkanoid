@@ -16,7 +16,7 @@ export function createRoundIntroScreenObjects(
     .text(360, 300, '', {
       fontSize: '48px',
       color: '#ffffff',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);
@@ -25,7 +25,7 @@ export function createRoundIntroScreenObjects(
     .text(360, 380, '', {
       fontSize: '32px',
       color: '#aaffaa',
-      fontFamily: 'monospace',
+      fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
     .setVisible(false);
