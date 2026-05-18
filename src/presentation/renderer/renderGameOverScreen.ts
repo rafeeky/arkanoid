@@ -7,6 +7,12 @@ export type GameOverScreenObjects = {
   highScoreText: Phaser.GameObjects.Text;
   newHighScoreText: Phaser.GameObjects.Text;
   retryText: Phaser.GameObjects.Text;
+  /** "타이틀로 나가기" 버튼 — 클릭 시 ReturnToTitleRequested. */
+  quitButton: { rect: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text };
+};
+
+export type GameOverHandlers = {
+  onQuitToTitle(): void;
 };
 
 /**
@@ -18,6 +24,7 @@ export type GameOverScreenObjects = {
  */
 export function createGameOverScreenObjects(
   scene: Phaser.Scene,
+  handlers: GameOverHandlers = { onQuitToTitle: () => { /* noop */ } },
 ): GameOverScreenObjects {
   const gameOverLabel = scene.add
     .text(360, 200, '', {
@@ -66,7 +73,25 @@ export function createGameOverScreenObjects(
     .setOrigin(0.5, 0.5)
     .setVisible(false);
 
-  return { gameOverLabel, finalScoreText, highScoreText, newHighScoreText, retryText };
+  // 타이틀로 나가기 버튼 — retryText 아래 (y=560).
+  const quitRect = scene.add
+    .rectangle(360, 560, 280, 60, 0x444444)
+    .setStrokeStyle(3, 0x888888)
+    .setOrigin(0.5, 0.5)
+    .setVisible(false)
+    .setInteractive({ useHandCursor: true });
+  quitRect.on('pointerdown', () => handlers.onQuitToTitle());
+  const quitLabel = scene.add
+    .text(360, 560, 'QUIT TO TITLE', {
+      fontSize: '24px', color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
+    })
+    .setOrigin(0.5, 0.5)
+    .setVisible(false);
+
+  return {
+    gameOverLabel, finalScoreText, highScoreText, newHighScoreText, retryText,
+    quitButton: { rect: quitRect, label: quitLabel },
+  };
 }
 
 /**
@@ -93,6 +118,8 @@ export function renderGameOverScreen(
 
   objects.newHighScoreText.setVisible(viewModel.isNewHighScore);
   objects.retryText.setText(viewModel.retryText).setVisible(true);
+  objects.quitButton.rect.setVisible(true);
+  objects.quitButton.label.setVisible(true);
 }
 
 /**
@@ -104,4 +131,6 @@ export function hideGameOverScreen(objects: GameOverScreenObjects): void {
   objects.highScoreText.setVisible(false);
   objects.newHighScoreText.setVisible(false);
   objects.retryText.setVisible(false);
+  objects.quitButton.rect.setVisible(false);
+  objects.quitButton.label.setVisible(false);
 }

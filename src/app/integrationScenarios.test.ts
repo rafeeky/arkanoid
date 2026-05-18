@@ -264,7 +264,7 @@ describe('§15-5 시나리오 2: 시작 → 플레이 → 게임오버 → 타�
     expect(saved.highScore).toBe(1234);
   });
 
-  it('4. gameOver에서 spaceJustPressed → title 복귀', async () => {
+  it('4. gameOver에서 spaceJustPressed → roundIntro (1스테이지부터 재시작)', async () => {
     const repo = new InMemorySaveRepository({ highScore: 0 });
     const ctx = await createAppContext({ saveRepository: repo });
     enterInGame(ctx);
@@ -281,7 +281,7 @@ describe('§15-5 시나리오 2: 시작 → 플레이 → 게임오버 → 타�
 
     expect(ctx.getFlowState().kind).toBe('gameOver');
     ctx.tick(spaceInput, 1 / 60);
-    expect(ctx.getFlowState().kind).toBe('title');
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
   });
 
   it('5. 새 AppContext를 같은 saveRepository로 생성하면 highScore=1234 로드됨 (교차 세션)', async () => {
@@ -559,7 +559,7 @@ describe('MVP2 §13-4 시나리오 A: Full clear (Stage1 → Stage2 → Stage3 �
     expect(ctx.getFlowState().kind).toBe('gameClear');
   });
 
-  it('A-8. GameClear에서 스페이스 → title 복귀', async () => {
+  it('A-8. GameClear에서 스페이스 → roundIntro (1스테이지부터 재시작)', async () => {
     const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
     advanceToInGame(ctx);
     clearAllBlocks(ctx);
@@ -570,7 +570,7 @@ describe('MVP2 §13-4 시나리오 A: Full clear (Stage1 → Stage2 → Stage3 �
     expect(ctx.getFlowState().kind).toBe('gameClear');
 
     ctx.tick(spaceInput, 1 / 60);
-    expect(ctx.getFlowState().kind).toBe('title');
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
   });
 
   it('A-9. 점수가 클리어 전 주입한 값에서 누적된다 (score 유지)', async () => {
@@ -678,7 +678,7 @@ describe('MVP2 §13-4 시나리오 B: 중간 GameOver — LifeLost 3회 → Game
     expect(saved.highScore).toBe(750);
   });
 
-  it('B-5. GameOver에서 스페이스 → title 복귀', async () => {
+  it('B-5. GameOver에서 스페이스 → roundIntro (1스테이지부터 재시작)', async () => {
     const ctx = await createAppContext({ saveRepository: new InMemorySaveRepository() });
     advanceToInGame(ctx);
 
@@ -691,7 +691,7 @@ describe('MVP2 §13-4 시나리오 B: 중간 GameOver — LifeLost 3회 → Game
     expect(ctx.getFlowState().kind).toBe('gameOver');
 
     ctx.tick(spaceInput, 1 / 60);
-    expect(ctx.getFlowState().kind).toBe('title');
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
   });
 
   it('B-6. score < 이전 highScore 이면 highScore 유지됨', async () => {
@@ -908,35 +908,27 @@ describe('MVP2 §13-4 시나리오 E: GameClear → Title 복귀 → 새 게임 
     expect(ctx.getFlowState().kind).toBe('gameClear');
   });
 
-  it('E-2. GameClear 에서 스페이스 → title 복귀', async () => {
+  it('E-2. GameClear 에서 스페이스 → roundIntro (1스테이지부터 재시작)', async () => {
     const repo = new InMemorySaveRepository({ highScore: 0 });
     const ctx = await reachGameClear(2000, repo);
     ctx.tick(spaceInput, 1 / 60);
-    expect(ctx.getFlowState().kind).toBe('title');
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
   });
 
-  it('E-3. Title 복귀 후 스페이스(StartGameRequested) 시 currentStageIndex=0 으로 리셋됨', async () => {
-    // GameClear → RetryRequested → Title 진입 시 currentStageIndex는
-    // FlowController에서 StartGameRequested 시 리셋된다 (mvp2.md §7-2).
-    // Title 화면 자체에서는 이전 값을 유지하지만, 다음 게임 시작 시 0이 된다.
+  it('E-3. GameClear → SPACE → roundIntro 진입 시 currentStageIndex=0 으로 리셋됨', async () => {
+    // 2026-05-19: RetryRequested 의미 변경 (title 복귀 → 1스테이지 재시작).
+    // GameClear + SPACE → 직접 roundIntro stage 0 으로.
     const repo = new InMemorySaveRepository({ highScore: 0 });
     const ctx = await reachGameClear(2000, repo);
-    ctx.tick(spaceInput, 1 / 60); // gameClear → title
-    expect(ctx.getFlowState().kind).toBe('title');
-
-    // 새 게임 시작(StartGameRequested) → introStory 전이 시 currentStageIndex=0
-    ctx.tick(spaceInput, 1 / 60); // title → introStory
-    expect(ctx.getFlowState().kind).toBe('introStory');
+    ctx.tick(spaceInput, 1 / 60); // gameClear → roundIntro (stage 0)
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
     expect(ctx.getFlowState().currentStageIndex).toBe(0);
   });
 
-  it('E-4. Title 복귀 후 새 게임 시작 → introStory → roundIntro → score=0, currentStageIndex=0', async () => {
+  it('E-4. GameClear → SPACE → roundIntro stage 0 + score=0 리셋', async () => {
     const repo = new InMemorySaveRepository({ highScore: 0 });
     const ctx = await reachGameClear(2000, repo);
-    ctx.tick(spaceInput, 1 / 60); // gameClear → title
-
-    ctx.tick(spaceInput, 1 / 60); // title → introStory
-    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
+    ctx.tick(spaceInput, 1 / 60); // gameClear → roundIntro (직접, introStory 안 거침)
 
     expect(ctx.getFlowState().kind).toBe('roundIntro');
     expect(ctx.getFlowState().currentStageIndex).toBe(0);
@@ -982,16 +974,13 @@ describe('MVP2 §13-4 시나리오 E: GameClear → Title 복귀 → 새 게임 
     expect(ctx.getGameplayState().session.highScore).toBeGreaterThanOrEqual(5000);
   });
 
-  it('E-8. 전체 사이클: GameClear → Title → 새 게임 → IntroStory → Stage1 inGame 진입 가능', async () => {
+  it('E-8. 전체 사이클: GameClear → SPACE → 직접 roundIntro Stage1 inGame 진입 가능', async () => {
     const repo = new InMemorySaveRepository({ highScore: 0 });
     const ctx = await reachGameClear(1000, repo);
-    ctx.tick(spaceInput, 1 / 60); // gameClear → title
+    ctx.tick(spaceInput, 1 / 60); // gameClear → roundIntro (직접, stage 0)
 
-    // 새 게임 사이클
-    ctx.tick(spaceInput, 1 / 60); // title → introStory
-    expect(ctx.getFlowState().kind).toBe('introStory');
-    ctx.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // introStory → roundIntro
     expect(ctx.getFlowState().kind).toBe('roundIntro');
+    expect(ctx.getFlowState().currentStageIndex).toBe(0);
     ctx.handlePresentationEvent({ type: 'RoundIntroFinished' }); // roundIntro → inGame
     expect(ctx.getFlowState().kind).toBe('inGame');
     expect(ctx.getFlowState().currentStageIndex).toBe(0);

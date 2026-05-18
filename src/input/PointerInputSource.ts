@@ -15,6 +15,8 @@ export class PointerInputSource {
   private targetBarX: number | undefined = undefined;
   /** 슬라이더 영역 첫 터치 edge — 한 번 read 하면 reset. 공 발사용 (SPACE 등가). */
   private launchJustPressed = false;
+  /** 화면 어디든 첫 터치 edge — gameOver/gameClear retry 용. */
+  private anyTapJustPressed = false;
 
   constructor(scene: Phaser.Scene) {
     scene.input.on('pointerdown', this.handleDown);
@@ -35,7 +37,15 @@ export class PointerInputSource {
     return v;
   }
 
+  /** 화면 어디든 첫 터치 edge 소비 — gameOver/gameClear/title 등 retry/confirm 용. */
+  consumeAnyTapJustPressed(): boolean {
+    const v = this.anyTapJustPressed;
+    this.anyTapJustPressed = false;
+    return v;
+  }
+
   private handleDown = (pointer: Phaser.Input.Pointer): void => {
+    this.anyTapJustPressed = true;
     if (!this.isInSliderArea(pointer.x, pointer.y)) return;
     this.dragActive = true;
     this.targetBarX = this.pointerToBarX(pointer.x);

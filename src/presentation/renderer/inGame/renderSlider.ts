@@ -4,7 +4,10 @@ import { LayoutConfigTable } from '../../../definitions/tables/LayoutConfigTable
 
 export type SliderObjects = {
   track: Phaser.GameObjects.Rectangle;
-  knob: Phaser.GameObjects.Arc;
+  /** 노브 — 선택된 마스코트 portrait. 둥근 stroke 으로 동그라미 느낌. */
+  knob: Phaser.GameObjects.Image;
+  /** 노브 외곽 흰 stroke (Image 는 stroke 미지원이라 별도 원). */
+  knobRing: Phaser.GameObjects.Arc;
   launchHint: Phaser.GameObjects.Text;
 };
 
@@ -18,9 +21,17 @@ export function createSliderObjects(scene: Phaser.Scene): SliderObjects {
     .setStrokeStyle(2, 0x4466cc)
     .setScrollFactor(0)
     .setVisible(false);
+  // 노브 — 마스코트 portrait. portrait2.<id> 텍스처 매 프레임 갱신.
   const knob = scene.add
-    .arc(trackCenterX, L.centerY, L.knobRadius, 0, 360, false, 0xeeeeee)
-    .setStrokeStyle(3, 0x666666)
+    .image(trackCenterX, L.centerY, 'portrait2.albatross')
+    .setDisplaySize(L.knobRadius * 2, L.knobRadius * 2)
+    .setOrigin(0.5, 0.5)
+    .setScrollFactor(0)
+    .setVisible(false);
+  // 동그라미 느낌 위한 외곽 흰 ring (Image stroke 미지원).
+  const knobRing = scene.add
+    .arc(trackCenterX, L.centerY, L.knobRadius, 0, 360, false, 0xffffff, 0)
+    .setStrokeStyle(4, 0xffffff)
     .setScrollFactor(0)
     .setVisible(false);
 
@@ -32,12 +43,14 @@ export function createSliderObjects(scene: Phaser.Scene): SliderObjects {
     .setScrollFactor(0)
     .setVisible(false);
 
-  return { track, knob, launchHint };
+  return { track, knob, knobRing, launchHint };
 }
 
 export function renderSlider(
   objects: SliderObjects,
   gameplayState: Readonly<GameplayRuntimeState>,
+  /** 선택된 마스코트 id (얼굴 텍스처). 미지정 시 albatross. */
+  selectedMascotId?: string,
 ): void {
   const L = LayoutConfigTable.barSlider;
   const trackCenterX = LayoutConfigTable.canvas.width / 2;
@@ -49,7 +62,13 @@ export function renderSlider(
   const knobX = trackCenterX - L.trackHalfWidth + clampedRatio * (L.trackHalfWidth * 2);
 
   objects.track.setVisible(true);
-  objects.knob.setPosition(knobX, L.centerY).setVisible(true);
+  const mascotId = selectedMascotId ?? 'albatross';
+  objects.knob
+    .setTexture(`portrait2.${mascotId}`)
+    .setPosition(knobX, L.centerY)
+    .setDisplaySize(L.knobRadius * 2, L.knobRadius * 2)
+    .setVisible(true);
+  objects.knobRing.setPosition(knobX, L.centerY).setVisible(true);
 
   // 발사 hint — 비활성 공 OR 자석 부착 시 깜빡임.
   const needsLaunchHint =
@@ -66,5 +85,6 @@ export function renderSlider(
 export function hideSlider(objects: SliderObjects): void {
   objects.track.setVisible(false);
   objects.knob.setVisible(false);
+  objects.knobRing.setVisible(false);
   objects.launchHint.setVisible(false);
 }

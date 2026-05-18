@@ -11,6 +11,13 @@ const CUBE_SIDE  = 0x8866dd;
 const TRI_FACE0 = 0xff99cc;
 const TRI_FACE1 = 0xffbbdd;
 const TRI_FACE2 = 0xcc6699;
+// 반투명 fill alpha + 발광 테두리 색.
+const FACE_FILL_ALPHA = 0.55;
+const EDGE_WIDTH = 2;
+const CUBE_EDGE_COLOR = 0xddccff;   // 큐브 보라 톤 밝게
+const TRI_EDGE_COLOR  = 0xffddee;   // 정사면체 핑크 톤 밝게
+const CUBE_GLOW_COLOR = 0xaa88ff;
+const TRI_GLOW_COLOR  = 0xff99cc;
 
 // Gate (스피너 등장 입구).
 const GATE_COLOR = 0x888888;
@@ -53,6 +60,9 @@ export function renderSpinners(
     let gfx = objects.spinnerMap.get(spinner.id);
     if (gfx === undefined) {
       gfx = scene.add.graphics();
+      // 외곽 발광 효과 (WebGL postFX) — kind 별 색. 1회만 적용.
+      const glowColor = def.kind === 'cube' ? CUBE_GLOW_COLOR : TRI_GLOW_COLOR;
+      gfx.postFX?.addGlow(glowColor, 6, 0, false, 0.1, 12);
       objects.spinnerMap.set(spinner.id, gfx);
     }
     gfx.clear().setAlpha(spinnerAlpha).setVisible(true);
@@ -149,7 +159,9 @@ function drawCube(
   }
   visibleFaces.sort((a, b) => a.avgZ - b.avgZ);
   for (const vf of visibleFaces) {
-    gfx.fillStyle(vf.color, 1).fillPoints(vf.pts, true);
+    // 반투명 fill + 발광 테두리.
+    gfx.fillStyle(vf.color, FACE_FILL_ALPHA).fillPoints(vf.pts, true);
+    gfx.lineStyle(EDGE_WIDTH, CUBE_EDGE_COLOR, 1).strokePoints(vf.pts, true, true);
   }
 }
 
@@ -213,7 +225,9 @@ function drawTetrahedron(
   }
   visible.sort((a, b) => a.avgZ - b.avgZ);
   for (const vf of visible) {
-    gfx.fillStyle(vf.color, 1).fillTriangle(vf.x0, vf.y0, vf.x1, vf.y1, vf.x2, vf.y2);
+    gfx.fillStyle(vf.color, FACE_FILL_ALPHA).fillTriangle(vf.x0, vf.y0, vf.x1, vf.y1, vf.x2, vf.y2);
+    gfx.lineStyle(EDGE_WIDTH, TRI_EDGE_COLOR, 1);
+    gfx.strokeTriangle(vf.x0, vf.y0, vf.x1, vf.y1, vf.x2, vf.y2);
   }
 }
 

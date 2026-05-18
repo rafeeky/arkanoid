@@ -21,7 +21,8 @@ export function createMascotObjects(scene: Phaser.Scene): MascotObjects {
   const sprite = scene.add
     .image(0, 0, 'mascot.albatross.frame0')
     .setOrigin(0.5, 0.5)
-    .setDisplaySize(CHEER_MASCOT_SIZE, CHEER_MASCOT_SIZE);
+    .setDisplaySize(CHEER_MASCOT_SIZE, CHEER_MASCOT_SIZE)
+    .setFlipX(true);   // 사용자 요청: 항상 왼쪽을 바라보게 좌우 반전.
   const container = scene.add
     .container(CHEER_MASCOT_CANVAS_X, CHEER_MASCOT_CANVAS_Y, [sprite])
     .setScrollFactor(0)

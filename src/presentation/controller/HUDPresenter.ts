@@ -34,7 +34,9 @@ export class HUDPresenter {
         round: session.currentStageIndex + 1,
         activeEffect: state.bar.activeEffect,
         magnetRemainingMs: state.magnetRemainingTime,
+        magnetRemainingUses: state.magnetRemainingUses ?? 0,
         laserCooldownMs: state.laserCooldownRemaining,
+        laserRemainingMs: state.laserRemainingTime ?? 0,
       };
     } else {
       // GameSessionState 경로 (레거시 호환)

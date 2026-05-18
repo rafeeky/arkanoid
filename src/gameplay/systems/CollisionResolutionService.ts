@@ -275,12 +275,21 @@ function resolveItemPickedUp(
     },
   ];
 
+  // 2026-05-18: magnet 5회 / laser 6초 — 새 필드 초기화.
+  // ItemDefinition 의 magnetUseCount / laserDurationMs 우선 사용. 미설정 시 기본값.
+  const newEffect = effectResult.nextBar.activeEffect;
+  const itemDef = tables.itemDefinitions[itemType];
+  const magnetUses = newEffect === 'magnet' ? (itemDef?.magnetUseCount ?? 5) : 0;
+  const laserTime = newEffect === 'laser' ? (itemDef?.laserDurationMs ?? 6000) : 0;
+
   const nextState: GameplayRuntimeState = {
     ...state,
     bar: effectResult.nextBar,
     itemDrops,
     magnetRemainingTime: effectResult.nextMagnetRemaining,
+    magnetRemainingUses: magnetUses,
     laserCooldownRemaining: effectResult.nextLaserCooldown,
+    laserRemainingTime: laserTime,
     // laser → 타 효과 전환 시 비행 중인 샷도 함께 제거한다.
     laserShots: effectResult.clearLaserShots ? [] : state.laserShots,
     attachedBallIds: effectResult.nextAttachedBalls,

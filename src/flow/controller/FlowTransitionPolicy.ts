@@ -78,11 +78,13 @@ export function nextState(
       return null;
 
     case 'gameOver':
-      if (command.type === 'RetryRequested') return 'title';
+      if (command.type === 'RetryRequested') return 'roundIntro';
+      if (command.type === 'ReturnToTitleRequested') return 'title';
       return null;
 
     case 'gameClear':
-      if (command.type === 'RetryRequested') return 'title';
+      if (command.type === 'RetryRequested') return 'roundIntro';
+      if (command.type === 'ReturnToTitleRequested') return 'title';
       return null;
   }
 }

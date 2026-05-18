@@ -216,6 +216,33 @@ async function main() {
     }
   }
 
+  // ── 해금 portrait2 (V2) — 500×500 이미 alpha 누끼됨. 450×450 resize 만. ──
+  // 사용자가 직접 누끼/정렬 처리한 자산. 단순 다운스케일.
+  console.log('[portraits2]');
+  const PORTRAIT2_SIZE = 450;
+  const portrait2Map = [
+    { src: 'unlock_albatross.png',  dst: 'albatross.png'  },
+    { src: 'unlock_hamster.png',    dst: 'kongming.png'   },
+    { src: 'unlock_snowrabbit.png', dst: 'snowrabbit.png' },
+    { src: 'unlock_reaper.png',     dst: 'reaper.png'     },
+    { src: 'unlock_seraphin.png',   dst: 'seraphin.png'   },
+  ];
+  const portraits2OutDir = path.join(OUT, 'portraits2');
+  await fs.mkdir(portraits2OutDir, { recursive: true });
+  for (const p of portrait2Map) {
+    // 비율 유지 + 빈 공간 투명 패딩 (정사각형 캔버스 안 가운데 정렬).
+    const final = await sharp(path.join(RAW, 'portraits2', p.src))
+      .resize(PORTRAIT2_SIZE, PORTRAIT2_SIZE, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png()
+      .toBuffer();
+    const out = path.join(portraits2OutDir, p.dst);
+    await fs.writeFile(out, final);
+    console.log('  ✓', path.relative(ROOT, out));
+  }
+
   // ── 해금 portrait — 캐러셀 잠금해제 미리보기. 단일 PNG (~1620×971) ──
   // 누끼(flood-fill) + trim + center 처리. 사이즈 900×900 (이전 360 × 2.5).
   // 파일명: unlock_<id>.png (한글 → 영문화). hamster=kongming, snowrabbit=눈토끼, reaper=사신.

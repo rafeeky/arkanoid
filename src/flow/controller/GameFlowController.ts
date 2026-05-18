@@ -139,6 +139,12 @@ export class GameFlowController {
       // 새 게임 시작: stageIndex 리셋
       nextStageIndex = 0;
     } else if (
+      command.type === 'RetryRequested' &&
+      (from === 'gameOver' || from === 'gameClear')
+    ) {
+      // 2026-05-19: gameOver/gameClear → RoundIntro 재시작 시 stageIndex 리셋.
+      nextStageIndex = 0;
+    } else if (
       command.type === 'StageCleared' &&
       !command.isLastStage
     ) {

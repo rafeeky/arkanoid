@@ -27,6 +27,15 @@ export type PauseButtonHandlers = {
 type Button = {
   rect: Phaser.GameObjects.Rectangle;
   label: Phaser.GameObjects.Text;
+  /** 입체감 bevel overlay (선택). 있으면 show/hide 시 같이 토글. */
+  bevel?: Phaser.GameObjects.Graphics;
+};
+
+type ButtonStyle = {
+  fillColor?: number;
+  strokeColor?: number;
+  glowColor?: number;
+  bevel?: boolean;
 };
 
 export type PauseOverlayObjects = {
@@ -69,15 +78,41 @@ function createButton(
   label: string,
   textColor: string,
   fontSize = '32px',
+  style?: ButtonStyle,
 ): Button {
+  const fillColor = style?.fillColor ?? COLOR_BUTTON_FILL;
+  const strokeColor = style?.strokeColor ?? COLOR_BUTTON_STROKE;
+
   const rect = scene.add
-    .rectangle(x, y, w, h, COLOR_BUTTON_FILL)
-    .setStrokeStyle(3, COLOR_BUTTON_STROKE)
+    .rectangle(x, y, w, h, fillColor)
+    .setStrokeStyle(3, strokeColor)
     .setOrigin(0.5, 0.5)
     .setScrollFactor(0)
     .setDepth(501)
     .setVisible(false)
     .setInteractive({ useHandCursor: true });
+
+  // 입체감 bevel — 위 절반 white highlight + 아래 절반 black shadow.
+  let bevel: Phaser.GameObjects.Graphics | undefined;
+  if (style?.bevel) {
+    bevel = scene.add.graphics()
+      .setScrollFactor(0)
+      .setDepth(501.5)
+      .setVisible(false);
+    const inset = 3;
+    const halfH = h / 2;
+    const left = x - w / 2 + inset;
+    const top = y - h / 2 + inset;
+    bevel.fillStyle(0xffffff, 0.22);
+    bevel.fillRect(left, top, w - inset * 2, halfH - inset);
+    bevel.fillStyle(0x000000, 0.25);
+    bevel.fillRect(left, y, w - inset * 2, halfH - inset);
+  }
+
+  // 외곽 발광 (WebGL postFX).
+  if (style?.glowColor !== undefined) {
+    rect.postFX?.addGlow(style.glowColor, 5, 0, false, 0.1, 14);
+  }
 
   const text = scene.add
     .text(x, y, label, {
@@ -91,7 +126,7 @@ function createButton(
     .setDepth(502)
     .setVisible(false);
 
-  return { rect, label: text };
+  return bevel ? { rect, label: text, bevel } : { rect, label: text };
 }
 
 export function createPauseOverlayObjects(
@@ -138,19 +173,22 @@ export function createPauseOverlayObjects(
     refreshButtonLabel(sfxButton, '효과음', !handlers.isSfxMuted());
   });
 
-  // 나가기 (→ Title)
+  // 나가기 — 빨강 입체 버튼 + 빨간 발광. 글자 흰색.
   const quitButton = createButton(
     scene, CX, QUIT_Y, ACTION_BUTTON_W, ACTION_BUTTON_H,
-    '나가기', COLOR_QUIT_TEXT, '40px',
+    'QUIT', '#ffffff', '40px',
+    { fillColor: 0xcc4444, strokeColor: 0xff8888, glowColor: 0xff5050, bevel: true },
   );
   quitButton.rect.on('pointerdown', () => handlers.onQuitToTitle());
 
-  // 돌아가기 (Resume)
+  // RESUME 버튼 — 초록 입체.
   const resumeButton = createButton(
     scene, CX, RESUME_Y, ACTION_BUTTON_W, ACTION_BUTTON_H,
-    '돌아가기', COLOR_RESUME_TEXT, '40px',
+    'RESUME', '#ffffff', '40px',
+    { fillColor: 0x44aa44, strokeColor: 0x88dd88, glowColor: 0x44cc66, bevel: true },
   );
   resumeButton.rect.on('pointerdown', () => handlers.onResume());
+  void COLOR_QUIT_TEXT; void COLOR_RESUME_TEXT;
 
   return { backdrop, title, bgmButton, sfxButton, quitButton, resumeButton };
 }
@@ -173,6 +211,7 @@ export function showPauseOverlay(
   for (const btn of [objects.bgmButton, objects.sfxButton, objects.quitButton, objects.resumeButton]) {
     btn.rect.setVisible(true);
     btn.label.setVisible(true);
+    btn.bevel?.setVisible(true);
   }
 }
 
@@ -182,5 +221,6 @@ export function hidePauseOverlay(objects: PauseOverlayObjects): void {
   for (const btn of [objects.bgmButton, objects.sfxButton, objects.quitButton, objects.resumeButton]) {
     btn.rect.setVisible(false);
     btn.label.setVisible(false);
+    btn.bevel?.setVisible(false);
   }
 }

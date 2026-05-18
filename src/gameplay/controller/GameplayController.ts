@@ -96,13 +96,20 @@ export class GameplayController {
           if (!releasedIds.has(b.id)) return b;
           return this.launchAttachedBall(b);
         });
+        // 2026-05-18: magnet 5회 — release 1회당 1 차감. 0 도달 시 effect 종료.
+        const prevUses = this.state.magnetRemainingUses ?? 0;
+        const nextUses = Math.max(0, prevUses - 1);
+        const magnetExhausted = nextUses <= 0 && prevUses > 0;
+        const nextBar = magnetExhausted
+          ? { ...releaseResult.nextBar, activeEffect: 'none' as const }
+          : releaseResult.nextBar;
         this.state = {
           ...this.state,
-          bar: releaseResult.nextBar,
+          bar: nextBar,
           balls: updatedBalls,
           attachedBallIds: [],
-          // magnetRemainingTime은 유지한다: 지속형 자석이므로
-          // 타이머는 tickMagnet이 감소시키고, 0이 되면 activeEffect='none'으로 전환한다
+          magnetRemainingUses: nextUses,
+          magnetRemainingTime: magnetExhausted ? 0 : this.state.magnetRemainingTime,
         };
         for (const e of releaseResult.events) {
           allEvents.push(e);
@@ -267,35 +274,39 @@ export class GameplayController {
       this.state = { ...this.state, doors: finalDoors, spinnerStates: nextSpinners };
     }
 
-    // 6.5. Magnet timer tick (dt를 ms로 변환)
-    const magnetTick = this.barEffectService.tickMagnet(
-      this.state.magnetRemainingTime,
-      this.state.attachedBallIds,
-      this.state.bar,
-      dt * 1000,
-    );
-    if (magnetTick.releasedBallIds.length > 0) {
-      const timedOutIds = new Set(magnetTick.releasedBallIds);
-      const updatedBallsOnTimeout = this.state.balls.map((b) => {
-        if (!timedOutIds.has(b.id)) return b;
-        return this.launchAttachedBall(b);
-      });
-      this.state = {
-        ...this.state,
-        bar: magnetTick.nextBar,
-        balls: updatedBallsOnTimeout,
-        attachedBallIds: [],
-        magnetRemainingTime: magnetTick.nextMagnetRemaining,
-      };
-    } else {
-      this.state = {
-        ...this.state,
-        bar: magnetTick.nextBar,
-        magnetRemainingTime: magnetTick.nextMagnetRemaining,
-      };
-    }
-    for (const e of magnetTick.events) {
-      allEvents.push(e);
+    // 6.5. Magnet tick — 2026-05-18: useCount 기반이면 시간 감소 skip (5회로 종료).
+    // useCount 가 0 이거나 미설정이면 legacy 시간 기반 (validator/호환용).
+    const magnetUseCountActive = (this.state.magnetRemainingUses ?? 0) > 0;
+    if (!magnetUseCountActive) {
+      const magnetTick = this.barEffectService.tickMagnet(
+        this.state.magnetRemainingTime,
+        this.state.attachedBallIds,
+        this.state.bar,
+        dt * 1000,
+      );
+      if (magnetTick.releasedBallIds.length > 0) {
+        const timedOutIds = new Set(magnetTick.releasedBallIds);
+        const updatedBallsOnTimeout = this.state.balls.map((b) => {
+          if (!timedOutIds.has(b.id)) return b;
+          return this.launchAttachedBall(b);
+        });
+        this.state = {
+          ...this.state,
+          bar: magnetTick.nextBar,
+          balls: updatedBallsOnTimeout,
+          attachedBallIds: [],
+          magnetRemainingTime: magnetTick.nextMagnetRemaining,
+        };
+      } else {
+        this.state = {
+          ...this.state,
+          bar: magnetTick.nextBar,
+          magnetRemainingTime: magnetTick.nextMagnetRemaining,
+        };
+      }
+      for (const e of magnetTick.events) {
+        allEvents.push(e);
+      }
     }
 
     // 6.55. Spinner ↔ Ball 충돌 처리
@@ -344,22 +355,39 @@ export class GameplayController {
       };
     }
 
-    // 6.7b. Laser 자동 발사 — activeEffect='laser' + cooldown 0 이면 매 틱 자동 fire.
-    // (SPACE 발사 폐기. 사용자가 신경 안 써도 알아서 쏨.)
-    if (this.state.bar.activeEffect === 'laser' && this.state.laserCooldownRemaining <= 0) {
-      const laserItemDef = this.deps.itemDefinitions['laser'];
-      const fireResult = this.laserSystem.fireLaser(
-        this.state.bar,
-        this.state.laserShots,
-        laserItemDef?.laserCooldownMs,
-      );
-      this.state = {
-        ...this.state,
-        laserShots: fireResult.newShots,
-        laserCooldownRemaining: fireResult.nextCooldownMs,
-      };
-      for (const e of fireResult.events) {
-        allEvents.push(e);
+    // 6.7b. Laser 자동 발사 + duration 감소 (6초 후 자동 종료).
+    if (this.state.bar.activeEffect === 'laser') {
+      // duration 감소.
+      const prevRemain = this.state.laserRemainingTime ?? 0;
+      const nextRemain = Math.max(0, prevRemain - dt * 1000);
+      const laserExpired = prevRemain > 0 && nextRemain <= 0;
+      if (laserExpired) {
+        // 6초 만료 → effect='none' + 비행 중 샷 제거.
+        this.state = {
+          ...this.state,
+          bar: { ...this.state.bar, activeEffect: 'none' },
+          laserRemainingTime: 0,
+          laserShots: [],
+        };
+      } else {
+        this.state = { ...this.state, laserRemainingTime: nextRemain };
+        // cooldown 0 면 자동 발사.
+        if (this.state.laserCooldownRemaining <= 0) {
+          const laserItemDef = this.deps.itemDefinitions['laser'];
+          const fireResult = this.laserSystem.fireLaser(
+            this.state.bar,
+            this.state.laserShots,
+            laserItemDef?.laserCooldownMs,
+          );
+          this.state = {
+            ...this.state,
+            laserShots: fireResult.newShots,
+            laserCooldownRemaining: fireResult.nextCooldownMs,
+          };
+          for (const e of fireResult.events) {
+            allEvents.push(e);
+          }
+        }
       }
     }
 

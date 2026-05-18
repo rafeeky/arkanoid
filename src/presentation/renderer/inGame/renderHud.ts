@@ -56,9 +56,23 @@ export type HudObjects = {
   borderLeft: Phaser.GameObjects.Rectangle;
   borderRight: Phaser.GameObjects.Rectangle;
   hudEffectTimer: Phaser.GameObjects.Text;
+  /** 우상단 일시정지 버튼 — ESC 와 동일 동작 (모바일 탭 / 데스크탑 클릭). */
+  pauseButton: { rect: Phaser.GameObjects.Rectangle; iconLeft: Phaser.GameObjects.Rectangle; iconRight: Phaser.GameObjects.Rectangle };
 };
 
-export function createHudObjects(scene: Phaser.Scene): HudObjects {
+// 일시정지 버튼 — 마스코트(centerX=900, top=100) 보다 우측 + 상단.
+// mascot right edge 1000 vs pause left edge 990 (10px 겹침이지만 y 다름 → OK).
+const PAUSE_BTN_X = 1020;
+const PAUSE_BTN_Y = 60;
+const PAUSE_BTN_SIZE = 60;
+const PAUSE_ICON_BAR_W = 8;
+const PAUSE_ICON_BAR_H = 28;
+const PAUSE_ICON_GAP = 6;
+
+export function createHudObjects(
+  scene: Phaser.Scene,
+  onPauseClick: () => void = () => { /* noop */ },
+): HudObjects {
   const scoreLabel = scene.add
     .text(HUD_LEFT_X, HUD_TOP_LABEL_Y, 'SCORE', {
       fontSize: HUD_LABEL_FONT, color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace',
@@ -111,9 +125,40 @@ export function createHudObjects(scene: Phaser.Scene): HudObjects {
     .text(360, 648, '', { fontSize: '14px', color: '#88ccff', fontFamily: 'DNFBitBitv2, monospace' })
     .setOrigin(0.5, 1).setVisible(false);
 
+  // 일시정지 버튼 — 우상단 (ROUND 와 mascot 사이). 모바일 탭 / 데스크탑 클릭.
+  const pauseRect = scene.add
+    .rectangle(PAUSE_BTN_X, PAUSE_BTN_Y, PAUSE_BTN_SIZE, PAUSE_BTN_SIZE, 0x000000, 0.45)
+    .setOrigin(0.5, 0.5)
+    .setStrokeStyle(2, 0xcccccc)
+    .setScrollFactor(0)
+    .setVisible(false)
+    .setInteractive({ useHandCursor: true });
+  pauseRect.on('pointerdown', onPauseClick);
+  pauseRect.on('pointerover', () => pauseRect.setStrokeStyle(2, 0xffffff));
+  pauseRect.on('pointerout', () => pauseRect.setStrokeStyle(2, 0xcccccc));
+  const iconLeft = scene.add
+    .rectangle(
+      PAUSE_BTN_X - (PAUSE_ICON_GAP / 2 + PAUSE_ICON_BAR_W / 2),
+      PAUSE_BTN_Y,
+      PAUSE_ICON_BAR_W, PAUSE_ICON_BAR_H, 0xffffff,
+    )
+    .setOrigin(0.5, 0.5)
+    .setScrollFactor(0)
+    .setVisible(false);
+  const iconRight = scene.add
+    .rectangle(
+      PAUSE_BTN_X + (PAUSE_ICON_GAP / 2 + PAUSE_ICON_BAR_W / 2),
+      PAUSE_BTN_Y,
+      PAUSE_ICON_BAR_W, PAUSE_ICON_BAR_H, 0xffffff,
+    )
+    .setOrigin(0.5, 0.5)
+    .setScrollFactor(0)
+    .setVisible(false);
+
   return {
     scoreLabel, scoreValue, highScoreLabel, highScoreValue, roundLabel, roundValue,
     livesGraphics, borderTop, borderLeft, borderRight, hudEffectTimer,
+    pauseButton: { rect: pauseRect, iconLeft, iconRight },
   };
 }
 
@@ -129,6 +174,11 @@ export function renderHud(objects: HudObjects, hud: HudViewModel): void {
   objects.borderLeft.setVisible(true);
   objects.borderRight.setVisible(true);
 
+  // 일시정지 버튼 visible (인게임 HUD 와 동일 lifecycle).
+  objects.pauseButton.rect.setVisible(true);
+  objects.pauseButton.iconLeft.setVisible(true);
+  objects.pauseButton.iconRight.setVisible(true);
+
   // 라이프 픽셀하트.
   objects.livesGraphics.clear().setVisible(true);
   const heartY = LIVES_Y_CANVAS - HEART_H / 2;
@@ -137,14 +187,13 @@ export function renderHud(objects: HudObjects, hud: HudViewModel): void {
     drawHeart(objects.livesGraphics, hx, heartY);
   }
 
-  // 효과 타이머 (magnet/laser).
-  if (hud.activeEffect === 'magnet' && hud.magnetRemainingMs > 0) {
-    const seconds = (hud.magnetRemainingMs / 1000).toFixed(1);
-    objects.hudEffectTimer.setText(`MAGNET ${seconds}s`).setColor('#88ccff').setVisible(true);
+  // 효과 타이머 (magnet 5회 / laser 6초).
+  if (hud.activeEffect === 'magnet') {
+    const uses = hud.magnetRemainingUses ?? 0;
+    objects.hudEffectTimer.setText(`MAGNET ${uses} LEFT`).setColor('#88ccff').setVisible(true);
   } else if (hud.activeEffect === 'laser') {
-    const cdSeconds = (hud.laserCooldownMs / 1000).toFixed(1);
-    const laserText = hud.laserCooldownMs > 0 ? `LASER CD ${cdSeconds}s` : 'LASER READY';
-    objects.hudEffectTimer.setText(laserText).setColor('#ff8888').setVisible(true);
+    const remainSec = ((hud.laserRemainingMs ?? 0) / 1000).toFixed(1);
+    objects.hudEffectTimer.setText(`LASER ${remainSec}s`).setColor('#ff8888').setVisible(true);
   } else {
     objects.hudEffectTimer.setVisible(false);
   }
@@ -162,4 +211,7 @@ export function hideHud(objects: HudObjects): void {
   objects.borderRight.setVisible(false);
   objects.livesGraphics.clear().setVisible(false);
   objects.hudEffectTimer.setVisible(false);
+  objects.pauseButton.rect.setVisible(false);
+  objects.pauseButton.iconLeft.setVisible(false);
+  objects.pauseButton.iconRight.setVisible(false);
 }

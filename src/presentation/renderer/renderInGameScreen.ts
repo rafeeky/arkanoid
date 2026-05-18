@@ -64,12 +64,15 @@ export type InGameObjects = {
   toast: ToastObjects;
 };
 
-export function createInGameObjects(scene: Phaser.Scene): InGameObjects {
+export function createInGameObjects(
+  scene: Phaser.Scene,
+  handlers: { onPauseClick?: () => void } = {},
+): InGameObjects {
   return {
-    hud:      createHudObjects(scene),
+    hud:      createHudObjects(scene, handlers.onPauseClick),
     bar:      createBarObjects(scene),
     ball:     createBallObjects(scene),
-    blocks:   createBlocksObjects(),
+    blocks:   createBlocksObjects(scene),
     items:    createItemsObjects(),
     lasers:   createLasersObjects(),
     spinners: createSpinnersObjects(),
@@ -105,7 +108,7 @@ export function renderInGameScreen(
   renderSpinners(scene, objects.spinners, gameplayState.spinnerStates, spinnerDefinitions);
   renderBorders(scene, objects.borders, gameplayState.borders, gameplayState.doors);
   renderMascot(objects.mascot, cheerMascot);
-  renderSlider(objects.slider, gameplayState);
+  renderSlider(objects.slider, gameplayState, cheerMascot?.id);
   renderToast(objects.toast, gameplayState.bar);
 }
 

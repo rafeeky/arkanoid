@@ -10,9 +10,16 @@ import type { VisualEffectController } from '../controller/VisualEffectControlle
 
 import { ScreenPresenter } from '../controller/ScreenPresenter';
 
+/** HUD 인터랙션 핸들러 (일시정지 버튼 등 InGame HUD 버튼). */
+export type HudHandlers = {
+  onPauseClick: () => void;
+  /** GameOver/GameClear "타이틀로 나가기" 버튼 — Q 키 등가. */
+  onQuitToTitle?: () => void;
+};
+
 /** 화면(currentScreen) → 배경 텍스처 키 매핑. inGame/roundIntro 는 별도 처리(playfieldBg). */
 const BG_KEY_BY_SCREEN: Record<ScreenState['currentScreen'], string> = {
-  title:      'bg_title',
+  title:      'bg_stage_02',  // 2026-05-18: 타이틀 배경 bg_stage_02 사용 (사용자 요청)
   introStory: 'bg_title',
   roundIntro: 'bg_title', // unused — inGame/roundIntro 는 위에서 early-return
   inGame:     'bg_title', // unused
@@ -81,6 +88,7 @@ export class SceneRenderer {
   private readonly visualEffectController: VisualEffectController;
   private readonly roundIntroDurationMs: number;
   private readonly mascotHandlers: MascotCarouselHandlers;
+  private readonly hudHandlers: HudHandlers;
   private readonly mascotStateProvider: () => {
     cursorIndex: number;
     gold: number;
@@ -98,6 +106,8 @@ export class SceneRenderer {
   private backgroundImage!: Phaser.GameObjects.Image;
   /** 스테이지(inGame/roundIntro) 한정 — playfield 영역(720×900) 검은 배경. */
   private playfieldBg!: Phaser.GameObjects.Rectangle;
+  /** gameOver 화면 한정 — 전체 캔버스 단색 검정 배경 (배경 이미지 대체). */
+  private gameOverBg!: Phaser.GameObjects.Rectangle;
 
   constructor(
     scene: Phaser.Scene,
@@ -110,6 +120,7 @@ export class SceneRenderer {
     mascotHandlers: MascotCarouselHandlers = defaultMascotHandlers(),
     mascotStateProvider: () => { cursorIndex: number; gold: number; isUnlocked: (id: string) => boolean; selectedMascotId: string }
       = () => ({ cursorIndex: 0, gold: 0, isUnlocked: () => true, selectedMascotId: 'albatross' }),
+    hudHandlers: HudHandlers = { onPauseClick: () => { /* noop */ } },
   ) {
     this.scene = scene;
     this.uiTexts = uiTexts;
@@ -122,6 +133,7 @@ export class SceneRenderer {
     this.hudPresenter = new HUDPresenter();
     this.mascotHandlers = mascotHandlers;
     this.mascotStateProvider = mascotStateProvider;
+    this.hudHandlers = hudHandlers;
   }
 
   /**
@@ -153,12 +165,28 @@ export class SceneRenderer {
       .setDepth(-50)
       .setVisible(false);
 
+    // gameOver 검은 배경 — 전체 캔버스 (zoom 1.5 환산 720×1280 + BLEED 1.2). depth -90.
+    this.gameOverBg = this.scene.add
+      .rectangle(360, 450, (1080 / ZOOM) * BG_BLEED, (1920 / ZOOM) * BG_BLEED, 0x000000)
+      .setOrigin(0.5, 0.5)
+      .setDepth(-90)
+      .setVisible(false);
+
+    // 2026-05-18: inGame 먼저 생성 — createBlocksObjects 안에서 icon_expand/magnet/laser
+    // 텍스처를 generateTexture 로 만들기 때문에 타이틀 POWERUPS 보다 선행해야 함.
+    this.inGameObjects = createInGameObjects(this.scene, {
+      onPauseClick: () => this.hudHandlers.onPauseClick(),
+    });
     this.titleObjects = createTitleScreenObjects(this.scene, this.mascotHandlers);
     this.roundIntroObjects = createRoundIntroScreenObjects(this.scene);
-    this.inGameObjects = createInGameObjects(this.scene);
-    this.gameOverObjects = createGameOverScreenObjects(this.scene);
+    // GameOver/GameClear 의 "타이틀로 나가기" 버튼 — hudHandlers.onPauseClick 대신 별도 quit 핸들러 사용.
+    this.gameOverObjects = createGameOverScreenObjects(this.scene, {
+      onQuitToTitle: () => this.hudHandlers.onQuitToTitle?.(),
+    });
     this.introStoryObjects = createIntroStoryScreenObjects(this.scene);
-    this.gameClearObjects = createGameClearScreenObjects(this.scene);
+    this.gameClearObjects = createGameClearScreenObjects(this.scene, {
+      onQuitToTitle: () => this.hudHandlers.onQuitToTitle?.(),
+    });
   }
 
   /** 현재 화면에 맞춰 배경 텍스처 교체.
@@ -172,9 +200,18 @@ export class SceneRenderer {
       void stageIndex;
       this.backgroundImage.setVisible(false);
       this.playfieldBg.setVisible(true);
+      this.gameOverBg.setVisible(false);
+      return;
+    }
+    if (screen === 'gameOver') {
+      // 게임오버: 우주 이미지 대신 단색 검정 (사용자 요청).
+      this.backgroundImage.setVisible(false);
+      this.playfieldBg.setVisible(false);
+      this.gameOverBg.setVisible(true);
       return;
     }
     this.playfieldBg.setVisible(false);
+    this.gameOverBg.setVisible(false);
     // OCP: screen → bg key 테이블 매핑 (새 화면 추가 시 BG_KEY_BY_SCREEN 한 곳만 갱신).
     const key = BG_KEY_BY_SCREEN[screen] ?? 'bg_title';
     this.backgroundImage.setTexture(key).setVisible(true);

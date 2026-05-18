@@ -3,25 +3,78 @@ import type { BlockState } from '../../../gameplay/state/BlockState';
 import type { BlockDefinition } from '../../../definitions/types/BlockDefinition';
 import { BLOCK_WIDTH, BLOCK_HEIGHT } from '../../../gameplay/systems/playfieldLayout';
 
-// 드랍 블록 visualId → 위에 오버레이할 아이템 텍스처 (어떤 아이템이 떨어지는지 알림).
-const BLOCK_ITEM_OVERLAY: Record<string, string> = {
-  block_basic_drop:  'item_expand',
-  block_magnet_drop: 'item_magnet',
-  block_laser_drop:  'item_laser',
+// 드랍 블록 visualId → 위에 표시할 흰색 아이콘 texture key.
+const DROP_BLOCK_ICON: Record<string, string> = {
+  block_basic_drop:  'icon_expand',   // 노랑 블럭 + 흰 ↔ (확장)
+  block_magnet_drop: 'icon_magnet',   // 파랑 블럭 + 흰 U (자석)
+  block_laser_drop:  'icon_laser',    // 빨강 블럭 + 흰 ⚡ (번개)
 };
-const BLOCK_ICON_W = 40;
-const BLOCK_ICON_H = 20;
+const ICON_W = 36;
+const ICON_H = 18;
 
 export type BlocksObjects = {
   blockMap: Map<string, Phaser.GameObjects.Image>;
+  /** drop 블럭 위 흰색 아이콘 overlay. */
   blockIconMap: Map<string, Phaser.GameObjects.Image>;
 };
 
-export function createBlocksObjects(): BlocksObjects {
+/**
+ * createBlocksObjects — 블록 풀 + 흰색 아이콘 텍스처 1회 생성.
+ *
+ * 아이콘은 Phaser Graphics 로 직접 그려서 generateTexture 로 등록 → Image 풀이 텍스처 재사용.
+ * 자산 추가 없이 코드 레벨로 처리 (사용자 피드백: 코드 레벨 우선).
+ */
+export function createBlocksObjects(scene: Phaser.Scene): BlocksObjects {
+  ensureIconTextures(scene);
   return {
     blockMap: new Map(),
     blockIconMap: new Map(),
   };
+}
+
+let iconTexturesGenerated = false;
+
+function ensureIconTextures(scene: Phaser.Scene): void {
+  if (iconTexturesGenerated) return;
+  iconTexturesGenerated = true;
+  // 모두 32×24 캔버스 흰색 도형 → generateTexture 로 등록 → 이후 Image 풀이 setTexture(key).
+
+  // EXPAND: 양방향 화살표 ↔
+  {
+    const g = scene.add.graphics().setVisible(false);
+    g.fillStyle(0xffffff, 1);
+    g.fillTriangle(0, 12, 10, 3, 10, 21);      // 왼쪽 화살촉
+    g.fillRect(10, 9, 12, 6);                    // 가운데 막대
+    g.fillTriangle(32, 12, 22, 3, 22, 21);     // 오른쪽 화살촉
+    g.generateTexture('icon_expand', 32, 24);
+    g.destroy();
+  }
+  // MAGNET: U 모양
+  {
+    const g = scene.add.graphics().setVisible(false);
+    g.fillStyle(0xffffff, 1);
+    g.fillRect(0, 0, 8, 20);    // 좌측 막대
+    g.fillRect(24, 0, 8, 20);   // 우측 막대
+    g.fillRect(0, 16, 32, 8);   // 하단 가로 (U 곡선부)
+    g.generateTexture('icon_magnet', 32, 24);
+    g.destroy();
+  }
+  // LASER: 번개 모양 (zigzag bolt)
+  {
+    const g = scene.add.graphics().setVisible(false);
+    g.fillStyle(0xffffff, 1);
+    g.fillPoints([
+      { x: 18, y: 0 },
+      { x: 24, y: 0 },
+      { x: 14, y: 11 },
+      { x: 20, y: 11 },
+      { x: 8, y: 24 },
+      { x: 14, y: 13 },
+      { x: 8, y: 13 },
+    ], true);
+    g.generateTexture('icon_laser', 32, 24);
+    g.destroy();
+  }
 }
 
 export function renderBlocks(
@@ -47,26 +100,32 @@ export function renderBlocks(
         .setDisplaySize(BLOCK_WIDTH, BLOCK_HEIGHT);
       objects.blockMap.set(block.id, img);
     }
+    // 매 프레임 setTexture — 스테이지 전환 시 ID 재사용 잔재 fix.
+    img.setTexture(frameName);
 
     if (flashBlockIds.has(block.id)) img.setTintFill(0xffffff);
     else img.clearTint();
     img.setPosition(block.x, block.y).setVisible(true);
 
-    // 드랍 블록 아이콘 오버레이.
-    const overlayKey = BLOCK_ITEM_OVERLAY[frameName];
-    if (overlayKey !== undefined) {
-      let icon = objects.blockIconMap.get(block.id);
+    // drop 블록 위 흰색 아이콘 overlay.
+    const iconKey = DROP_BLOCK_ICON[frameName];
+    const existingIcon = objects.blockIconMap.get(block.id);
+    if (iconKey !== undefined) {
+      let icon = existingIcon;
       if (!icon) {
         icon = scene.add
-          .image(0, 0, overlayKey)
+          .image(0, 0, iconKey)
           .setOrigin(0.5, 0.5)
-          .setDisplaySize(BLOCK_ICON_W, BLOCK_ICON_H);
+          .setDisplaySize(ICON_W, ICON_H);
         objects.blockIconMap.set(block.id, icon);
       }
       icon
-        .setTexture(overlayKey)
+        .setTexture(iconKey)
         .setPosition(block.x + BLOCK_WIDTH / 2, block.y + BLOCK_HEIGHT / 2)
         .setVisible(true);
+    } else if (existingIcon) {
+      // 같은 ID 가 drop → non-drop 으로 재배치되면 (스테이지 전환) icon hide.
+      existingIcon.setVisible(false);
     }
   }
 

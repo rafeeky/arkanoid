@@ -57,14 +57,14 @@ describe('FlowTransitionPolicy — nextState()', () => {
   });
 
   describe('GameOver 상태에서 유효 전이', () => {
-    it('GameOver + RetryRequested → Title', () => {
-      expect(nextState('gameOver', retryRequested)).toBe('title');
+    it('GameOver + RetryRequested → RoundIntro (1스테이지부터 재시작)', () => {
+      expect(nextState('gameOver', retryRequested)).toBe('roundIntro');
     });
   });
 
   describe('GameClear 상태에서 유효 전이', () => {
-    it('GameClear + RetryRequested → Title', () => {
-      expect(nextState('gameClear', retryRequested)).toBe('title');
+    it('GameClear + RetryRequested → RoundIntro (1스테이지부터 재시작)', () => {
+      expect(nextState('gameClear', retryRequested)).toBe('roundIntro');
     });
   });
 

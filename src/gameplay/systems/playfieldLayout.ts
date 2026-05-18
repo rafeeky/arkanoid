@@ -36,9 +36,9 @@ export const BALL_RADIUS = 8;
 export const INITIAL_LAUNCH_OFFSET_X = 30;
 
 // ─── 아이템 드랍 ─────────────────────────────────────────────────────
-// 2026-05-17: 24×12 → 72×36 (3배). 시각 + 충돌 판정 모두 SSOT 로 일괄 갱신.
-export const ITEM_WIDTH = 72;
-export const ITEM_HEIGHT = 36;
+// 2026-05-18: 블록과 동일 사이즈 (64×24). 블록 = 아이템 블록 일치 + 충돌 판정도 같음.
+export const ITEM_WIDTH = 64;   // = BLOCK_WIDTH
+export const ITEM_HEIGHT = 24;  // = BLOCK_HEIGHT
 
 // ─── 테두리 (BorderBlock) ──────────────────────────────────────────────
 /** 테두리의 긴 변 (= 일반 블럭 가로). 한 셀이 차지하는 길이. */

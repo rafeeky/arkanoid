@@ -61,6 +61,8 @@ for (const id of MASCOT_IDS) {
   }
   // Title 카루셀용 portrait (character.png 에서 추출)
   ASSET_FILES[`portrait.${id}`] = `${A}/portraits/${id}.png`;
+  // V2 portrait — 가로세로 동일 정사각형 (테두리 박스 안 표시용).
+  ASSET_FILES[`portrait2.${id}`] = `${A}/portraits2/${id}.png`;
 }
 
 // IntroStory 일러스트

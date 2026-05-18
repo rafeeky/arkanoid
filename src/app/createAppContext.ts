@@ -121,7 +121,11 @@ export async function createAppContext(options?: AppContextOptions): Promise<App
 
   // 마스코트 / 골드 영속 상태. 변경 시 saveRepository.save() 동기화.
   let mascotGold = initialSaveData.gold;
-  let mascotUnlocked: readonly string[] = initialSaveData.unlockedMascots;
+  // 2026-05-18: 시각 검증용 — 알바트로스 외 강제 LOCKED. LOCKED 상태의 "필요 골드"
+  // 영역과 mascot 정보 패널의 "보유 골드" 영역 겹침 여부 확인. 검증 후 원복 시
+  // initialSaveData.unlockedMascots 사용으로 되돌릴 것.
+  let mascotUnlocked: readonly string[] = ['albatross'];
+  void initialSaveData.unlockedMascots;
   let mascotSelected = initialSaveData.selectedMascot;
   // 신규 마스코트 추가 시 selectedMascot 가 unlocked 에 없을 수 있음 — 방어.
   if (!mascotUnlocked.includes(mascotSelected) && mascotUnlocked.length > 0) {

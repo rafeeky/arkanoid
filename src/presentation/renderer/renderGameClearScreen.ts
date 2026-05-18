@@ -6,6 +6,11 @@ export type GameClearScreenObjects = {
   finalScoreText: Phaser.GameObjects.Text;
   highScoreText: Phaser.GameObjects.Text;
   retryText: Phaser.GameObjects.Text;
+  quitButton: { rect: Phaser.GameObjects.Rectangle; label: Phaser.GameObjects.Text };
+};
+
+export type GameClearHandlers = {
+  onQuitToTitle(): void;
 };
 
 /**
@@ -15,6 +20,7 @@ export type GameClearScreenObjects = {
  */
 export function createGameClearScreenObjects(
   scene: Phaser.Scene,
+  handlers: GameClearHandlers = { onQuitToTitle: () => { /* noop */ } },
 ): GameClearScreenObjects {
   const headlineText = scene.add
     .text(360, 200, '', {
@@ -52,7 +58,21 @@ export function createGameClearScreenObjects(
     .setOrigin(0.5, 0.5)
     .setVisible(false);
 
-  return { headlineText, finalScoreText, highScoreText, retryText };
+  const quitRect = scene.add
+    .rectangle(360, 540, 280, 60, 0x444444)
+    .setStrokeStyle(3, 0x888888)
+    .setOrigin(0.5, 0.5)
+    .setVisible(false)
+    .setInteractive({ useHandCursor: true });
+  quitRect.on('pointerdown', () => handlers.onQuitToTitle());
+  const quitLabel = scene.add
+    .text(360, 540, 'QUIT TO TITLE', {
+      fontSize: '24px', color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
+    })
+    .setOrigin(0.5, 0.5)
+    .setVisible(false);
+
+  return { headlineText, finalScoreText, highScoreText, retryText, quitButton: { rect: quitRect, label: quitLabel } };
 }
 
 /**
@@ -77,6 +97,8 @@ export function renderGameClearScreen(
     .setVisible(true);
 
   objects.retryText.setText(viewModel.retryText).setVisible(true);
+  objects.quitButton.rect.setVisible(true);
+  objects.quitButton.label.setVisible(true);
 }
 
 /**
@@ -87,4 +109,6 @@ export function hideGameClearScreen(objects: GameClearScreenObjects): void {
   objects.finalScoreText.setVisible(false);
   objects.highScoreText.setVisible(false);
   objects.retryText.setVisible(false);
+  objects.quitButton.rect.setVisible(false);
+  objects.quitButton.label.setVisible(false);
 }

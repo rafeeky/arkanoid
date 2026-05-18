@@ -176,14 +176,14 @@ describe('AppContext — GameOver 시나리오', () => {
     expect(ctx.getFlowState().kind).toBe('gameOver');
   });
 
-  it('GameOver 에서 스페이스 입력으로 Title 복귀', async () => {
+  it('GameOver 에서 스페이스 입력으로 roundIntro 재시작 (1스테이지부터)', async () => {
     const ctx = await createAppContext();
     enterInGame(ctx);
     drainAllLives(ctx);
     expect(ctx.getFlowState().kind).toBe('gameOver');
 
-    ctx.tick(spaceInput, 1 / 60); // GameOver → Title
-    expect(ctx.getFlowState().kind).toBe('title');
+    ctx.tick(spaceInput, 1 / 60); // GameOver → RoundIntro (1스테이지)
+    expect(ctx.getFlowState().kind).toBe('roundIntro');
   });
 });
 
@@ -696,17 +696,20 @@ function createMockAudioPlayer(): IAudioPlayer & { calls: AudioCueEntry[] } {
 }
 
 describe('AppContext — Audio: Flow 이벤트 → audioPlayer.play 라우팅', () => {
-  it('EnteredTitle(초기 진입) 시 bgm_title cue 재생', async () => {
+  it('EnteredTitle(GameOver → Q 키로 복귀) 시 bgm_title cue 재생', async () => {
+    // 2026-05-19: SPACE 는 이제 roundIntro 재시작. title 복귀는 Q 키 (또는 QUIT 버튼).
     const mockAudio = createMockAudioPlayer();
     const ctx = await createAppContext({ audioPlayer: mockAudio });
 
-    // GameOver → Title 전이 시 EnteredTitle 발행됨
     enterInGame(ctx);
     drainAllLives(ctx);
     expect(ctx.getFlowState().kind).toBe('gameOver');
 
     mockAudio.calls.length = 0; // 이전 호출 초기화
-    ctx.tick(spaceInput, 1 / 60); // gameOver → title (EnteredTitle 발행)
+    // GameOver → Q 키 → Title (EnteredTitle 발행)
+    const qInput: InputSnapshot = { leftDown: false, rightDown: false, spaceJustPressed: false, qJustPressed: true };
+    ctx.tick(qInput, 1 / 60);
+    expect(ctx.getFlowState().kind).toBe('title');
 
     const titleCues = mockAudio.calls.filter((c) => c.resourceId === 'bgm_title');
     expect(titleCues.length).toBeGreaterThan(0);

@@ -37,6 +37,8 @@ export function renderBorders(
         .setDisplaySize(w, h);
       objects.borderMap.set(border.id, img);
     }
+    // 매 프레임 setTexture — 스테이지 전환 시 orientation 변경 잔재 fix.
+    img.setTexture(key);
     img.setPosition(border.x, border.y).setDisplaySize(w, h).setVisible(true);
   }
   for (const [id, img] of objects.borderMap) {

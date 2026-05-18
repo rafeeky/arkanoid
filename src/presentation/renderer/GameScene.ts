@@ -92,13 +92,18 @@ export class GameScene extends Phaser.Scene {
       data.roundIntroDurationMs,
       data.introPages,
       {
+        // wraparound 비활성 — 첫/마지막 mascot 에서는 그 방향 이동 막힘.
         onCursorPrev: () => {
-          this.mascotCursorIndex = (this.mascotCursorIndex - 1 + MascotTable.length) % MascotTable.length;
-          this.maybeAutoSelectAtCursor();
+          if (this.mascotCursorIndex > 0) {
+            this.mascotCursorIndex--;
+            this.maybeAutoSelectAtCursor();
+          }
         },
         onCursorNext: () => {
-          this.mascotCursorIndex = (this.mascotCursorIndex + 1) % MascotTable.length;
-          this.maybeAutoSelectAtCursor();
+          if (this.mascotCursorIndex < MascotTable.length - 1) {
+            this.mascotCursorIndex++;
+            this.maybeAutoSelectAtCursor();
+          }
         },
         onTryUnlock: () => {
           const mascot = MascotTable[this.mascotCursorIndex]!;
@@ -109,6 +114,9 @@ export class GameScene extends Phaser.Scene {
         getGold: () => this.appContext.getGold(),
         isUnlocked: (id) => this.appContext.getUnlockedMascots().includes(id),
         getCursorIndex: () => this.mascotCursorIndex,
+        // NORMAL/HARD 버튼 클릭 — 다음 update 에서 처리하도록 flag 만 set.
+        onNormalClick: () => { this.pendingPlayDifficulty = 'normal'; },
+        onHardClick:   () => { this.pendingPlayDifficulty = 'hard'; },
       },
       () => ({
         cursorIndex: this.mascotCursorIndex,
@@ -116,10 +124,27 @@ export class GameScene extends Phaser.Scene {
         isUnlocked: (id: string) => this.appContext.getUnlockedMascots().includes(id),
         selectedMascotId: this.appContext.getSelectedMascot(),
       }),
+      {
+        // 일시정지 버튼 — ESC 와 동일 동작. flowState 가 inGame 일 때만 효과.
+        onPauseClick: () => {
+          if (this.appContext.getFlowState().kind === 'inGame') {
+            this.isPaused = !this.isPaused;
+          }
+        },
+        // GameOver/GameClear 의 QUIT TO TITLE 버튼 — Q 키 합성.
+        onQuitToTitle: () => {
+          this.appContext.tick(
+            { leftDown: false, rightDown: false, spaceJustPressed: false, qJustPressed: true },
+            0,
+          );
+        },
+      },
     );
   }
 
   private mascotCursorIndex = 0;
+  /** NORMAL/HARD 버튼 클릭 시 set, 다음 update 에서 처리 후 reset. */
+  private pendingPlayDifficulty: 'normal' | 'hard' | undefined = undefined;
 
   /** cursor 가 unlocked mascot 위에 있으면 자동으로 selectMascot. */
   private maybeAutoSelectAtCursor(): void {
@@ -195,10 +220,40 @@ export class GameScene extends Phaser.Scene {
     const dt = deltaMs / 1000;
     const kbInput = this.keyboardInputSource.readSnapshot();
     const targetBarX = this.pointerInputSource.readTargetBarX();
-    // 슬라이더 첫 터치 = SPACE 등가 (공 발사 / 자석 해제). 키보드 SPACE 와 OR.
+    // 슬라이더 첫 터치 = SPACE 등가 (인게임 공 발사 / 자석 해제). 키보드 SPACE 와 OR.
     const launchTap = this.pointerInputSource.consumeLaunchJustPressed();
-    const mergedKb = launchTap
-      ? { ...kbInput, spaceJustPressed: true }
+    // 화면 어디든 탭 = SPACE 등가. 단 인게임 진행 중엔 무시 (실수 발사 방지).
+    const anyTap = this.pointerInputSource.consumeAnyTapJustPressed();
+    const flowKindNow = this.appContext.getFlowState().kind;
+    // paused 중 또는 title 에선 anyTap → SPACE 제외.
+    // (타이틀 그냥 클릭으로 스토리 진입 방지. 타이틀 시작은 NORMAL/HARD 버튼/키보드.)
+    const acceptAnyTapAsSpace = !this.isPaused && (
+      flowKindNow === 'gameOver' || flowKindNow === 'gameClear'
+      || flowKindNow === 'introStory'
+    );
+    const spaceTap = launchTap || (anyTap && acceptAnyTapAsSpace);
+
+    // NORMAL/HARD 버튼 클릭 — 다른 난이도 선택 시 left/right 합성, 그리고 SPACE 트리거.
+    let extraLeft = false;
+    let extraRight = false;
+    let extraSpace = false;
+    if (this.pendingPlayDifficulty !== undefined && flowKindNow === 'title') {
+      const currentDiff = this.appContext.getFlowState().selectedDifficulty;
+      if (this.pendingPlayDifficulty !== currentDiff) {
+        if (this.pendingPlayDifficulty === 'normal') extraLeft = true;
+        else extraRight = true;
+      }
+      extraSpace = true;
+      this.pendingPlayDifficulty = undefined;
+    }
+
+    const mergedKb = (spaceTap || extraSpace || extraLeft || extraRight)
+      ? {
+          ...kbInput,
+          spaceJustPressed: kbInput.spaceJustPressed || spaceTap || extraSpace,
+          leftJustPressed:  kbInput.leftJustPressed  || extraLeft,
+          rightJustPressed: kbInput.rightJustPressed || extraRight,
+        }
       : kbInput;
     const input = targetBarX !== undefined ? { ...mergedKb, targetBarX } : mergedKb;
     const flowKindBefore = this.appContext.getFlowState().kind;

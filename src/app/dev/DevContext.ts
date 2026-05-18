@@ -42,7 +42,9 @@ export type DevContext = {
  * @param initialStageIndex 세션 시작 스테이지 인덱스 (기본 0).
  *
  * 기본값:
- * - isEnabled: true (생성 시점에 dev 모드 ON)
+ * - isEnabled: false (디버그 오버레이 OFF. F1 으로 토글 ON.)
+ *   2026-05-18: dev 서버에서도 기본 OFF — 블록 ID 라벨/AABB 등 잔재가
+ *   시각적 인상을 해쳐서 의도적으로 봐야 할 때만 켜는 정책으로 변경.
  * - invariantChecker: DefaultInvariantChecker
  * - replayRecorder: maxFrames 10000 (약 160초 @ 60fps)
  * - collisionLog: maxSize 10
@@ -50,6 +52,8 @@ export type DevContext = {
  */
 export function createDevContext(seed: number, initialStageIndex: number = 0): DevContext {
   return {
+    // 2026-05-18: 디버그용 임시 true (회전체 콜리전 polygon + 블록 ID 표시).
+    // 확인 끝나면 false 로 복원. F1 으로도 토글 가능.
     isEnabled: true,
     invariantChecker: new DefaultInvariantChecker(),
     replayRecorder: new ReplayRecorder(seed, initialStageIndex),

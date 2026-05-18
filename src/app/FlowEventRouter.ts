@@ -160,8 +160,8 @@ export class FlowEventRouter {
     // 묶음 E: 현재 선택된 난이도 설정 조회
     const difficulty = getDifficultyConfig(this.flowController.getState().selectedDifficulty);
 
-    if (from === 'introStory') {
-      // 인트로 종료 후 첫 스테이지 시작: Stage 0 완전 초기화, 현재 highScore 유지
+    if (from === 'introStory' || from === 'gameOver' || from === 'gameClear') {
+      // 인트로/게임오버/클리어 → roundIntro: Stage 0 완전 초기화 (score/lives 리셋, highScore 유지).
       const currentHighScore = this.gameplayController.getState().session.highScore;
       const stage0 = this.stageDefinitions[0]!;
       const newState = this.lifecycleHandler.initializeStage(

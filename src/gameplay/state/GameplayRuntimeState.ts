@@ -19,12 +19,16 @@ export type GameplayRuntimeState = {
   doors: readonly DoorState[];
   itemDrops: ItemDropState[];
   isStageCleared: boolean;
-  /** 자석 효과 남은 시간 (ms). 0이면 비활성. */
+  /** @deprecated 자석 효과 남은 시간 (ms). 호환용 유지 — 새 동작은 magnetRemainingUses 사용 예정. */
   magnetRemainingTime: number;
+  /** 자석 효과 남은 부착 횟수 (5회). 미설정 시 0. 시스템 로직 변경 turn 에서 활성화. */
+  magnetRemainingUses?: number;
   /** 자석 상태에서 바에 붙은 공 ID 목록. */
   attachedBallIds: readonly string[];
   /** 레이저 다음 발사까지 남은 쿨다운 (ms). 0이면 즉시 발사 가능. */
   laserCooldownRemaining: number;
+  /** 레이저 효과 남은 지속 시간 (ms). 미설정 시 0. 시스템 로직 변경 turn 에서 활성화. */
+  laserRemainingTime?: number;
   /** 화면에 존재하는 레이저 발사체 목록. */
   laserShots: readonly LaserShotState[];
   /** 현재 스테이지의 회전체 런타임 상태 목록. */

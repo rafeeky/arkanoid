@@ -81,10 +81,10 @@ describe('GameFlowController — 통합 시나리오', () => {
       expect(controller.getState().kind).toBe('gameOver');
       expect(events.at(-1)).toEqual({ type: 'EnteredGameOver', from: 'inGame' });
 
-      // GameOver → Title (스페이스)
+      // GameOver → RoundIntro (스페이스 = 1스테이지부터 재시작)
       controller.handleInput(snapSpace);
-      expect(controller.getState().kind).toBe('title');
-      expect(events.at(-1)).toEqual({ type: 'EnteredTitle', from: 'gameOver' });
+      expect(controller.getState().kind).toBe('roundIntro');
+      expect(events.at(-1)).toEqual({ type: 'EnteredRoundIntro', from: 'gameOver' });
     });
 
     it('각 전이마다 Entered 이벤트가 정확히 1회 발행됨', () => {
@@ -94,14 +94,14 @@ describe('GameFlowController — 통합 시나리오', () => {
       controller.handlePresentationEvent({ type: 'IntroSequenceFinished' }); // → roundIntro
       controller.handlePresentationEvent({ type: 'RoundIntroFinished' }); // → inGame
       controller.handleGameplayEvent({ type: 'LifeLost', remainingLives: 0 }); // → gameOver
-      controller.handleInput(snapSpace); // → title
+      controller.handleInput(snapSpace); // → roundIntro (1스테이지 재시작)
 
       expect(events).toEqual([
         { type: 'EnteredIntroStory', from: 'title' },
         { type: 'EnteredRoundIntro', from: 'introStory' },
         { type: 'EnteredInGame', from: 'roundIntro' },
         { type: 'EnteredGameOver', from: 'inGame' },
-        { type: 'EnteredTitle', from: 'gameOver' },
+        { type: 'EnteredRoundIntro', from: 'gameOver' },
       ]);
     });
   });
@@ -162,23 +162,20 @@ describe('GameFlowController — 통합 시나리오', () => {
     });
   });
 
-  describe('StartGameRequested 시 currentStageIndex 리셋', () => {
-    it('GameClear 후 Title 복귀, 다시 StartGameRequested 하면 stageIndex=0으로 리셋', () => {
-      const { controller } = makeController(1);
+  describe('GameClear 후 RetryRequested(SPACE) → RoundIntro 재시작', () => {
+    it('GameClear → SPACE → RoundIntro (stageIndex=0 리셋, EnteredRoundIntro from=gameClear 발행)', () => {
+      const { controller, events } = makeController(1);
       advanceToInGame(controller);
 
       // Stage 0(마지막) 클리어 → GameClear
       controller.handleGameplayEvent({ type: 'StageCleared' });
       expect(controller.getState().kind).toBe('gameClear');
 
-      // GameClear → Title
+      // GameClear → RoundIntro (1스테이지부터 재시작)
       controller.handleInput(snapSpace);
-      expect(controller.getState().kind).toBe('title');
-
-      // Title → IntroStory (stageIndex 리셋 확인)
-      controller.handleInput(snapSpace);
-      expect(controller.getState().kind).toBe('introStory');
+      expect(controller.getState().kind).toBe('roundIntro');
       expect(controller.getState().currentStageIndex).toBe(0);
+      expect(events.at(-1)).toEqual({ type: 'EnteredRoundIntro', from: 'gameClear' });
     });
 
     it('Title 진입 후 StartGameRequested 하면 stageIndex=0', () => {
@@ -189,17 +186,17 @@ describe('GameFlowController — 통합 시나리오', () => {
     });
   });
 
-  describe('GameClear → Title 복귀', () => {
-    it('GameClear + spaceJustPressed → Title + EnteredTitle 발행', () => {
+  describe('GameClear → RoundIntro 재시작 (이전엔 Title 복귀였음)', () => {
+    it('GameClear + spaceJustPressed → RoundIntro + EnteredRoundIntro from=gameClear 발행', () => {
       const { controller, events } = makeController(1);
       advanceToInGame(controller);
 
       controller.handleGameplayEvent({ type: 'StageCleared' }); // → gameClear
       expect(controller.getState().kind).toBe('gameClear');
 
-      controller.handleInput(snapSpace); // → title
-      expect(controller.getState().kind).toBe('title');
-      expect(events.at(-1)).toEqual({ type: 'EnteredTitle', from: 'gameClear' });
+      controller.handleInput(snapSpace); // → roundIntro (재시작)
+      expect(controller.getState().kind).toBe('roundIntro');
+      expect(events.at(-1)).toEqual({ type: 'EnteredRoundIntro', from: 'gameClear' });
     });
   });
 
