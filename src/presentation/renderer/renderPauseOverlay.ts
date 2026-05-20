@@ -1,16 +1,17 @@
 import type Phaser from 'phaser';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './canvasLayout';
+import { createButton, type Button } from '../ui/Button';
 
 /**
  * 일시정지 오버레이 — InGame 중 ESC 누르면 표시되는 풀스크린 패널.
  *
- * 모바일 게임 표준 패턴 (블록블라스트 등 참고):
- *   - 풀스크린 반투명 backdrop (게임 화면 살짝 보이게)
- *   - 큰 "PAUSED" 타이틀
- *   - 가로 2개 토글 버튼: 배경음 / 효과음
- *   - 세로 2개 액션 버튼: 나가기 (→ Title) / 돌아가기 (Resume)
+ * 정석 (learning_principles_albatross): 일시정지 화면은 *혼합* 카메라 — 멈춘 월드=main, 메뉴=UI.
+ *   backdrop / title / 4개 버튼 모두 UI 카메라 (scrollFactor 0). 멈춘 게임 월드가 backdrop 너머로 비침.
  *
- * 모든 요소 scrollFactor=0 + setInteractive 로 마우스/터치 클릭 가능.
+ * 4개 버튼:
+ *   - 가로: BGM toggle (neutral, ON/OFF) / SFX toggle (neutral, ON/OFF)
+ *   - 세로: QUIT (danger, 빨강) / RESUME (primary, 초록)
+ *
  * Unity 매핑: PauseMenuView MonoBehaviour. UGUI Button 컴포넌트로 동등.
  */
 export type PauseButtonHandlers = {
@@ -18,24 +19,10 @@ export type PauseButtonHandlers = {
   onToggleSfx(): void;
   onQuitToTitle(): void;
   onResume(): void;
-  /** 현재 BGM 음소거 상태 — 버튼 라벨 색상에 반영. */
+  /** 현재 BGM 음소거 상태. */
   isBgmMuted(): boolean;
   /** 현재 SFX 음소거 상태. */
   isSfxMuted(): boolean;
-};
-
-type Button = {
-  rect: Phaser.GameObjects.Rectangle;
-  label: Phaser.GameObjects.Text;
-  /** 입체감 bevel overlay (선택). 있으면 show/hide 시 같이 토글. */
-  bevel?: Phaser.GameObjects.Graphics;
-};
-
-type ButtonStyle = {
-  fillColor?: number;
-  strokeColor?: number;
-  glowColor?: number;
-  bevel?: boolean;
 };
 
 export type PauseOverlayObjects = {
@@ -49,95 +36,32 @@ export type PauseOverlayObjects = {
 
 const CX = CANVAS_WIDTH / 2;
 
-// 레이아웃 — 캔버스 절대 좌표.
+// 레이아웃 — 캔버스 절대 좌표 (UI 카메라).
 const TITLE_Y = 600;
 const TOGGLE_ROW_Y = 900;
 const TOGGLE_BUTTON_W = 280;
 const TOGGLE_BUTTON_H = 160;
-const TOGGLE_LEFT_X = CX - 160;   // 배경음 버튼 (좌)
-const TOGGLE_RIGHT_X = CX + 160;  // 효과음 버튼 (우)
+const TOGGLE_LEFT_X = CX - 160;   // 배경음 (좌)
+const TOGGLE_RIGHT_X = CX + 160;  // 효과음 (우)
 
 const ACTION_BUTTON_W = 460;
 const ACTION_BUTTON_H = 110;
-const QUIT_Y = 1200;     // 나가기 (위)
-const RESUME_Y = 1380;   // 돌아가기 (아래)
+const QUIT_Y = 1200;
+const RESUME_Y = 1380;
 
-const COLOR_BUTTON_FILL = 0x1a2a3a;
-const COLOR_BUTTON_STROKE = 0x4488cc;
-const COLOR_BUTTON_TEXT_ON = '#ffffff';
-const COLOR_BUTTON_TEXT_OFF = '#666666';
-const COLOR_RESUME_TEXT = '#88ff88';
-const COLOR_QUIT_TEXT = '#ff7777';
-
-function createButton(
-  scene: Phaser.Scene,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  label: string,
-  textColor: string,
-  fontSize = '32px',
-  style?: ButtonStyle,
-): Button {
-  const fillColor = style?.fillColor ?? COLOR_BUTTON_FILL;
-  const strokeColor = style?.strokeColor ?? COLOR_BUTTON_STROKE;
-
-  const rect = scene.add
-    .rectangle(x, y, w, h, fillColor)
-    .setStrokeStyle(3, strokeColor)
-    .setOrigin(0.5, 0.5)
-    .setScrollFactor(0)
-    .setDepth(501)
-    .setVisible(false)
-    .setInteractive({ useHandCursor: true });
-
-  // 입체감 bevel — 위 절반 white highlight + 아래 절반 black shadow.
-  let bevel: Phaser.GameObjects.Graphics | undefined;
-  if (style?.bevel) {
-    bevel = scene.add.graphics()
-      .setScrollFactor(0)
-      .setDepth(501.5)
-      .setVisible(false);
-    const inset = 3;
-    const halfH = h / 2;
-    const left = x - w / 2 + inset;
-    const top = y - h / 2 + inset;
-    bevel.fillStyle(0xffffff, 0.22);
-    bevel.fillRect(left, top, w - inset * 2, halfH - inset);
-    bevel.fillStyle(0x000000, 0.25);
-    bevel.fillRect(left, y, w - inset * 2, halfH - inset);
-  }
-
-  // 외곽 발광 (WebGL postFX).
-  if (style?.glowColor !== undefined) {
-    rect.postFX?.addGlow(style.glowColor, 5, 0, false, 0.1, 14);
-  }
-
-  const text = scene.add
-    .text(x, y, label, {
-      fontSize,
-      color: textColor,
-      fontFamily: 'DNFBitBitv2, monospace',
-      fontStyle: 'bold',
-    })
-    .setOrigin(0.5, 0.5)
-    .setScrollFactor(0)
-    .setDepth(502)
-    .setVisible(false);
-
-  return bevel ? { rect, label: text, bevel } : { rect, label: text };
-}
+const DEPTH_BACKDROP = 500;
+const DEPTH_BUTTON = 501;
+const DEPTH_TITLE = 502;
 
 export function createPauseOverlayObjects(
   scene: Phaser.Scene,
   handlers: PauseButtonHandlers,
 ): PauseOverlayObjects {
-  // 풀스크린 반투명 어두운 backdrop. 게임 화면 살짝 보이게 alpha 0.7.
+  // 풀스크린 반투명 어두운 backdrop. 멈춘 게임 월드가 살짝 비치도록 alpha 0.75.
   const backdrop = scene.add
     .rectangle(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_WIDTH, CANVAS_HEIGHT, 0x000000, 0.75)
     .setScrollFactor(0)
-    .setDepth(500)
+    .setDepth(DEPTH_BACKDROP)
     .setVisible(false);
 
   const title = scene.add
@@ -149,53 +73,66 @@ export function createPauseOverlayObjects(
     })
     .setOrigin(0.5, 0.5)
     .setScrollFactor(0)
-    .setDepth(502)
+    .setDepth(DEPTH_TITLE)
     .setVisible(false);
 
-  // 배경음 / 효과음 토글 (가로 2개)
-  const bgmButton = createButton(
-    scene, TOGGLE_LEFT_X, TOGGLE_ROW_Y, TOGGLE_BUTTON_W, TOGGLE_BUTTON_H,
-    '배경음\nON', COLOR_BUTTON_TEXT_ON, '32px',
-  );
-  bgmButton.label.setAlign('center').setLineSpacing(4);
-  bgmButton.rect.on('pointerdown', () => {
-    handlers.onToggleBgm();
-    refreshButtonLabel(bgmButton, '배경음', !handlers.isBgmMuted());
+  // 배경음 toggle — neutral variant. label "배경음" + 자동 \nON/\nOFF.
+  const bgmButton = createButton(scene, {
+    cx: TOGGLE_LEFT_X, cy: TOGGLE_ROW_Y, w: TOGGLE_BUTTON_W, h: TOGGLE_BUTTON_H,
+    label: '배경음',
+    variant: 'neutral',
+    fontSize: '32px',
+    toggle: true,
+    toggleInitiallyOn: !handlers.isBgmMuted(),
+    scrollFactor: 0,
+    depth: DEPTH_BUTTON,
+    onClick: () => {
+      handlers.onToggleBgm();
+      bgmButton.setOn(!handlers.isBgmMuted());
+    },
   });
 
-  const sfxButton = createButton(
-    scene, TOGGLE_RIGHT_X, TOGGLE_ROW_Y, TOGGLE_BUTTON_W, TOGGLE_BUTTON_H,
-    '효과음\nON', COLOR_BUTTON_TEXT_ON, '32px',
-  );
-  sfxButton.label.setAlign('center').setLineSpacing(4);
-  sfxButton.rect.on('pointerdown', () => {
-    handlers.onToggleSfx();
-    refreshButtonLabel(sfxButton, '효과음', !handlers.isSfxMuted());
+  // 효과음 toggle — neutral variant.
+  const sfxButton = createButton(scene, {
+    cx: TOGGLE_RIGHT_X, cy: TOGGLE_ROW_Y, w: TOGGLE_BUTTON_W, h: TOGGLE_BUTTON_H,
+    label: '효과음',
+    variant: 'neutral',
+    fontSize: '32px',
+    toggle: true,
+    toggleInitiallyOn: !handlers.isSfxMuted(),
+    scrollFactor: 0,
+    depth: DEPTH_BUTTON,
+    onClick: () => {
+      handlers.onToggleSfx();
+      sfxButton.setOn(!handlers.isSfxMuted());
+    },
   });
 
-  // 나가기 — 빨강 입체 버튼 + 빨간 발광. 글자 흰색.
-  const quitButton = createButton(
-    scene, CX, QUIT_Y, ACTION_BUTTON_W, ACTION_BUTTON_H,
-    'QUIT', '#ffffff', '40px',
-    { fillColor: 0xcc4444, strokeColor: 0xff8888, glowColor: 0xff5050, bevel: true },
-  );
-  quitButton.rect.on('pointerdown', () => handlers.onQuitToTitle());
+  // QUIT — danger variant + glow.
+  const quitButton = createButton(scene, {
+    cx: CX, cy: QUIT_Y, w: ACTION_BUTTON_W, h: ACTION_BUTTON_H,
+    label: 'QUIT',
+    variant: 'danger',
+    fontSize: '40px',
+    glow: true,
+    scrollFactor: 0,
+    depth: DEPTH_BUTTON,
+    onClick: () => handlers.onQuitToTitle(),
+  });
 
-  // RESUME 버튼 — 초록 입체.
-  const resumeButton = createButton(
-    scene, CX, RESUME_Y, ACTION_BUTTON_W, ACTION_BUTTON_H,
-    'RESUME', '#ffffff', '40px',
-    { fillColor: 0x44aa44, strokeColor: 0x88dd88, glowColor: 0x44cc66, bevel: true },
-  );
-  resumeButton.rect.on('pointerdown', () => handlers.onResume());
-  void COLOR_QUIT_TEXT; void COLOR_RESUME_TEXT;
+  // RESUME — primary variant + glow.
+  const resumeButton = createButton(scene, {
+    cx: CX, cy: RESUME_Y, w: ACTION_BUTTON_W, h: ACTION_BUTTON_H,
+    label: 'RESUME',
+    variant: 'primary',
+    fontSize: '40px',
+    glow: true,
+    scrollFactor: 0,
+    depth: DEPTH_BUTTON,
+    onClick: () => handlers.onResume(),
+  });
 
   return { backdrop, title, bgmButton, sfxButton, quitButton, resumeButton };
-}
-
-function refreshButtonLabel(button: Button, name: string, isOn: boolean): void {
-  button.label.setText(`${name}\n${isOn ? 'ON' : 'OFF'}`);
-  button.label.setColor(isOn ? COLOR_BUTTON_TEXT_ON : COLOR_BUTTON_TEXT_OFF);
 }
 
 export function showPauseOverlay(
@@ -205,22 +142,20 @@ export function showPauseOverlay(
 ): void {
   objects.backdrop.setVisible(true);
   objects.title.setVisible(true);
-  // 토글 버튼 라벨을 현재 음소거 상태에 맞춤.
-  refreshButtonLabel(objects.bgmButton, '배경음', !isBgmMuted);
-  refreshButtonLabel(objects.sfxButton, '효과음', !isSfxMuted);
-  for (const btn of [objects.bgmButton, objects.sfxButton, objects.quitButton, objects.resumeButton]) {
-    btn.rect.setVisible(true);
-    btn.label.setVisible(true);
-    btn.bevel?.setVisible(true);
-  }
+  // toggle 상태를 현재 음소거 상태에 맞춤 (라벨 + OFF 시 회색 자동).
+  objects.bgmButton.setOn(!isBgmMuted);
+  objects.sfxButton.setOn(!isSfxMuted);
+  objects.bgmButton.setVisible(true);
+  objects.sfxButton.setVisible(true);
+  objects.quitButton.setVisible(true);
+  objects.resumeButton.setVisible(true);
 }
 
 export function hidePauseOverlay(objects: PauseOverlayObjects): void {
   objects.backdrop.setVisible(false);
   objects.title.setVisible(false);
-  for (const btn of [objects.bgmButton, objects.sfxButton, objects.quitButton, objects.resumeButton]) {
-    btn.rect.setVisible(false);
-    btn.label.setVisible(false);
-    btn.bevel?.setVisible(false);
-  }
+  objects.bgmButton.setVisible(false);
+  objects.sfxButton.setVisible(false);
+  objects.quitButton.setVisible(false);
+  objects.resumeButton.setVisible(false);
 }

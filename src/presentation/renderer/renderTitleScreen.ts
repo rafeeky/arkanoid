@@ -4,6 +4,8 @@ import type { MascotDefinition } from '../../definitions/types/MascotDefinition'
 import { MascotTable, getMascotById } from '../../definitions/tables/MascotTable';
 import { CANVAS_WIDTH } from './canvasLayout';
 import { createTextPanel } from './components/TextPanel';
+import { createButton, type Button } from '../ui/Button';
+import { createToast } from '../ui/Toast';
 
 export type MascotCarouselHandlers = {
   /** 이전/다음 캐릭터로 cursor 이동. 잠금 여부 무관 (모든 캐릭터 cycle). */
@@ -23,12 +25,7 @@ export type MascotCarouselHandlers = {
   onHardClick?(): void;
 };
 
-type Button = {
-  rect: Phaser.GameObjects.Rectangle;
-  label: Phaser.GameObjects.Text;
-  /** 입체 bevel overlay (optional). */
-  bevel?: Phaser.GameObjects.Graphics;
-};
+// (local Button type 제거 — 공용 Button (ui/Button.ts) 사용으로 통합. unlockButton 만 쓰던 곳.)
 
 export type TitleScreenObjects = {
   // 텍스트
@@ -36,10 +33,6 @@ export type TitleScreenObjects = {
   startText: Phaser.GameObjects.Text;
   highScoreText: Phaser.GameObjects.Text;
   goldText: Phaser.GameObjects.Text;
-  normalLabel: Phaser.GameObjects.Text;
-  hardLabel: Phaser.GameObjects.Text;
-  difficultyHelp: Phaser.GameObjects.Text;  // NORMAL 박스 sub "PLAY BUTTON"
-  hardSubText: Phaser.GameObjects.Text;     // HARD 박스 sub "PLAY BUTTON"
 
   // Mascot 캐러셀 — V2 portrait (가로세로 동일) + 테두리. portrait2.<id> 텍스처 사용.
   mascotPortrait: Phaser.GameObjects.Image;
@@ -57,12 +50,12 @@ export type TitleScreenObjects = {
   powerupItems: PowerupItemObjects[];
 
   // 정보 그룹 반투명 카드 — 텍스트 뒤 배경. depth -10.
-  // (titlePanel 은 사용자 요청으로 제거됨. ALBATROSS 로고는 패널 없이 노출.)
-  highScorePanel: Phaser.GameObjects.Graphics;
   mascotInfoPanel: Phaser.GameObjects.Graphics;
   powerupsPanel: Phaser.GameObjects.Graphics;
-  normalPanel: Phaser.GameObjects.Graphics;
-  hardPanel: Phaser.GameObjects.Graphics;
+
+  // NORMAL / HARD 버튼 — 공용 Button 컴포넌트.
+  normalButton: Button;
+  hardButton: Button;
 };
 
 type PowerupItemObjects = {
@@ -126,32 +119,6 @@ const POWERUP_NAME_GAP = 32;
 
 const ITEM_BOX_WIDTH = 320;
 
-const COLOR_BUTTON_FILL = 0x1a2a3a;
-const COLOR_BUTTON_STROKE = 0x4488cc;
-
-function createTextButton(
-  scene: Phaser.Scene,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  text: string,
-): Button {
-  const rect = scene.add
-    .rectangle(x, y, w, h, COLOR_BUTTON_FILL)
-    .setStrokeStyle(2, COLOR_BUTTON_STROKE)
-    .setOrigin(0.5, 0.5)
-    .setScrollFactor(0)
-    .setVisible(false)
-    .setInteractive({ useHandCursor: true });
-  const label = scene.add
-    .text(x, y, text, { fontSize: '24px', color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold' })
-    .setOrigin(0.5, 0.5)
-    .setScrollFactor(0)
-    .setVisible(false);
-  return { rect, label };
-}
-
 // 정보 그룹 카드 — 폰트 사이즈 키운 만큼 패널 조정.
 const CARD_HIGHSCORE  = { cx: 220, cy: 117, w: 380, h: 78 };           // 좌상단 (font 30 → w 늘림)
 // CARD_TITLE — 2026-05-18: 사용자 요청으로 제거됨 (로고는 패널 없이 직접 노출).
@@ -165,19 +132,28 @@ export function createTitleScreenObjects(
   mascotHandlers: MascotCarouselHandlers,
 ): TitleScreenObjects {
   // 정보 그룹 6개 반투명 카드 (텍스트보다 뒤, depth=-10).
-  const highScorePanel  = createTextPanel(scene, CARD_HIGHSCORE.cx,  CARD_HIGHSCORE.cy,  CARD_HIGHSCORE.w,  CARD_HIGHSCORE.h);
   const mascotInfoPanel = createTextPanel(scene, CARD_MASCOTINFO.cx, CARD_MASCOTINFO.cy, CARD_MASCOTINFO.w, CARD_MASCOTINFO.h);
+  void CARD_HIGHSCORE; // panel 제거됨 — 텍스트만 표시
   const powerupsPanel   = createTextPanel(scene, CARD_POWERUPS.cx,   CARD_POWERUPS.cy,   CARD_POWERUPS.w,   CARD_POWERUPS.h);
-  // NORMAL 버튼 — 초록 입체 + 발광. 클릭 시 normal 선택 + 게임 시작.
-  const normalPanel     = createTextPanel(scene, CARD_NORMAL.cx, CARD_NORMAL.cy, CARD_NORMAL.w, CARD_NORMAL.h,
-    { color: 0x44aa44, alpha: 0.95, strokeColor: 0x88dd88, strokeWidth: 5, cornerRadius: 24,
-      bevel: true, glowColor: 0x44cc66,
-      onClick: () => mascotHandlers.onNormalClick?.() });
-  // HARD 버튼 — 빨강 입체 + 발광. 클릭 시 hard 선택 + 게임 시작.
-  const hardPanel       = createTextPanel(scene, CARD_HARD.cx,   CARD_HARD.cy,   CARD_HARD.w,   CARD_HARD.h,
-    { color: 0xcc4444, alpha: 0.95, strokeColor: 0xff8888, strokeWidth: 5, cornerRadius: 24,
-      bevel: true, glowColor: 0xff5050,
-      onClick: () => mascotHandlers.onHardClick?.() });
+  // NORMAL 버튼 — primary (초록). 라벨 'NORMAL PLAY' 한 텍스트로 통합 (옛은 'NORMAL'+'PLAY' 분리였지만 색 동일이라 묶음).
+  // glow 없음 — Title 은 밝은 배경. glow 룰: 어두운 backdrop 위 액션 버튼만 ([[learning_principles_albatross]]).
+  const normalButton = createButton(scene, {
+    cx: CARD_NORMAL.cx, cy: CARD_NORMAL.cy, w: CARD_NORMAL.w, h: CARD_NORMAL.h,
+    label: 'NORMAL PLAY',
+    variant: 'primary',
+    fontSize: '44px',
+    scrollFactor: 0,
+    onClick: () => mascotHandlers.onNormalClick?.(),
+  });
+  // HARD 버튼 — danger (빨강). glow 없음 (동일 이유).
+  const hardButton = createButton(scene, {
+    cx: CARD_HARD.cx, cy: CARD_HARD.cy, w: CARD_HARD.w, h: CARD_HARD.h,
+    label: 'HARD PLAY',
+    variant: 'danger',
+    fontSize: '44px',
+    scrollFactor: 0,
+    onClick: () => mascotHandlers.onHardClick?.(),
+  });
 
   // ALBATROSS 로고 — 패널 없이 직접 노출. 폰트 1.3배 (84→110).
   const logo = scene.add
@@ -185,6 +161,21 @@ export function createTitleScreenObjects(
       fontSize: '110px', color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
     })
     .setOrigin(0.5, 0.5).setScrollFactor(0).setVisible(false);
+  // 2026-05-19: 빛 sweep — 좌→우 한 번, 2초 휴식 후 무한 반복.
+  // postFX.addShine 의 active 토글로 한 사이클씩만 보이게 함.
+  // (sweep 자체는 약 700ms 정도 — speed 0.6 기준 한 번 라인이 지나가는 길이.)
+  const shineFx = logo.postFX?.addShine(0.6, 0.5, 5);
+  if (shineFx) shineFx.active = false;
+  if (shineFx) {
+    scene.time.addEvent({
+      delay: 2700, // 700ms sweep + 2000ms pause
+      loop: true,
+      callback: () => {
+        shineFx.active = true;
+        scene.time.delayedCall(700, () => { shineFx.active = false; });
+      },
+    });
+  }
 
   // Mascot portrait V2 — 가로세로 동일 정사각형 + 테두리 박스. portrait2.<id> 키.
   const mascotPortrait = scene.add
@@ -234,39 +225,37 @@ export function createTitleScreenObjects(
     })
     .setOrigin(0.5, 0.5).setScrollFactor(0).setVisible(false);
 
+  // Toast — gold 부족 등 짧은 알림. Title 화면 안 단일 인스턴스.
+  // UNLOCK 버튼 (cy=848, h=60 → top=818) 위에 위치 — 토스트 h=84 / 사이 gap ~10 → cy=766.
+  const toast = createToast(scene, { cy: 766 });
+
   // 잠금 해제 버튼 — portrait bottom(790) ~ mascotInfo top(905) 사이 (cy=848).
-  // 파란색 입체 + 발광 효과 (NORMAL/HARD 버튼 톤과 유사한 별도 색).
-  const UNLOCK_X = CX;
-  const UNLOCK_Y = 848;
-  const UNLOCK_W = 320;
-  const UNLOCK_H = 60;
-  const unlockRect = scene.add
-    .rectangle(UNLOCK_X, UNLOCK_Y, UNLOCK_W, UNLOCK_H, 0xff8833)
-    .setStrokeStyle(4, 0xffcc88)
-    .setOrigin(0.5, 0.5)
-    .setScrollFactor(0)
-    .setVisible(false)
-    .setInteractive({ useHandCursor: true });
-  unlockRect.postFX?.addGlow(0xffaa55, 5, 0, false, 0.1, 14);
-  // bevel: top highlight + bottom shadow.
-  const unlockBevel = scene.add.graphics().setScrollFactor(0).setVisible(false);
-  const _ui = 3;
-  const _hh = UNLOCK_H / 2;
-  const _l = UNLOCK_X - UNLOCK_W / 2 + _ui;
-  const _t = UNLOCK_Y - UNLOCK_H / 2 + _ui;
-  unlockBevel.fillStyle(0xffffff, 0.22);
-  unlockBevel.fillRect(_l, _t, UNLOCK_W - _ui * 2, _hh - _ui);
-  unlockBevel.fillStyle(0x000000, 0.25);
-  unlockBevel.fillRect(_l, UNLOCK_Y, UNLOCK_W - _ui * 2, _hh - _ui);
-  const unlockLabel = scene.add
-    .text(UNLOCK_X, UNLOCK_Y, 'BUY', {
-      fontSize: '30px', color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
-    })
-    .setOrigin(0.5, 0.5)
-    .setScrollFactor(0)
-    .setVisible(false);
-  const unlockButton: Button = { rect: unlockRect, label: unlockLabel, bevel: unlockBevel };
-  unlockButton.rect.on('pointerdown', () => mascotHandlers.onTryUnlock());
+  // 주황색 — variant 외 fillColor 오버라이드 (variant 4번째 안 만듦).
+  // afford 상태는 render() 에서 setDisabled — 색 자체가 dark 로.
+  // glow 는 끄기 (사용자 요청 — disabled 인지 더 명확하게).
+  const unlockButton = createButton(scene, {
+    cx: CX,
+    cy: 848,
+    w: 320,
+    h: 60,
+    label: 'BUY',
+    fillColor: 0xff8833,
+    strokeColor: 0xffcc88,
+    fontSize: '30px',
+    scrollFactor: 0,
+    onClick: () => {
+      // afford 체크 — 부족하면 토스트 + onTryUnlock 호출 안 함.
+      const idx = mascotHandlers.getCursorIndex();
+      const norm = ((idx % MascotTable.length) + MascotTable.length) % MascotTable.length;
+      const m = MascotTable[norm]!;
+      if (mascotHandlers.isUnlocked(m.id)) return;
+      if (mascotHandlers.getGold() < m.unlockCost) {
+        toast.show('Not enough gold');
+        return;
+      }
+      mascotHandlers.onTryUnlock();
+    },
+  });
 
   // POWERUPS
   const powerupsTitle = scene.add
@@ -316,64 +305,29 @@ export function createTitleScreenObjects(
   const startText = scene.add
     .text(CX, 1850, '', { fontSize: '1px', color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace' })
     .setOrigin(0.5, 0.5).setScrollFactor(0).setVisible(false);
-  // HIGH SCORE — 좌상단 카드 안 가운데 정렬 (사용자 요청). CARD_HIGHSCORE 중심에 origin(0.5, 0.5).
+  // HIGH SCORE — mascot 정보 카드(bottom 1065) 와 POWERUPS 카드(top 1210) 사이 빈 공간 중앙 (y=1137).
+  // 패널 없이 텍스트만.
   const highScoreText = scene.add
-    .text(CARD_HIGHSCORE.cx, CARD_HIGHSCORE.cy, '', { fontSize: '30px', color: '#ffff00', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold' })
+    .text(CX, 1137, '', { fontSize: '36px', color: '#ffff00', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold' })
     .setOrigin(0.5, 0.5).setScrollFactor(0).setVisible(false);
   // GOLD — mascot 정보 패널 안 (줄 3).
   const goldText = scene.add
     .text(CX, GOLD_Y, '', { fontSize: '28px', color: '#ffcc44', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold' })
     .setOrigin(0.5, 0.5).setScrollFactor(0).setVisible(false);
 
-  // NORMAL/HARD — 한 줄, 단어별 색상 분리. PLAY 는 흰색.
-  // 두 텍스트 합친 width 측정 후 박스 중앙으로 reposition.
-  const WORD_GAP = 14;
-  const normalLabel = scene.add
-    .text(0, BUTTON_BOX_Y, 'NORMAL', {
-      fontSize: '44px', color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
-    })
-    .setOrigin(0, 0.5).setScrollFactor(0).setVisible(false);
-  const difficultyHelp = scene.add
-    .text(0, BUTTON_BOX_Y, 'PLAY', {
-      fontSize: '44px', color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
-    })
-    .setOrigin(0, 0.5).setScrollFactor(0).setVisible(false);
-  // NORMAL 박스 중앙 정렬.
-  {
-    const totalW = normalLabel.width + WORD_GAP + difficultyHelp.width;
-    const startX = NORMAL_BOX_CX - totalW / 2;
-    normalLabel.setX(startX);
-    difficultyHelp.setX(startX + normalLabel.width + WORD_GAP);
-  }
-
-  const hardLabel = scene.add
-    .text(0, BUTTON_BOX_Y, 'HARD', {
-      fontSize: '44px', color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
-    })
-    .setOrigin(0, 0.5).setScrollFactor(0).setVisible(false);
-  const hardSubText = scene.add
-    .text(0, BUTTON_BOX_Y, 'PLAY', {
-      fontSize: '44px', color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
-    })
-    .setOrigin(0, 0.5).setScrollFactor(0).setVisible(false);
-  // HARD 박스 중앙 정렬.
-  {
-    const totalW = hardLabel.width + WORD_GAP + hardSubText.width;
-    const startX = HARD_BOX_CX - totalW / 2;
-    hardLabel.setX(startX);
-    hardSubText.setX(startX + hardLabel.width + WORD_GAP);
-  }
+  // (옛 normalLabel/hardLabel/difficultyHelp/hardSubText 4개 분리 텍스트 제거 — Button.label 안으로 흡수.
+  //  옛 addPressAnimation(normalPanel/hardPanel, [...]) 호출도 제거 — createButton 이 container 단위 자동 press.)
 
   // 사용자가 mascotHandlers 참조를 사용하지 않는 메서드 — type 위해 참조 보존.
   void mascotHandlers.getCursorIndex;
+  void BUTTON_BOX_Y; // (label 좌표용이었지만 Button 안 라벨이 자동 중앙 — 보존만)
 
   return {
     logo, startText, highScoreText, goldText,
-    normalLabel, hardLabel, difficultyHelp, hardSubText,
     mascotPortrait, mascotPortraitFrame, mascotName, mascotSubtitle, mascotLockStatus,
     unlockButton, prevArrow, nextArrow,
     powerupsTitle, powerupItems,
-    highScorePanel, mascotInfoPanel, powerupsPanel, normalPanel, hardPanel,
+    mascotInfoPanel, powerupsPanel, normalButton, hardButton,
   };
 }
 
@@ -382,12 +336,11 @@ export function renderTitleScreen(
   viewModel: TitleScreenViewModel,
   mascotState: { cursorIndex: number; gold: number; isUnlocked: (id: string) => boolean },
 ): void {
-  // 정보 그룹 카드 visible (5개. titlePanel 제거됨).
-  objects.highScorePanel.setVisible(true);
+  // 정보 그룹 카드 visible.
   objects.mascotInfoPanel.setVisible(true);
   objects.powerupsPanel.setVisible(true);
-  objects.normalPanel.setVisible(true);
-  objects.hardPanel.setVisible(true);
+  objects.normalButton.setVisible(true);
+  objects.hardButton.setVisible(true);
 
   // 기본 텍스트
   objects.logo.setVisible(true);
@@ -396,22 +349,8 @@ export function renderTitleScreen(
   objects.highScoreText.setText(`HIGH SCORE  ${viewModel.highScore}`).setVisible(true);
   objects.goldText.setText(`GOLD  ${mascotState.gold}`).setVisible(true);
 
-  const isHard = viewModel.selectedDifficulty === 'hard';
-  // 글자는 항상 alpha 1.0 흰색 (회색빛 방지). 선택 표시는 box panel alpha 변동.
-  objects.normalLabel.setColor('#ffffff').setAlpha(1.0).setVisible(true);
-  objects.hardLabel.setColor('#ffffff').setAlpha(1.0).setVisible(true);
-  objects.difficultyHelp.setAlpha(1.0);
-  objects.hardSubText.setAlpha(1.0);
-  // 박스 alpha — 번갈아 깜빡임 (NORMAL ↔ HARD 약 1초 주기). 클릭 유도용 attention.
-  // 선택된 박스는 항상 alpha=1.0, 비선택은 0.5..1.0 사이 sinusoidal pulse.
-  const t = performance.now() / 500; // 1초 주기.
-  const pulse = 0.5 + 0.5 * Math.abs(Math.sin(t));        // 0.5 → 1.0
-  const invPulse = 0.5 + 0.5 * Math.abs(Math.cos(t));     // 위상 반대
-  objects.normalPanel.setAlpha(isHard ? invPulse : 1.0);
-  objects.hardPanel.setAlpha(isHard ? 1.0 : pulse);
-  // PLAY 흰색 텍스트 (NORMAL/HARD 옆에 항상 표시).
-  objects.difficultyHelp.setVisible(true);
-  objects.hardSubText.setVisible(true);
+  // NORMAL/HARD — 클릭 한 번으로 모드 선택 + 게임 시작. selectedDifficulty 의 시각 표시 불필요
+  // (옛 alpha pulse 효과는 *선택 상태* 시각화 — 키보드 토글 시절 잔재. 제거.)
 
   // Mascot 표시 — cursor 위치의 캐릭터.
   const idx = ((mascotState.cursorIndex % MascotTable.length) + MascotTable.length) % MascotTable.length;
@@ -436,22 +375,14 @@ export function renderTitleScreen(
 
   if (unlocked) {
     objects.mascotLockStatus.setText('UNLOCKED').setColor('#88ff88').setVisible(true);
-    objects.unlockButton.rect.setVisible(false);
-    objects.unlockButton.label.setVisible(false);
-    objects.unlockButton.bevel?.setVisible(false);
+    objects.unlockButton.setVisible(false);
   } else {
     objects.mascotLockStatus.setText('LOCKED').setColor('#ff7777').setVisible(true);
-    // BUY 버튼 + 가격 표시. 골드 부족 시 어둡게.
+    // BUY 버튼 + 가격 표시. 골드 부족 시 setDisabled — 색 자체가 dark 로 변경 + glow off + 라벨 회색.
     const canAfford = mascotState.gold >= mascot.unlockCost;
-    objects.unlockButton.rect
-      .setFillStyle(canAfford ? 0xff8833 : 0x333333)
-      .setStrokeStyle(4, canAfford ? 0xffcc88 : 0x555555)
-      .setVisible(true);
-    objects.unlockButton.label
-      .setText(`BUY  ${mascot.unlockCost} G`)
-      .setColor(canAfford ? '#ffffff' : '#888888')
-      .setVisible(true);
-    objects.unlockButton.bevel?.setVisible(true);
+    objects.unlockButton.setLabel(`BUY  ${mascot.unlockCost} G`);
+    objects.unlockButton.setDisabled(!canAfford);
+    objects.unlockButton.setVisible(true);
   }
   // 화살표 색 — cursor 가 끝(첫/마지막) 에 있으면 그 방향 화살표만 dimmed.
   //   albatross(0):   ←dim   →white
@@ -478,27 +409,20 @@ export function renderTitleScreen(
 }
 
 export function hideTitleScreen(objects: TitleScreenObjects): void {
-  objects.highScorePanel.setVisible(false);
   objects.mascotInfoPanel.setVisible(false);
   objects.powerupsPanel.setVisible(false);
-  objects.normalPanel.setVisible(false);
-  objects.hardPanel.setVisible(false);
-  objects.hardSubText.setVisible(false);
+  objects.normalButton.setVisible(false);
+  objects.hardButton.setVisible(false);
   objects.logo.setVisible(false);
   objects.startText.setVisible(false);
   objects.highScoreText.setVisible(false);
   objects.goldText.setVisible(false);
-  objects.normalLabel.setVisible(false);
-  objects.hardLabel.setVisible(false);
-  objects.difficultyHelp.setVisible(false);
   objects.mascotPortrait.setVisible(false);
   objects.mascotPortraitFrame.setVisible(false);
   objects.mascotName.setVisible(false);
   objects.mascotSubtitle.setVisible(false);
   objects.mascotLockStatus.setVisible(false);
-  objects.unlockButton.rect.setVisible(false);
-  objects.unlockButton.label.setVisible(false);
-  objects.unlockButton.bevel?.setVisible(false);
+  objects.unlockButton.setVisible(false);
   objects.prevArrow.setVisible(false);
   objects.nextArrow.setVisible(false);
   objects.powerupsTitle.setVisible(false);

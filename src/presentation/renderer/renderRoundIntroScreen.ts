@@ -12,8 +12,10 @@ export type RoundIntroScreenObjects = {
 export function createRoundIntroScreenObjects(
   scene: Phaser.Scene,
 ): RoundIntroScreenObjects {
+  // 2026-05-19: 블록(y~280 까지) 아래 + bar(y=680) 위 빈 영역으로 이동.
+  // 회전체(y~6, 천장 가까이) 와 안 겹침.
   const roundLabel = scene.add
-    .text(360, 300, '', {
+    .text(360, 500, '', {
       fontSize: '48px',
       color: '#ffffff',
       fontFamily: 'DNFBitBitv2, monospace',
@@ -22,9 +24,9 @@ export function createRoundIntroScreenObjects(
     .setVisible(false);
 
   const readyLabel = scene.add
-    .text(360, 380, '', {
+    .text(360, 575, '', {
       fontSize: '32px',
-      color: '#aaffaa',
+      color: '#88ccff', // 하늘색 (이전 연두색 #aaffaa 에서 변경 — 2026-05-19).
       fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)

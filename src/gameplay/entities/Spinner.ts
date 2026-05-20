@@ -40,12 +40,16 @@ export function getCollisionPolygon(
   const cos = Math.cos(spinner.angleRad);
   const sin = Math.sin(spinner.angleRad);
 
+  // 2026-05-19: 시각의 edge stroke(2px) + glow 영역 보정 — 콜리전을 ~4px 외곽으로 확장.
+  // 시각 outer envelope 가 발광 효과로 더 커 보이는데 콜리전이 fill 만 잡으면 "닿았는데 안 튕김" 느낌.
+  const VISUAL_OUTER_PAD = 4;
+
   if (def.kind === 'cube') {
     // 8 vertex 정육면체 → Y회전 후 2D silhouette = 직사각형.
     //   x range = ±s * (|cos| + |sin|),  y range = ±s
     const s = def.size / 2;
-    const halfW = s * (Math.abs(cos) + Math.abs(sin));
-    const halfH = s;
+    const halfW = s * (Math.abs(cos) + Math.abs(sin)) + VISUAL_OUTER_PAD;
+    const halfH = s + VISUAL_OUTER_PAD;
     return [
       { x: cx - halfW, y: cy - halfH },
       { x: cx + halfW, y: cy - halfH },
@@ -71,11 +75,12 @@ export function getCollisionPolygon(
   const base3X = 0 * cos - (2 * s * inv3) * sin;     // -2*s*inv3*sin
   const minX = Math.min(base1X, base2X, base3X);
   const maxX = Math.max(base1X, base2X, base3X);
-  // CCW: top, base-right, base-left (y is down, CCW from top)
+  // CCW: top, base-right, base-left (y is down, CCW from top).
+  // 외곽 방향으로 VISUAL_OUTER_PAD 만큼 확장 (시각 stroke+glow 보정).
   return [
-    { x: cx, y: cy - h },
-    { x: cx + maxX, y: cy + baseY },
-    { x: cx + minX, y: cy + baseY },
+    { x: cx, y: cy - h - VISUAL_OUTER_PAD },
+    { x: cx + maxX + VISUAL_OUTER_PAD, y: cy + baseY + VISUAL_OUTER_PAD },
+    { x: cx + minX - VISUAL_OUTER_PAD, y: cy + baseY + VISUAL_OUTER_PAD },
   ];
 }
 

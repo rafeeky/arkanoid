@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import type { HudViewModel } from '../../view-models/HudViewModel';
 import { LayoutConfigTable } from '../../../definitions/tables/LayoutConfigTable';
+import { createButton, type Button } from '../../ui/Button';
 
 // HUD 상수 — LayoutConfigTable SSOT.
 const HUD_TOP_LABEL_Y = LayoutConfigTable.hud.labelY;
@@ -56,8 +57,8 @@ export type HudObjects = {
   borderLeft: Phaser.GameObjects.Rectangle;
   borderRight: Phaser.GameObjects.Rectangle;
   hudEffectTimer: Phaser.GameObjects.Text;
-  /** 우상단 일시정지 버튼 — ESC 와 동일 동작 (모바일 탭 / 데스크탑 클릭). */
-  pauseButton: { rect: Phaser.GameObjects.Rectangle; iconLeft: Phaser.GameObjects.Rectangle; iconRight: Phaser.GameObjects.Rectangle };
+  /** 우상단 일시정지 버튼 — ESC 와 동일 동작. 공용 Button 컴포넌트. */
+  pauseButton: Button;
 };
 
 // 일시정지 버튼 — 마스코트(centerX=900, top=100) 보다 우측 + 상단.
@@ -125,40 +126,44 @@ export function createHudObjects(
     .text(360, 648, '', { fontSize: '14px', color: '#88ccff', fontFamily: 'DNFBitBitv2, monospace' })
     .setOrigin(0.5, 1).setVisible(false);
 
-  // 일시정지 버튼 — 우상단 (ROUND 와 mascot 사이). 모바일 탭 / 데스크탑 클릭.
-  const pauseRect = scene.add
-    .rectangle(PAUSE_BTN_X, PAUSE_BTN_Y, PAUSE_BTN_SIZE, PAUSE_BTN_SIZE, 0x000000, 0.45)
-    .setOrigin(0.5, 0.5)
-    .setStrokeStyle(2, 0xcccccc)
-    .setScrollFactor(0)
-    .setVisible(false)
-    .setInteractive({ useHandCursor: true });
-  pauseRect.on('pointerdown', onPauseClick);
-  pauseRect.on('pointerover', () => pauseRect.setStrokeStyle(2, 0xffffff));
-  pauseRect.on('pointerout', () => pauseRect.setStrokeStyle(2, 0xcccccc));
+  // 일시정지 버튼 — 우상단. 공용 Button 컴포넌트 (neutral variant) + label 없이 두 아이콘 바를 container 자식으로 추가.
+  // press 시 container.y += 2 → 아이콘 바도 함께 따라감 (container 가 transform SSOT).
+  // scrollFactor: 0 — HUD 는 *canvas 절대 좌표계* (UI 카메라) 사용. cx=1020 같은 canvas 우상단 좌표가 그대로 의미.
+  const pauseButton = createButton(scene, {
+    cx: PAUSE_BTN_X,
+    cy: PAUSE_BTN_Y,
+    w: PAUSE_BTN_SIZE,
+    h: PAUSE_BTN_SIZE,
+    label: '',
+    variant: 'neutral',
+    cornerRadius: 8,
+    scrollFactor: 0,
+    onClick: onPauseClick,
+  });
+  // 두 아이콘 바 — container local 좌표 (button center = 0,0 기준).
+  // scrollFactor 0 명시 — multi-camera 분류 (GameScene.classifyCameras) 가 자식별로 검사하므로
+  // container 의 scrollFactor 만으론 부족. UI 카메라 전용으로 그려져야 함.
   const iconLeft = scene.add
     .rectangle(
-      PAUSE_BTN_X - (PAUSE_ICON_GAP / 2 + PAUSE_ICON_BAR_W / 2),
-      PAUSE_BTN_Y,
+      -(PAUSE_ICON_GAP / 2 + PAUSE_ICON_BAR_W / 2), 0,
       PAUSE_ICON_BAR_W, PAUSE_ICON_BAR_H, 0xffffff,
     )
     .setOrigin(0.5, 0.5)
-    .setScrollFactor(0)
-    .setVisible(false);
+    .setScrollFactor(0, 0);
   const iconRight = scene.add
     .rectangle(
-      PAUSE_BTN_X + (PAUSE_ICON_GAP / 2 + PAUSE_ICON_BAR_W / 2),
-      PAUSE_BTN_Y,
+      (PAUSE_ICON_GAP / 2 + PAUSE_ICON_BAR_W / 2), 0,
       PAUSE_ICON_BAR_W, PAUSE_ICON_BAR_H, 0xffffff,
     )
     .setOrigin(0.5, 0.5)
-    .setScrollFactor(0)
-    .setVisible(false);
+    .setScrollFactor(0, 0);
+  pauseButton.container.add(iconLeft);
+  pauseButton.container.add(iconRight);
 
   return {
     scoreLabel, scoreValue, highScoreLabel, highScoreValue, roundLabel, roundValue,
     livesGraphics, borderTop, borderLeft, borderRight, hudEffectTimer,
-    pauseButton: { rect: pauseRect, iconLeft, iconRight },
+    pauseButton,
   };
 }
 
@@ -175,9 +180,7 @@ export function renderHud(objects: HudObjects, hud: HudViewModel): void {
   objects.borderRight.setVisible(true);
 
   // 일시정지 버튼 visible (인게임 HUD 와 동일 lifecycle).
-  objects.pauseButton.rect.setVisible(true);
-  objects.pauseButton.iconLeft.setVisible(true);
-  objects.pauseButton.iconRight.setVisible(true);
+  objects.pauseButton.setVisible(true);
 
   // 라이프 픽셀하트.
   objects.livesGraphics.clear().setVisible(true);
@@ -211,7 +214,5 @@ export function hideHud(objects: HudObjects): void {
   objects.borderRight.setVisible(false);
   objects.livesGraphics.clear().setVisible(false);
   objects.hudEffectTimer.setVisible(false);
-  objects.pauseButton.rect.setVisible(false);
-  objects.pauseButton.iconLeft.setVisible(false);
-  objects.pauseButton.iconRight.setVisible(false);
+  objects.pauseButton.setVisible(false);
 }
