@@ -30,17 +30,10 @@ const ASSET_FILES: Record<string, string> = {
 
   // (slider / spinner 스프라이트는 의도적으로 빠짐 — Rectangle/Arc / 3D Graphics 로 직접 그림)
 
-  // Ball / Item 스프라이트 (alpha 누끼됨).
-  ball:        `${A}/gameplay/ball.png`,
+  // Item 스프라이트 (alpha 누끼됨). ball/bar 자산 폐기 — GlossyStyle 헬퍼 (Graphics) 로 직접 그림.
   item_expand: `${A}/gameplay/item_expand.png`,
   item_magnet: `${A}/gameplay/item_magnet.png`,
   item_laser:  `${A}/gameplay/item_laser.png`,
-
-  // 바 스프라이트 (120×16, alpha 누끼됨). activeEffect 별 4종.
-  bar_normal:        `${A}/bars/bar_normal.png`,
-  bar_expand_tint:   `${A}/bars/bar_expand_tint.png`,
-  bar_magnet_tint:   `${A}/bars/bar_magnet_tint.png`,
-  bar_laser_tint:    `${A}/bars/bar_laser_tint.png`,
 
   // 테두리 / 문 스프라이트 (이미 alpha 누끼됨)
   border_horizontal: `${A}/borders/border_horizontal.png`,
