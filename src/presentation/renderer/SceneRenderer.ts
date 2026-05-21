@@ -17,15 +17,18 @@ export type HudHandlers = {
   onQuitToTitle?: () => void;
 };
 
-/** 화면(currentScreen) → 배경 텍스처 키 매핑. inGame/roundIntro 는 별도 처리(playfieldBg). */
+/** 화면(currentScreen) → 배경 텍스처 키 매핑. inGame/roundIntro 는 stageIndex 별 분기. */
 const BG_KEY_BY_SCREEN: Record<ScreenState['currentScreen'], string> = {
   title:      'bg_stage_02',  // 2026-05-18: 타이틀 배경 bg_stage_02 사용 (사용자 요청)
   introStory: 'bg_title',
-  roundIntro: 'bg_title', // unused — inGame/roundIntro 는 위에서 early-return
+  roundIntro: 'bg_title', // unused — inGame/roundIntro 는 BG_BY_STAGE 로 처리
   inGame:     'bg_title', // unused
   gameOver:   'bg_gameover',
   gameClear:  'bg_gameclear',
 };
+
+/** 스테이지 index → 인게임 배경 (상하단 띠) 텍스처 키. 플레이필드는 playfieldBg(검정) 가 덮음. */
+const BG_BY_STAGE: readonly string[] = ['bg_pixel_01', 'bg_pixel_02', 'bg_pixel_03'];
 
 import { HUDPresenter } from '../controller/HUDPresenter';
 import { GameplayConfigTable } from '../../definitions/tables/GameplayConfigTable';
@@ -197,8 +200,9 @@ export class SceneRenderer {
     stageIndex: number,
   ): void {
     if (screen === 'inGame' || screen === 'roundIntro') {
-      void stageIndex;
-      this.backgroundImage.setVisible(false);
+      // 상하단 띠 = stageIndex 별 bg_pixel_0X. 플레이필드는 playfieldBg(검정) 가 덮음 (depth -50 > -100).
+      const bgKey = BG_BY_STAGE[stageIndex] ?? BG_BY_STAGE[0]!;
+      this.backgroundImage.setTexture(bgKey).setVisible(true);
       this.playfieldBg.setVisible(true);
       this.gameOverBg.setVisible(false);
       return;

@@ -20,6 +20,10 @@ const ASSET_FILES: Record<string, string> = {
   bg_stage_03:   `${A}/backgrounds/bg_stage_03.png`,
   bg_gameover:   `${A}/backgrounds/bg_gameover.png`,
   bg_gameclear:  `${A}/backgrounds/bg_gameclear.png`,
+  // inGame 상하단 띠 — 스테이지별 픽셀 배경 (플레이필드 검정 사각은 그 위에 덮임).
+  bg_pixel_01:   `${A}/backgrounds/bg_pixel_01.png`,
+  bg_pixel_02:   `${A}/backgrounds/bg_pixel_02.png`,
+  bg_pixel_03:   `${A}/backgrounds/bg_pixel_03.png`,
 
   // 블록 (누끼됨)
   block_basic:       `${A}/blocks/block_basic.png`,

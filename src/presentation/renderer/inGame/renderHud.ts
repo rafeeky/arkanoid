@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import type { HudViewModel } from '../../view-models/HudViewModel';
 import { LayoutConfigTable } from '../../../definitions/tables/LayoutConfigTable';
 import { createButton, type Button } from '../../ui/Button';
+import { POWERUP_TABLE, colorToHex } from '../../../definitions/tables/PowerupTable';
 
 // HUD 상수 — LayoutConfigTable SSOT.
 const HUD_TOP_LABEL_Y = LayoutConfigTable.hud.labelY;
@@ -190,13 +191,15 @@ export function renderHud(objects: HudObjects, hud: HudViewModel): void {
     drawHeart(objects.livesGraphics, hx, heartY);
   }
 
-  // 효과 타이머 (magnet 5회 / laser 6초).
+  // 효과 타이머 (magnet 5회 / laser 6초). 색·라벨은 POWERUP_TABLE 참조 (SSOT).
   if (hud.activeEffect === 'magnet') {
+    const t = POWERUP_TABLE.magnet;
     const uses = hud.magnetRemainingUses ?? 0;
-    objects.hudEffectTimer.setText(`MAGNET ${uses} LEFT`).setColor('#88ccff').setVisible(true);
+    objects.hudEffectTimer.setText(`${t.label} ${uses} LEFT`).setColor(colorToHex(t.color)).setVisible(true);
   } else if (hud.activeEffect === 'laser') {
+    const t = POWERUP_TABLE.laser;
     const remainSec = ((hud.laserRemainingMs ?? 0) / 1000).toFixed(1);
-    objects.hudEffectTimer.setText(`LASER ${remainSec}s`).setColor('#ff8888').setVisible(true);
+    objects.hudEffectTimer.setText(`${t.label} ${remainSec}s`).setColor(colorToHex(t.color)).setVisible(true);
   } else {
     objects.hudEffectTimer.setVisible(false);
   }
