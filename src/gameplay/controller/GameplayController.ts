@@ -145,6 +145,9 @@ export class GameplayController {
       newBar = moveBar(this.state.bar, moveDirection, dt, this.deps.config);
     }
     const currentBlocks = this.state.blocks;
+    // 회전체 swept 충돌용 — 이번 tick 시작 시점 공 위치 snapshot (MovementSystem 처리 *전*).
+    // 빠른 공이 회전체 폴리곤을 한 프레임에 건너뛰면 *현재 위치* 검사 못 잡음 → swept 가 잡음.
+    const preMovementBalls = this.state.balls.map((b) => ({ ...b }));
 
     // Block and wall collisions are resolved inside moveBallWithCollisions (swept AABB).
     // Bar / item collisions remain in the detectCollisions pipeline below.
@@ -309,10 +312,11 @@ export class GameplayController {
       }
     }
 
-    // 6.55. Spinner ↔ Ball 충돌 처리
+    // 6.55. Spinner ↔ Ball 충돌 처리 — swept (prevBall) 로 터널링 방지.
     if (this.state.spinnerStates.length > 0) {
       const updatedBalls = this.state.balls.map((ball) => {
-        const result = this.spinnerSystem.handleBallCollisions(ball, this.state.spinnerStates);
+        const prev = preMovementBalls.find((p) => p.id === ball.id);
+        const result = this.spinnerSystem.handleBallCollisions(ball, this.state.spinnerStates, prev);
         return result.nextBall;
       });
       this.state = { ...this.state, balls: updatedBalls };

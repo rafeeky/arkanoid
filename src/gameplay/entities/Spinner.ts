@@ -138,8 +138,74 @@ function isPointInsidePolygon(poly: readonly Vec2[], p: Vec2): boolean {
 }
 
 /**
+ * 공 swept 충돌 검사 — prev → curr 선분이 폴리곤 변을 가로질러 inside 로 들어왔는지.
+ *
+ * 빠른 공이 한 프레임에 폴리곤을 *건너뛰면* (터널링) 현재 위치 검사로는 못 잡으므로
+ * 이전 위치 → 현재 위치 선분으로 변과 교차 시점 t (0..1) 탐색.
+ *
+ * @returns 가장 빠른 (t 최소) 충돌 — { t, nx, ny } 또는 null (충돌 없음).
+ */
+function sweptCheckPolygon(
+  prev: Vec2,
+  curr: Vec2,
+  poly: readonly Vec2[],
+): { t: number; nx: number; ny: number } | null {
+  let bestT = Infinity;
+  let bestNx = 0;
+  let bestNy = 0;
+  let hit = false;
+
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]!;
+    const b = poly[(i + 1) % poly.length]!;
+    const ex = b.x - a.x;
+    const ey = b.y - a.y;
+    const lenSq = ex * ex + ey * ey;
+    if (lenSq < 1e-12) continue;
+    const len = Math.sqrt(lenSq);
+    // CCW outward normal (poly 가 CCW 가정 — getCollisionPolygon 보장).
+    const nx = ey / len;
+    const ny = -ex / len;
+
+    // 변 plane 까지의 부호 거리 (outward 양수).
+    const distPrev = (prev.x - a.x) * nx + (prev.y - a.y) * ny;
+    const distCurr = (curr.x - a.x) * nx + (curr.y - a.y) * ny;
+
+    // 공 surface 가 변 plane 에 닿는 = dist = BALL_RADIUS.
+    // prev 가 outside (dist > R) + curr 가 inside-or-touching (dist <= R) 이면 진입.
+    if (distPrev > BALL_RADIUS && distCurr <= BALL_RADIUS) {
+      const denom = distPrev - distCurr;
+      if (denom < 1e-9) continue;
+      const t = (distPrev - BALL_RADIUS) / denom;
+      if (t < 0 || t > 1) continue;
+      // 충돌 시점의 공 중심 위치.
+      const hitX = prev.x + (curr.x - prev.x) * t;
+      const hitY = prev.y + (curr.y - prev.y) * t;
+      // 그 시점 공 중심이 변 segment 영역 내인지 (투영 t_e 0..1).
+      const tEdge = ((hitX - a.x) * ex + (hitY - a.y) * ey) / lenSq;
+      if (tEdge < 0 || tEdge > 1) continue;
+
+      if (t < bestT) {
+        bestT = t;
+        bestNx = nx;
+        bestNy = ny;
+        hit = true;
+      }
+    }
+  }
+
+  return hit ? { t: bestT, nx: bestNx, ny: bestNy } : null;
+}
+
+/**
  * 공 ↔ 스피너 폴리곤 충돌 검사 + 반사.
  *
+ * 두 단계 검사:
+ *   1) **swept** — prevBall 주어지면 선분 (prev → curr) 이 폴리곤 변을 가로질러 들어왔는지.
+ *      빠른 공 터널링 방지. swept hit 시 그 시점으로 위치 되돌리고 반사.
+ *   2) **현재 위치 검사** — swept 가 안 잡았으면 옛 로직 (closest point + inside test).
+ *
+ * @param prevBall 이번 tick 시작 시점 공 위치 (선택). MovementSystem 처리 *전* 위치.
  * @returns
  *   - collided: false → 충돌 없음 (ball 그대로)
  *   - collided: true  → push-out + 반사 적용된 nextBall
@@ -148,8 +214,44 @@ export function handleBallCollision(
   ball: BallState,
   spinner: SpinnerRuntimeState,
   def: SpinnerDefinition,
+  prevBall?: BallState,
 ): { nextBall: BallState; collided: boolean } {
   const poly = getCollisionPolygon(spinner, def);
+
+  // 1) swept 검사 — prevBall 있을 때만.
+  if (prevBall) {
+    const swept = sweptCheckPolygon(
+      { x: prevBall.x, y: prevBall.y },
+      { x: ball.x, y: ball.y },
+      poly,
+    );
+    if (swept) {
+      // 충돌 시점 공 중심 위치.
+      const hitX = prevBall.x + (ball.x - prevBall.x) * swept.t;
+      const hitY = prevBall.y + (ball.y - prevBall.y) * swept.t;
+      const dot = ball.vx * swept.nx + ball.vy * swept.ny;
+      // dot < 0 = 변쪽으로 들어오는 중 → 반사.
+      if (dot < 0) {
+        return {
+          nextBall: {
+            ...ball,
+            x: hitX,
+            y: hitY,
+            vx: ball.vx - 2 * dot * swept.nx,
+            vy: ball.vy - 2 * dot * swept.ny,
+          },
+          collided: true,
+        };
+      }
+      // dot >= 0 (이미 분리 방향) — push-out 만, 반사 안 함.
+      return {
+        nextBall: { ...ball, x: hitX, y: hitY },
+        collided: true,
+      };
+    }
+  }
+
+  // 2) 옛 로직 — 현재 위치 closest point + inside test.
   const ballPos: Vec2 = { x: ball.x, y: ball.y };
   const { pt: closest, edgeNormal } = closestPointOnPolygon(poly, ballPos);
 

@@ -161,6 +161,7 @@ export class SpinnerSystem {
   handleBallCollisions(
     ball: BallState,
     spinnerStates: readonly SpinnerRuntimeState[],
+    prevBall?: BallState,
   ): {
     nextBall: BallState;
     collided: boolean;
@@ -179,14 +180,21 @@ export class SpinnerSystem {
     // broad-phase 반경 = def.size + BALL_RADIUS (silhouette 의 최외곽 vertex 가
     // size/2 보다 멀 수 있어 def.size 로 잡음. cube vertex max ≈ s√3, triangle
     // top vertex 거리 = h ≈ size * 0.577).
+    //
+    // 터널링 방지: prevBall 도 broad-phase 검사에 포함 — 현재 위치가 broad 밖이라도
+    // 이전 위치가 안이면 candidate (swept 검사가 잡음).
+    // 한 프레임 이동량 (travel) 도 broad 반경에 더함 — *멀리서 빠르게 통과* 케이스 잡기.
+    // prev 와 curr 가 둘 다 spinner 영역 밖이어도 *선분이 영역 가로지름* 가능.
+    const travel = prevBall ? distance(prevBall.x, prevBall.y, ball.x, ball.y) : 0;
     const candidates: Array<{ s: SpinnerRuntimeState; def: SpinnerDefinition; dist: number }> = [];
     for (const s of activeSpinners) {
       const def = this.spinnerDefinitions[s.definitionId];
       if (!def) continue;
-      const broadR = def.size + BALL_RADIUS;
+      const broadR = def.size + BALL_RADIUS + travel;
       const d = distance(ball.x, ball.y, s.x, s.y);
-      if (d < broadR) {
-        candidates.push({ s, def, dist: d });
+      const dPrev = prevBall ? distance(prevBall.x, prevBall.y, s.x, s.y) : Infinity;
+      if (d < broadR || dPrev < broadR) {
+        candidates.push({ s, def, dist: Math.min(d, dPrev) });
       }
     }
     if (candidates.length === 0) {
@@ -196,7 +204,7 @@ export class SpinnerSystem {
 
     // 첫 번째 후보 polygon 으로 정확 충돌 — 통과하면 다음 후보.
     for (const { s, def } of candidates) {
-      const r = Spinner.handleBallCollision(ball, s, def);
+      const r = Spinner.handleBallCollision(ball, s, def, prevBall);
       if (r.collided) {
         return r;
       }

@@ -614,6 +614,33 @@ describe('SpinnerSystem.handleBallCollisions — triangle', () => {
     const result = system.handleBallCollisions(ball, [spinner]);
     expect(result.nextBall.vy).toBeLessThan(0);
   });
+
+  // -----------------------------------------------------------------
+  // 터널링 (swept) — 빠른 공이 한 프레임에 폴리곤 통과 시도.
+  // -----------------------------------------------------------------
+
+  it('triangle: 빠른 공이 위에서 변 영역을 *건너뛰면* swept 가 잡아 반사한다', () => {
+    // tetrahedron: spinner (360, 300), 변 1 = top(360, 256.8) → base-right(388, 317.06).
+    // 변 1 의 outward normal (CCW) = (0.907, -0.421) — 우상단 방향.
+    // 공 x=390 (변 1 의 우측 outside 영역), y 240 → 350 수직 통과.
+    //   prev 변 1 거리 34.3 (outside-far, BALL_RADIUS 10 초과)
+    //   curr 변 1 거리 -12.0 (inside)
+    //   swept t ≈ 0.525, hit y ≈ 298, tEdge ≈ 0.75 (변 1 영역 안) → 충돌 ✓
+    const spinner = makeCirclingSpinner({ id: 's0', definitionId: 'spinner_triangle', x: 360, y: 300 });
+    const prev = makeBall({ x: 390, y: 240, vx: 0, vy: 6600 });
+    const curr = makeBall({ x: 390, y: 350, vx: 0, vy: 6600 });
+    const result = system.handleBallCollisions(curr, [spinner], prev);
+    expect(result.collided).toBe(true);
+    // 변 1 outward 가 (0.907, -0.421) 라 반사 후 vx 양수, vy 양수 감소 (또는 음수).
+    expect(result.nextBall.vx).toBeGreaterThan(0); // 변에서 우측으로 튕김
+  });
+
+  it('triangle: prev 안 주면 옛 로직대로 동작 (호환). 빠른 통과는 옛 로직으로 못 잡음', () => {
+    const spinner = makeCirclingSpinner({ id: 's0', definitionId: 'spinner_triangle', x: 360, y: 300 });
+    const curr = makeBall({ x: 390, y: 350, vx: 0, vy: 6600 });
+    const result = system.handleBallCollisions(curr, [spinner]); // prev 없음
+    expect(result.collided).toBe(false); // 옛 로직은 현재 위치만 검사 → 통과 못 잡음
+  });
 });
 
 // ---------------------------------------------------------------------------
