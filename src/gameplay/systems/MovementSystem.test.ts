@@ -15,7 +15,7 @@ const baseConfig: GameplayConfig = {
   roundIntroDurationMs: 1500,
   blockHitFlashDurationMs: 120,
   barBreakDurationMs: 700,
-  expandMultiplier: 1.5,  physics: defaultPhysicsConfig,
+  expandMultiplier: 1.5, autoLaunchDelayMs: 7000, physics: defaultPhysicsConfig,
 };
 
 const baseBar: BarState = {

@@ -1,9 +1,84 @@
 # progress.md
 
-알카노이드 프로젝트 진척 현황. 최종 갱신 **2026-05-10**.
+알카노이드 프로젝트 진척 현황. 최종 갱신 **2026-05-22**.
 
 전체 흐름 요약: **TS 선구현 → Unity 포팅 → 기능 확장 + 모바일 대응 → 출시 전 TS 폴리싱 단계** 진행 중.
 출시 목표: 1개월 내 Google Play. 현재는 TS-side 폴리싱 (해상도/HUD/Mascot/Pause/오디오/궤적 등) + 데이터 단일화 단계.
+
+---
+
+## 0-rec. 2026-05-20~22 추가 작업 (UI/시각 폴리싱 + 데이터 토큰화)
+
+### 공용 UI 컴포넌트 통합
+
+| 항목 | 내용 | 파일 |
+|---|---|---|
+| **공용 Button** | 5곳 흩어진 버튼 그리기 코드 → `createButton(style)` 한 곳. variant primary/danger/neutral, toggle, glow, fillColor 오버라이드, setDisabled. container 기반 (transform SSOT) | `src/presentation/ui/Button.ts` |
+| **12개 버튼 통합** | HUD pause / GameOver/Clear retry+quit / Pause bgm+sfx+quit+resume / Title NORMAL+HARD+UNLOCK | (위 5 호출처) |
+| **GlossyStyle 헬퍼** | 바/공 Graphics 직접 그리기. shape: pill/circle. baseColor/highlight/outline 토큰 주입. 자산 PNG 폐기 (bar/ball) | `src/presentation/ui/GlossyStyle.ts` |
+| **Toast 컴포넌트** | "Not enough gold" 같은 짧은 알림. fade-in/hold/fade-out | `src/presentation/ui/Toast.ts` |
+
+### 카메라 정석 (diegetic / non-diegetic)
+
+- multi-camera 환경의 **카메라 컨벤션 표** 명문화 + 메모리 박음
+- 화면별 정석: Title/GameOver/Clear = 전부 UI. 인게임/일시정지 = 혼합. RoundIntro = 혼합 (메시지만 UI).
+- **GameOver/Clear/RoundIntro 정석 통일** — main 카메라 잔재 → UI 카메라로 일제 이전. canvas 좌표계 직접 재배치.
+- **Phaser default `scrollFactor=1` 함정** 알리기 + `Container.setScrollFactor()` 가 자식 비전파 발견 + 명시 룰.
+
+### 충돌 정확도
+
+- **회전체 swept 콜리전** — `Spinner.handleBallCollision` 에 `prevBall?` 옵션. 선분-변 교차 검사로 터널링 fix. broad-phase 반경에 `travel` 더함. 단위 테스트 2개 추가.
+- **테두리 빈틈 fix** — `BORDER_LENGTH 64 → 60` (720 약수). `BORDER_TOP_COLS / SIDE_ROWS 11 → 12`. 모든 stage JSON 의 placement 갯수 갱신.
+
+### 공 파워 상태 + 라운드별 트레일
+
+| 항목 | 내용 |
+|---|---|
+| BallState 신규 필드 | `blocksSincePaddle?: number`, `isPowered?: boolean` |
+| 상태 로직 | 블록 destroy → counter +1. ≥2 시 isPowered=true. 바 충돌 (반사/자석 부착) 시 reset. 벽 튕김은 reset 안 함. spawn/respawn 시 명시 reset (StageRuntimeFactory, applyLaunchBall) |
+| **단일 trail 컴포넌트** | `createBallTrail(scene, style)` + config 주입. 시간 기반 push (`pushIntervalMs` 18, 60fps 매 frame) + 정지 보호. 머리 또렷 → 꼬리 fade. depth -1 (공 뒤) |
+| **TrailStyleTable SSOT** | golden_sun / blue_meteor / sunset 3 프리셋 (color/glow/segmentCount/headAlpha/segmentRadius/pushIntervalMs) |
+| **라운드별 매핑** | `StageDefinition.trailStyle` 옵셔널 필드. stage1/2/3.json 에 각각 지정. GameplayRuntimeState.currentTrailStyle 로 전달. BallObjects 가 3 trail 미리 생성, 현재 stage 만 active |
+
+### 파워업 데이터 토큰화 + 토스트 팝
+
+| 항목 | 내용 |
+|---|---|
+| **PowerupTable SSOT** | expand/magnet/laser 각 `{color, iconKey, label}` 단일 정의. `colorToHex` helper | `src/definitions/tables/PowerupTable.ts` |
+| **토스트 색 일관성** | 옛 노랑 #ffff66 고정 제거 → POWERUP_TABLE 참조. expand 주황 / magnet 파랑 / laser 빨강. 아이콘 + 라벨 가로 배열 |
+| **토스트 팝 애니메이션** | 일정 위치 (canvas 가운데 + bar.y - 32). scale 0.5→1 + alpha 0→1 (100ms, Back.out) → hold 500ms → fade 300ms. 총 ~800ms |
+| **HUD 잔량 카운터 토큰 경유** | 옛 인라인 hex → POWERUP_TABLE.color 참조 |
+
+### 인게임 배경 + HUD 가독성
+
+| 항목 | 내용 |
+|---|---|
+| **스테이지별 배경** | `bg_pixel_01/02/03` PNG (941×1672 RGB) — `SceneRenderer.BG_BY_STAGE` 테이블. inGame/roundIntro 시 `backgroundImage` 가 stageIndex 별 bg_pixel_0X. playfieldBg (검정) 가 가운데 덮어 플레이필드 유지 |
+| **하단 시각 회색 띠** | HUD 의 `borderTop` 미러 → `borderBottom` 추가 (y = PLAYFIELD_HEIGHT + thickness/2). **충돌 X (시각만)** — 죽음 로직 무변경 |
+| **HUD 텍스트 stroke** | 배경 라운드별 변동 → 고정 색 글씨 가독성 한쪽 무조건 묻힘. 모든 HUD/RoundIntro/Slider 텍스트에 검정 stroke (외곽선 thickness 2~6 폰트 비례). "자막 패턴" — 맥락 무관 가독성 |
+
+### 자동 발사
+
+| 항목 | 내용 |
+|---|---|
+| **`autoLaunchDelayMs` config** | 라운드 시작/사망 후 N ms 발사 안 하면 자동 launch. default 7000ms | `GameplayConfig.ts` / `GameplayConfigTable.ts` |
+| Controller timer | `autoLaunchTimerMs` private 필드. tick 안에서 비활성 공만 있을 때 누적, 임계 도달 시 `applyLaunchBall`. 활성 공 있으면 reset |
+
+### 자산 / 마스코트 / dev
+
+| 항목 | 내용 |
+|---|---|
+| Story 풀스크린 배경 | OneDrive `story01~04.png` → 풀스크린 (1080×1920). 옛 세로 짧은 일러스트 폐기. IntroStory 도 UI 카메라 정석 통일 |
+| GameOver/Clear 마스코트 | gameover_frame_1~4 (개별 RGBA PNG, 수동 timer 토글) + dance_sheet (1 spritesheet, Phaser anim). 각 화면 하단 *3마리 가로 배치* |
+| Endscreen 배경 | bg_gameover/gameclear PNG 풀스크린 |
+| **Dev overlay 토글** | URL 쿼리 `?dev-overlay=1` 일 때만 dev 시각화 (block ID, trail, 충돌 로그). 평소 dev 서버 깨끗 |
+| **자산 cleanup** | dead PNG (bar_normal/expand/magnet/laser_tint, ball) + AssetLoader 키 제거 |
+
+### 학습 누적
+
+- 학습 로그 (Notion `📓 알바트로스 학습 로그`): "implicit coupling", "diegetic / non-diegetic", "Swept 콜리전 / 터널링"
+- Voca 추가: `diegetic`, `non-diegetic`, `멘탈 모델`, `swept collision`, `tunneling`, `broad-phase / narrow-phase`
+- 학습 원칙 메모리 갱신: 카메라 정석 표 + Phaser default 함정 + 인프라 변경 시 전수 재점검 룰 + 버튼 시각 규칙 (glow/cornerRadius)
 
 ---
 

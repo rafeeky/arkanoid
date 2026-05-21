@@ -25,6 +25,8 @@ export type GameplayConfig = {
   blockHitFlashDurationMs: number;
   barBreakDurationMs: number;
   expandMultiplier: number;
+  /** 라운드 시작 후 공 발사 안 하면 N ms 후 자동 발사. 데이터 제어용. */
+  autoLaunchDelayMs: number;
   physics: PhysicsConfig;
 };
 

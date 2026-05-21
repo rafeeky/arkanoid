@@ -36,9 +36,11 @@ export function createSliderObjects(scene: Phaser.Scene): SliderObjects {
   track.strokeRoundedRect(trackLeft, trackTop, trackW, trackH, cornerR);
 
   // 드래그 hint — 슬라이더 우측 하단. 한 번 보여줘서 "드래그해라" 알림.
+  // stroke 추가: 라운드별 변동 배경 위에서 가독성 보장 (HUD 텍스트와 동일 원칙).
   const dragHint = scene.add
     .text(trackCenterX + L.trackHalfWidth, L.centerY + L.knobRadius + 12, 'DRAG TO MOVE BAR', {
       fontSize: '18px', color: '#ffff66', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 3,
     })
     .setOrigin(1, 0).setScrollFactor(0).setVisible(false);
 
@@ -56,10 +58,11 @@ export function createSliderObjects(scene: Phaser.Scene): SliderObjects {
     .setScrollFactor(0)
     .setVisible(false);
 
-  // TAP HERE TO LAUNCH — 살짝 위로 (마스코트 얼굴과 겹침 방지).
+  // TAP HERE TO LAUNCH — 살짝 위로 (마스코트 얼굴과 겹침 방지). 검정 stroke 로 가독성 보장.
   const launchHint = scene.add
     .text(LayoutConfigTable.canvas.width / 2, L.centerY - 54, 'TAP HERE TO LAUNCH', {
       fontSize: '24px', color: '#ffff66', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 4,
     })
     .setOrigin(0.5, 0.5)
     .setScrollFactor(0)

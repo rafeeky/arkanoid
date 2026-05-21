@@ -131,7 +131,7 @@ const minimalConfig: GameplayConfig = {
   roundIntroDurationMs: 2000,
   blockHitFlashDurationMs: 200,
   barBreakDurationMs: 700,
-  expandMultiplier: 1.5,  physics: defaultPhysicsConfig,
+  expandMultiplier: 1.5, autoLaunchDelayMs: 7000, physics: defaultPhysicsConfig,
 };
 
 const minimalStageDefinition: StageDefinition = {

@@ -15,11 +15,13 @@ export function createRoundIntroScreenObjects(
   // 정석 (learning_principles_albatross §4): RoundIntro 는 *혼합* — 게임 월드(블록/바/회전체)는 main,
   // 메시지(ROUND N / READY)만 UI 카메라. 블록 끝(visual ~700) 아래 + bar(visual ~1300) 위 빈 영역.
   // canvas 좌표계 — cx=540 가운데. cy: roundLabel 1080, readyLabel 1180 (블록과 bar 사이).
+  // ROUND/READY 텍스트 — 어두운 stroke 로 라운드별 변동 배경 (bg_pixel_0X) 위에서 가독성 보장.
   const roundLabel = scene.add
     .text(540, 1080, '', {
       fontSize: '72px',
       color: '#ffffff',
       fontFamily: 'DNFBitBitv2, monospace',
+      stroke: '#000000', strokeThickness: 6,
     })
     .setOrigin(0.5, 0.5)
     .setScrollFactor(0)
@@ -30,6 +32,7 @@ export function createRoundIntroScreenObjects(
       fontSize: '48px',
       color: '#88ccff', // 하늘색.
       fontFamily: 'DNFBitBitv2, monospace',
+      stroke: '#000000', strokeThickness: 5,
     })
     .setOrigin(0.5, 0.5)
     .setScrollFactor(0)

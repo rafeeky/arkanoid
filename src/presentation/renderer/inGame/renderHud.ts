@@ -55,6 +55,7 @@ export type HudObjects = {
   roundValue: Phaser.GameObjects.Text;
   livesGraphics: Phaser.GameObjects.Graphics;
   borderTop: Phaser.GameObjects.Rectangle;
+  borderBottom: Phaser.GameObjects.Rectangle;
   borderLeft: Phaser.GameObjects.Rectangle;
   borderRight: Phaser.GameObjects.Rectangle;
   hudEffectTimer: Phaser.GameObjects.Text;
@@ -75,41 +76,59 @@ export function createHudObjects(
   scene: Phaser.Scene,
   onPauseClick: () => void = () => { /* noop */ },
 ): HudObjects {
+  // HUD 텍스트 — 어두운 stroke 로 *모든 배경 (밝은 낮 / 어두운 밤)* 에서 가독성 유지.
+  // 배경이 라운드별 변동이라 고정 색으로는 한쪽이 묻힘 → 외곽선이 맥락 무관 보장 (자막 패턴).
+  const HUD_STROKE = '#000000';
+  const HUD_STROKE_LABEL = 3; // 작은 라벨 폰트용
+  const HUD_STROKE_VALUE = 4; // 큰 값 폰트용
+
   const scoreLabel = scene.add
     .text(HUD_LEFT_X, HUD_TOP_LABEL_Y, 'SCORE', {
       fontSize: HUD_LABEL_FONT, color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace',
+      stroke: HUD_STROKE, strokeThickness: HUD_STROKE_LABEL,
     })
     .setOrigin(0, 0).setScrollFactor(0).setVisible(false);
   const scoreValue = scene.add
     .text(HUD_LEFT_X, HUD_TOP_VALUE_Y, '0', {
       fontSize: HUD_VALUE_FONT, color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace',
+      stroke: HUD_STROKE, strokeThickness: HUD_STROKE_VALUE,
     })
     .setOrigin(0, 0).setScrollFactor(0).setVisible(false);
 
   const highScoreLabel = scene.add
     .text(HUD_CENTER_X, HUD_TOP_LABEL_Y, 'HIGH SCORE', {
       fontSize: HUD_LABEL_FONT, color: '#ff3333', fontFamily: 'DNFBitBitv2, monospace', fontStyle: 'bold',
+      stroke: HUD_STROKE, strokeThickness: HUD_STROKE_LABEL,
     })
     .setOrigin(0.5, 0).setScrollFactor(0).setVisible(false);
   const highScoreValue = scene.add
     .text(HUD_CENTER_X, HUD_TOP_VALUE_Y, '0', {
       fontSize: HUD_VALUE_FONT, color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace',
+      stroke: HUD_STROKE, strokeThickness: HUD_STROKE_VALUE,
     })
     .setOrigin(0.5, 0).setScrollFactor(0).setVisible(false);
 
   const roundLabel = scene.add
     .text(HUD_RIGHT_X, HUD_TOP_LABEL_Y, 'ROUND', {
       fontSize: HUD_LABEL_FONT, color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace',
+      stroke: HUD_STROKE, strokeThickness: HUD_STROKE_LABEL,
     })
     .setOrigin(1, 0).setScrollFactor(0).setVisible(false);
   const roundValue = scene.add
     .text(HUD_RIGHT_X, HUD_TOP_VALUE_Y, '1', {
       fontSize: HUD_VALUE_FONT, color: '#ffffff', fontFamily: 'DNFBitBitv2, monospace',
+      stroke: HUD_STROKE, strokeThickness: HUD_STROKE_VALUE,
     })
     .setOrigin(1, 0).setScrollFactor(0).setVisible(false);
 
   const borderTop = scene.add
     .rectangle(360, -PLAYFIELD_BORDER_THICKNESS / 2,
+               720 + PLAYFIELD_BORDER_THICKNESS * 2, PLAYFIELD_BORDER_THICKNESS, PLAYFIELD_BORDER_COLOR)
+    .setOrigin(0.5, 0.5).setVisible(false);
+  // 하단 시각 회색 띠 — borderTop 미러. y = 플레이필드 아래쪽 외측 (720 + thickness/2).
+  // 충돌 X (시각만) — 바닥은 공이 빠져 죽는 자리. setRectangle 만, BorderBlock state 무관.
+  const borderBottom = scene.add
+    .rectangle(360, 720 + PLAYFIELD_BORDER_THICKNESS / 2,
                720 + PLAYFIELD_BORDER_THICKNESS * 2, PLAYFIELD_BORDER_THICKNESS, PLAYFIELD_BORDER_COLOR)
     .setOrigin(0.5, 0.5).setVisible(false);
   const borderLeft = scene.add
@@ -124,7 +143,10 @@ export function createHudObjects(
   const livesGraphics = scene.add.graphics().setScrollFactor(0).setVisible(false);
 
   const hudEffectTimer = scene.add
-    .text(360, 648, '', { fontSize: '14px', color: '#88ccff', fontFamily: 'DNFBitBitv2, monospace' })
+    .text(360, 648, '', {
+      fontSize: '14px', color: '#88ccff', fontFamily: 'DNFBitBitv2, monospace',
+      stroke: HUD_STROKE, strokeThickness: 2, // 작은 폰트 → 얇은 stroke
+    })
     .setOrigin(0.5, 1).setVisible(false);
 
   // 일시정지 버튼 — 우상단. 공용 Button 컴포넌트 (neutral variant) + label 없이 두 아이콘 바를 container 자식으로 추가.
@@ -163,7 +185,7 @@ export function createHudObjects(
 
   return {
     scoreLabel, scoreValue, highScoreLabel, highScoreValue, roundLabel, roundValue,
-    livesGraphics, borderTop, borderLeft, borderRight, hudEffectTimer,
+    livesGraphics, borderTop, borderBottom, borderLeft, borderRight, hudEffectTimer,
     pauseButton,
   };
 }
@@ -177,6 +199,7 @@ export function renderHud(objects: HudObjects, hud: HudViewModel): void {
   objects.roundValue.setText(String(hud.round)).setVisible(true);
 
   objects.borderTop.setVisible(true);
+  objects.borderBottom.setVisible(true);
   objects.borderLeft.setVisible(true);
   objects.borderRight.setVisible(true);
 
@@ -213,6 +236,7 @@ export function hideHud(objects: HudObjects): void {
   objects.roundLabel.setVisible(false);
   objects.roundValue.setVisible(false);
   objects.borderTop.setVisible(false);
+  objects.borderBottom.setVisible(false);
   objects.borderLeft.setVisible(false);
   objects.borderRight.setVisible(false);
   objects.livesGraphics.clear().setVisible(false);

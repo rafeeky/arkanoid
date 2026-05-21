@@ -32,6 +32,8 @@ export class GameplayController {
   private readonly laserSystem: LaserSystem;
   private readonly spinnerSystem: SpinnerSystem;
   private laserShotCounter = 0;
+  /** 자동 발사 timer (ms 누적). 비활성 공만 있을 때 누적, 임계 도달 시 자동 LaunchBall. */
+  private autoLaunchTimerMs = 0;
 
   constructor(initialState: GameplayRuntimeState, deps: Dependencies) {
     this.state = initialState;
@@ -130,6 +132,22 @@ export class GameplayController {
           allEvents.push(e);
         }
       }
+    }
+
+    // 3.5. 자동 발사 — 비활성 공만 있을 때 (active 공 0) 일정 시간 후 자동 LaunchBall.
+    // 데이터 제어: deps.config.autoLaunchDelayMs (default 7000ms = 7sec).
+    // dt 는 sec 단위 (1/60 같은) → ms 변환 후 누적.
+    const hasActiveBall = this.state.balls.some((b) => b.isActive);
+    if (!hasActiveBall) {
+      this.autoLaunchTimerMs += dt * 1000;
+      if (this.autoLaunchTimerMs >= this.deps.config.autoLaunchDelayMs) {
+        const { launchState, launchEvent } = this.applyLaunchBall();
+        this.state = launchState;
+        allEvents.push(launchEvent);
+        this.autoLaunchTimerMs = 0;
+      }
+    } else {
+      this.autoLaunchTimerMs = 0;
     }
 
     // 4. Movement

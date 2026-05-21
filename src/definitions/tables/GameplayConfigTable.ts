@@ -12,5 +12,7 @@ export const GameplayConfigTable: GameplayConfig = {
   blockHitFlashDurationMs: 120,
   barBreakDurationMs: 700,
   expandMultiplier: 1.5,
+  // 라운드 시작 / 사망 후 7초 동안 발사 안 하면 자동 발사 (모바일 손쉬움).
+  autoLaunchDelayMs: 7000,
   physics: defaultPhysicsConfig,
 };
