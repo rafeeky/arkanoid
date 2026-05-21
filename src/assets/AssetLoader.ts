@@ -71,9 +71,23 @@ for (let i = 1; i <= 4; i++) {
   ASSET_FILES[`intro_story_${num}`] = `${A}/intro/intro_story_${num}.png`;
 }
 
+// 게임 오버 화면 마스코트 — 개별 4프레임 PNG (RGBA, 누끼 처리됨).
+for (let i = 1; i <= 4; i++) {
+  ASSET_FILES[`gameover_frame_${i}`] = `${A}/mascots/gameover_frame_${i}.png`;
+}
+
+/** Spritesheet 자산 — 한 PNG 안에 여러 frame. */
+const SPRITESHEET_FILES: Record<string, { path: string; frameWidth: number; frameHeight: number }> = {
+  // 게임 클리어 마스코트 dance (2009×591, 4 frame 가로, frame 502×591. 마지막 1픽셀은 무시됨).
+  dance_sheet: { path: `${A}/mascots/dance_sheet.png`, frameWidth: 502, frameHeight: 591 },
+};
+
 /** Phaser scene.preload() 에서 호출. 모든 자산 등록. */
 export function preloadAssets(scene: Phaser.Scene): void {
   for (const [key, path] of Object.entries(ASSET_FILES)) {
     scene.load.image(key, path);
+  }
+  for (const [key, info] of Object.entries(SPRITESHEET_FILES)) {
+    scene.load.spritesheet(key, info.path, { frameWidth: info.frameWidth, frameHeight: info.frameHeight });
   }
 }

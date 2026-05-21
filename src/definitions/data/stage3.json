@@ -345,6 +345,21 @@
       "row": 10,
       "col": 1,
       "orientation": "vertical"
+    },
+    {
+      "row": 11,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 11,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 0,
+      "col": 11,
+      "orientation": "horizontal"
     }
   ],
   "doors": [

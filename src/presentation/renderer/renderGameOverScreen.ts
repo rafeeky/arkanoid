@@ -3,6 +3,8 @@ import type { GameOverViewModel } from '../view-models/GameOverViewModel';
 import { createButton, type Button } from '../ui/Button';
 
 export type GameOverScreenObjects = {
+  /** 풀스크린 배경 (canvas 1080×1920). depth -10 — 모든 UI 뒤. */
+  background: Phaser.GameObjects.Image;
   gameOverLabel: Phaser.GameObjects.Text;
   finalScoreText: Phaser.GameObjects.Text;
   highScoreText: Phaser.GameObjects.Text;
@@ -11,7 +13,19 @@ export type GameOverScreenObjects = {
   retryButton: Button;
   /** QUIT TO TITLE 버튼 — 클릭 시 ReturnToTitleRequested. */
   quitButton: Button;
+  /** 마스코트 3마리 가로 (Image). 매 프레임 setTexture 로 4프레임 토글. */
+  mascots: Phaser.GameObjects.Image[];
+  /** 4프레임 토글 타이머. */
+  animTimer: Phaser.Time.TimerEvent;
 };
+
+const MASCOT_FRAME_KEYS = [
+  'gameover_frame_1',
+  'gameover_frame_2',
+  'gameover_frame_3',
+  'gameover_frame_4',
+] as const;
+const MASCOT_FRAME_MS = 167; // ~6fps
 
 export type GameOverHandlers = {
   onQuitToTitle(): void;
@@ -30,6 +44,15 @@ export function createGameOverScreenObjects(
   handlers: GameOverHandlers = { onQuitToTitle: () => { /* noop */ } },
 ): GameOverScreenObjects {
   const CX = 540; // canvas 가운데.
+
+  // 풀스크린 배경 — UI 카메라 + depth -10 (모든 UI 뒤).
+  const background = scene.add
+    .image(540, 960, 'bg_gameover')
+    .setOrigin(0.5, 0.5)
+    .setDisplaySize(1080, 1920)
+    .setScrollFactor(0)
+    .setDepth(-10)
+    .setVisible(false);
 
   const gameOverLabel = scene.add
     .text(CX, 480, '', {
@@ -90,7 +113,38 @@ export function createGameOverScreenObjects(
     onClick: () => handlers.onQuitToTitle(),
   });
 
-  return { gameOverLabel, finalScoreText, highScoreText, newHighScoreText, retryButton, quitButton };
+  // 마스코트 3마리 가로 (QUIT bottom edge 1285 아래). RGBA PNG 4 frame 수동 토글.
+  // 사이즈 180×280 (원본 ~320×550 비율 유지). 3마리 간격 200.
+  const MASCOT_W = 180;
+  const MASCOT_H = 280;
+  const MASCOT_GAP = 200;
+  const MASCOT_CY = 1500;
+  const mascots: Phaser.GameObjects.Image[] = [-1, 0, 1].map((slot) =>
+    scene.add
+      .image(CX + slot * MASCOT_GAP, MASCOT_CY, MASCOT_FRAME_KEYS[0])
+      .setOrigin(0.5, 0.5)
+      .setDisplaySize(MASCOT_W, MASCOT_H)
+      .setScrollFactor(0)
+      .setVisible(false),
+  );
+
+  // 4프레임 토글 타이머 — 모든 sprite 동기 갱신. setTexture 후 displaySize 재적용
+  // (native size 다른 PNG 들의 scaleX/scaleY 어긋남 방지).
+  let frameIdx = 0;
+  const animTimer = scene.time.addEvent({
+    delay: MASCOT_FRAME_MS,
+    loop: true,
+    callback: () => {
+      frameIdx = (frameIdx + 1) % MASCOT_FRAME_KEYS.length;
+      const key = MASCOT_FRAME_KEYS[frameIdx]!;
+      for (const m of mascots) {
+        m.setTexture(key);
+        m.setDisplaySize(MASCOT_W, MASCOT_H);
+      }
+    },
+  });
+
+  return { background, gameOverLabel, finalScoreText, highScoreText, newHighScoreText, retryButton, quitButton, mascots, animTimer };
 }
 
 /**
@@ -100,6 +154,7 @@ export function renderGameOverScreen(
   objects: GameOverScreenObjects,
   viewModel: GameOverViewModel,
 ): void {
+  objects.background.setVisible(true);
   objects.gameOverLabel.setText(viewModel.gameOverLabel).setVisible(true);
   objects.finalScoreText.setText(viewModel.finalScoreLabel).setVisible(true);
 
@@ -113,13 +168,18 @@ export function renderGameOverScreen(
   objects.retryButton.setLabel(viewModel.retryText);
   objects.retryButton.setVisible(true);
   objects.quitButton.setVisible(true);
+  for (const m of objects.mascots) m.setVisible(true);
+  objects.animTimer.paused = false;
 }
 
 export function hideGameOverScreen(objects: GameOverScreenObjects): void {
+  objects.background.setVisible(false);
   objects.gameOverLabel.setVisible(false);
   objects.finalScoreText.setVisible(false);
   objects.highScoreText.setVisible(false);
   objects.newHighScoreText.setVisible(false);
   objects.retryButton.setVisible(false);
   objects.quitButton.setVisible(false);
+  for (const m of objects.mascots) m.setVisible(false);
+  objects.animTimer.paused = true;
 }

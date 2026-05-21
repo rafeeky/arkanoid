@@ -41,8 +41,12 @@ export const ITEM_WIDTH = 64;   // = BLOCK_WIDTH
 export const ITEM_HEIGHT = 24;  // = BLOCK_HEIGHT
 
 // ─── 테두리 (BorderBlock) ──────────────────────────────────────────────
-/** 테두리의 긴 변 (= 일반 블럭 가로). 한 셀이 차지하는 길이. */
-export const BORDER_LENGTH = 64;
+/**
+ * 테두리 한 셀이 차지하는 길이. 720 (PLAYFIELD 폭/높이) 의 약수여야 끝이 빔 없이 맞음.
+ * 720 / 60 = 12 셀.
+ * (이전 64 는 720/64 = 11.25 라 마지막 16px 빔 발생.)
+ */
+export const BORDER_LENGTH = 60;
 /** 테두리의 짧은 변 (= 일반 블럭 세로의 1/2). 두께. */
 export const BORDER_THICKNESS = 12;
 

@@ -113,10 +113,10 @@ export {
   BORDER_THICKNESS,
 } from '../gameplay/systems/playfieldLayout';
 
-/** Border 그리드: 상단 가로 셀 수. PLAYFIELD_WIDTH / BORDER_LENGTH. */
-export const BORDER_TOP_COLS = 11; // 720 / 64 = 11.25 → 11 (마지막 16px 빔)
-/** Border 그리드: 좌/우 세로 셀 수. PLAYFIELD_HEIGHT / BORDER_LENGTH. */
-export const BORDER_SIDE_ROWS = 11;
+/** Border 그리드: 상단 가로 셀 수. PLAYFIELD_WIDTH / BORDER_LENGTH = 720 / 60 = 12. */
+export const BORDER_TOP_COLS = 12;
+/** Border 그리드: 좌/우 세로 셀 수. PLAYFIELD_HEIGHT / BORDER_LENGTH = 720 / 60 = 12. */
+export const BORDER_SIDE_ROWS = 12;
 
 // ─── 팔레트 색상 ─────────────────────────────────────────────────────────────
 
