@@ -3,6 +3,12 @@ import type { BlockState } from '../../../gameplay/state/BlockState';
 import type { BlockDefinition } from '../../../definitions/types/BlockDefinition';
 import { BLOCK_WIDTH, BLOCK_HEIGHT } from '../../../gameplay/systems/playfieldLayout';
 
+// TODO (톤 결정 후): 블록도 자산 PNG 폐기하고 `applyGlossyStyle` (또는 톤 변경 시 새 헬퍼)
+// 로 통일. 바/공은 이미 GlossyStyle 헬퍼 사용 중. 게임 월드 톤 결정 (하늘/바다/석양/픽셀아트 등)
+// 후 블록 visualId 8개 색 매핑 + 코드 generateTexture 또는 직접 Graphics. 지금은 글로시 유지
+// 미정이라 헛수고 방지로 PNG 그대로.
+// 참조: [[diegetic_non-diegetic]] / learning_principles_albatross §5.
+
 // 드랍 블록 visualId → 위에 표시할 흰색 아이콘 texture key.
 const DROP_BLOCK_ICON: Record<string, string> = {
   block_basic_drop:  'icon_expand',   // 노랑 블럭 + 흰 ↔ (확장)

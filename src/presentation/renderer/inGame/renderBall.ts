@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import type { BallState } from '../../../gameplay/state/BallState';
 import { BALL_RADIUS } from '../../../gameplay/systems/playfieldLayout';
+import { applyGlossyStyle } from '../../ui/GlossyStyle';
 
 // 공 발사 궤적 — 발사 전 (ball.isActive=false) 미리보기.
 const TRAJECTORY_DOT_COUNT = 18;
@@ -10,16 +11,21 @@ const TRAJECTORY_STEP_DT = 0.07;
 const PLAYFIELD_LOCAL_WIDTH = 720;
 const TRAJECTORY_BALL_RADIUS = 8;
 
+// 공 톤 — 살짝 청록 톤 (순백 X). 톤 결정 후 갱신.
+const BALL_COLORS = {
+  base: 0xc8d6e4,      // 청회색 톤 (구슬 같은 인상)
+  highlight: 0xffffff, // specular 점은 흰색 OK (작아서 안 떠 보임)
+  outline: 0x2a3a4a,
+};
+
 export type BallObjects = {
-  ball: Phaser.GameObjects.Image;
+  /** 공 본체 — Graphics 한 객체. shadow/base/specular/outline. */
+  graphics: Phaser.GameObjects.Graphics;
   trajectoryDots: Phaser.GameObjects.Arc[];
 };
 
 export function createBallObjects(scene: Phaser.Scene): BallObjects {
-  const ball = scene.add
-    .image(360, 660, 'ball')
-    .setDisplaySize(BALL_RADIUS * 2, BALL_RADIUS * 2)
-    .setVisible(false);
+  const graphics = scene.add.graphics().setVisible(false);
 
   const trajectoryDots: Phaser.GameObjects.Arc[] = [];
   for (let i = 0; i < TRAJECTORY_DOT_COUNT; i++) {
@@ -28,7 +34,7 @@ export function createBallObjects(scene: Phaser.Scene): BallObjects {
       .setVisible(false);
     trajectoryDots.push(dot);
   }
-  return { ball, trajectoryDots };
+  return { graphics, trajectoryDots };
 }
 
 export function renderBall(
@@ -38,9 +44,19 @@ export function renderBall(
   ballConfig?: { ballInitialSpeed: number; ballInitialAngleDeg: number },
 ): void {
   if (ball && !isBreaking) {
-    objects.ball.setPosition(ball.x, ball.y).setAlpha(1).setVisible(true);
+    applyGlossyStyle(objects.graphics, {
+      cx: ball.x,
+      cy: ball.y,
+      w: BALL_RADIUS * 2,
+      h: BALL_RADIUS * 2,
+      shape: 'circle',
+      baseColor: BALL_COLORS.base,
+      highlight: BALL_COLORS.highlight,
+      outline: BALL_COLORS.outline,
+    });
+    objects.graphics.setAlpha(1).setVisible(true);
   } else {
-    objects.ball.setVisible(false);
+    objects.graphics.setVisible(false);
   }
 
   if (ball && !ball.isActive && !isBreaking && ballConfig) {
@@ -51,7 +67,7 @@ export function renderBall(
 }
 
 export function hideBall(objects: BallObjects): void {
-  objects.ball.setVisible(false);
+  objects.graphics.setVisible(false);
   for (const dot of objects.trajectoryDots) dot.setVisible(false);
 }
 

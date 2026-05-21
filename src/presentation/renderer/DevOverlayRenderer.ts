@@ -62,6 +62,12 @@ const TEXT_STYLE_HUD: Phaser.Types.GameObjects.Text.TextStyle = {
 
 export class DevOverlayRenderer {
   private readonly scene: Phaser.Scene;
+  /**
+   * 시각 오버레이 표시 여부 — URL 쿼리 `?dev-overlay=1` 일 때만 true.
+   * dev mode (Vite dev server) 라도 *평소엔 화면 깨끗*. 디버깅 필요 시 URL 추가.
+   * (replay/recording 같은 devContext 기능은 isDevMode 따로라 영향 X.)
+   */
+  private readonly overlayVisible: boolean;
 
   // 반투명 배경 (전체 캔버스)
   private readonly dimOverlay: Phaser.GameObjects.Rectangle;
@@ -86,6 +92,7 @@ export class DevOverlayRenderer {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+    this.overlayVisible = new URLSearchParams(window.location.search).get('dev-overlay') === '1';
 
     // 반투명 배경 — 전체 캔버스 크기. depth 를 높여 게임 오브젝트 위에 렌더링.
     const { width, height } = scene.scale;
@@ -151,6 +158,11 @@ export class DevOverlayRenderer {
     devContext: DevContext,
   ): void {
     if (!devContext.isEnabled) {
+      this.hide();
+      return;
+    }
+    // URL 쿼리 `?dev-overlay=1` 일 때만 화면 그리기. 평소 dev 서버 작업 시 깨끗.
+    if (!this.overlayVisible) {
       this.hide();
       return;
     }
