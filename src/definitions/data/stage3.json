@@ -1,5 +1,6 @@
 {
   "stageId": "stage_03",
+  "trailStyle": "sunset",
   "displayName": "STAGE 3",
   "backgroundId": "bg_stage_03",
   "barSpawnX": 360,
@@ -353,6 +354,26 @@
     },
     {
       "row": 11,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 12,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 12,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 13,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 13,
       "col": 1,
       "orientation": "vertical"
     },

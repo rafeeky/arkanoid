@@ -1,5 +1,6 @@
 {
   "stageId": "stage_02",
+  "trailStyle": "blue_meteor",
   "displayName": "STAGE 2",
   "backgroundId": "bg_stage_02",
   "barSpawnX": 360,
@@ -313,6 +314,26 @@
     },
     {
       "row": 11,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 12,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 12,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 13,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 13,
       "col": 1,
       "orientation": "vertical"
     },

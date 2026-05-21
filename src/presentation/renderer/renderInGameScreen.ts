@@ -101,7 +101,7 @@ export function renderInGameScreen(
 ): void {
   renderHud(objects.hud, hudViewModel);
   renderBar(objects.bar, gameplayState.bar, barAlphaOverride, screenState.isBarBreaking, barBreakProgress);
-  renderBall(objects.ball, gameplayState.balls[0], screenState.isBarBreaking, ballConfig);
+  renderBall(objects.ball, gameplayState.balls[0], screenState.isBarBreaking, ballConfig, gameplayState.currentTrailStyle);
   renderBlocks(scene, objects.blocks, gameplayState.blocks, blockDefinitions, new Set(screenState.blockHitFlashBlockIds));
   renderItems(scene, objects.items, gameplayState.itemDrops);
   renderLasers(scene, objects.lasers, gameplayState.laserShots);

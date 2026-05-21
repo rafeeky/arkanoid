@@ -2,6 +2,7 @@ import type { StageBlockPlacement } from './StageBlockPlacement';
 import type { StageBorderPlacement } from './StageBorderPlacement';
 import type { StageDoorPlacement } from './StageDoorPlacement';
 import type { StageSpinnerPlacement } from './StageSpinnerPlacement';
+import type { TrailStyleId } from '../tables/TrailStyleTable';
 
 export type StageDefinition = {
   stageId: string;
@@ -19,4 +20,6 @@ export type StageDefinition = {
   /** 상단 테두리 위 문(door). 선택. 열리면 스피너 spawn (Checkpoint D). */
   doors?: StageDoorPlacement[];
   spinners?: StageSpinnerPlacement[];
+  /** 공 파워 상태 트레일 스타일. 미지정 시 'golden_sun'. */
+  trailStyle?: TrailStyleId;
 };

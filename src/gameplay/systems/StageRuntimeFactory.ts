@@ -89,6 +89,9 @@ export function createGameplayRuntimeFromStageDefinition(
         vx: 0,
         vy: 0,
         isActive: false,
+        // 파워 상태 — 새 공은 항상 파워 없이 시작. spawn 시점에 명시 (이벤트 의존 X).
+        blocksSincePaddle: 0,
+        isPowered: false,
       },
     ],
     blocks,
@@ -101,6 +104,7 @@ export function createGameplayRuntimeFromStageDefinition(
     laserCooldownRemaining: 0,
     laserShots: [],
     spinnerStates,
+    currentTrailStyle: def.trailStyle ?? 'golden_sun',
   };
 }
 

@@ -487,12 +487,14 @@ export class GameplayController {
     const vx = Math.cos(angleRad) * speed;
     const vy = Math.sin(angleRad) * speed;
 
-    // Only launch the first inactive ball
+    // Only launch the first inactive ball.
+    // 파워 상태 명시 reset — 죽음 후 새 공 launch 도 spawn 의 한 형태.
+    // 바 충돌 이벤트에 의존 X (새 공은 바 위에서 시작이라 충돌 안 함).
     let launched = false;
     const updatedBalls = this.state.balls.map((b) => {
       if (!b.isActive && !launched) {
         launched = true;
-        return { ...b, isActive: true, vx, vy };
+        return { ...b, isActive: true, vx, vy, blocksSincePaddle: 0, isPowered: false };
       }
       return b;
     });

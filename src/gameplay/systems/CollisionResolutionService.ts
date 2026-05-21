@@ -117,7 +117,9 @@ function resolveBar(
   if (state.bar.activeEffect === 'magnet') {
     const targetBall = state.balls.find((b) => b.id === fact.ballId);
     if (targetBall && targetBall.isActive) {
-      const attachedBall = Bar.attachBall(targetBall, state.bar);
+      // 자석 부착도 paddle 접촉 — 파워 상태 reset.
+      const attached = Bar.attachBall(targetBall, state.bar);
+      const attachedBall = { ...attached, blocksSincePaddle: 0, isPowered: false };
       const balls = state.balls.map((b) => (b.id === fact.ballId ? attachedBall : b));
       const newAttachedIds = [...state.attachedBallIds, fact.ballId];
       const events: GameplayEvent[] = [
@@ -133,10 +135,12 @@ function resolveBar(
     }
   }
 
-  // 일반 상태: 반사. BallHitBarEvent 발행 (저음 사운드 트리거 — 묶음 A 이식)
-  const balls = state.balls.map((b) =>
-    b.id === fact.ballId ? Bar.reflectFromBall(b, fact, physics) : b,
-  );
+  // 일반 상태: 반사 + 파워 상태 reset (blocksSincePaddle=0, isPowered=false).
+  const balls = state.balls.map((b) => {
+    if (b.id !== fact.ballId) return b;
+    const reflected = Bar.reflectFromBall(b, fact, physics);
+    return { ...reflected, blocksSincePaddle: 0, isPowered: false };
+  });
   return {
     state: { ...state, balls },
     events: [{ type: 'BallHitBar', ballId: fact.ballId }],
@@ -186,6 +190,16 @@ function resolveBlock(
       i === blockIndex ? { ...b, remainingHits: 0, isDestroyed: true } : b,
     );
     events.push({ type: 'BlockDestroyed', blockId: block.id, scoreDelta });
+
+    // 공 파워 상태 — destroyed 1회당 blocksSincePaddle += 1.
+    // 2 이상 도달 시 isPowered=true (시각 트레일 트리거 전용, 게임플레이 영향 X).
+    // 바 충돌 시 resolveBar 가 0/false 로 reset.
+    const POWER_THRESHOLD = 2;
+    balls = balls.map((b) => {
+      if (b.id !== fact.ballId) return b;
+      const newCount = (b.blocksSincePaddle ?? 0) + 1;
+      return { ...b, blocksSincePaddle: newCount, isPowered: newCount >= POWER_THRESHOLD };
+    });
 
     // Item drop — only if no item currently on screen
     if (def && def.dropItemType !== 'none' && state.itemDrops.length === 0) {

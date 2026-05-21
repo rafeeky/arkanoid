@@ -1,5 +1,6 @@
 {
   "stageId": "stage_01",
+  "trailStyle": "golden_sun",
   "displayName": "STAGE 1",
   "backgroundId": "bg_stage_01",
   "barSpawnX": 360,
@@ -378,6 +379,26 @@
     },
     {
       "row": 11,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 12,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 12,
+      "col": 1,
+      "orientation": "vertical"
+    },
+    {
+      "row": 13,
+      "col": 0,
+      "orientation": "vertical"
+    },
+    {
+      "row": 13,
       "col": 1,
       "orientation": "vertical"
     },

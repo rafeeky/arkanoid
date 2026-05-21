@@ -7,6 +7,7 @@ import type { DoorState } from './DoorState';
 import type { ItemDropState } from './ItemDropState';
 import type { LaserShotState } from './LaserShotState';
 import type { SpinnerRuntimeState } from './SpinnerRuntimeState';
+import type { TrailStyleId } from '../../definitions/tables/TrailStyleTable';
 
 export type GameplayRuntimeState = {
   session: GameSessionState;
@@ -33,4 +34,6 @@ export type GameplayRuntimeState = {
   laserShots: readonly LaserShotState[];
   /** 현재 스테이지의 회전체 런타임 상태 목록. */
   spinnerStates: readonly SpinnerRuntimeState[];
+  /** 현재 스테이지의 공 파워 트레일 스타일. StageRuntimeFactory 에서 세팅. */
+  currentTrailStyle?: TrailStyleId;
 };
