@@ -12,24 +12,27 @@ export type RoundIntroScreenObjects = {
 export function createRoundIntroScreenObjects(
   scene: Phaser.Scene,
 ): RoundIntroScreenObjects {
-  // 2026-05-19: 블록(y~280 까지) 아래 + bar(y=680) 위 빈 영역으로 이동.
-  // 회전체(y~6, 천장 가까이) 와 안 겹침.
+  // 정석 (learning_principles_albatross §4): RoundIntro 는 *혼합* — 게임 월드(블록/바/회전체)는 main,
+  // 메시지(ROUND N / READY)만 UI 카메라. 블록 끝(visual ~700) 아래 + bar(visual ~1300) 위 빈 영역.
+  // canvas 좌표계 — cx=540 가운데. cy: roundLabel 1080, readyLabel 1180 (블록과 bar 사이).
   const roundLabel = scene.add
-    .text(360, 500, '', {
-      fontSize: '48px',
+    .text(540, 1080, '', {
+      fontSize: '72px',
       color: '#ffffff',
       fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
+    .setScrollFactor(0)
     .setVisible(false);
 
   const readyLabel = scene.add
-    .text(360, 575, '', {
-      fontSize: '32px',
-      color: '#88ccff', // 하늘색 (이전 연두색 #aaffaa 에서 변경 — 2026-05-19).
+    .text(540, 1180, '', {
+      fontSize: '48px',
+      color: '#88ccff', // 하늘색.
       fontFamily: 'DNFBitBitv2, monospace',
     })
     .setOrigin(0.5, 0.5)
+    .setScrollFactor(0)
     .setVisible(false);
 
   return { roundLabel, readyLabel };
