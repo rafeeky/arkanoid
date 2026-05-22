@@ -1,11 +1,19 @@
 # progress.md
 
-알카노이드 프로젝트 진척 현황. 최종 갱신 **2026-05-22**.
+알카노이드 프로젝트 진척 현황. 최종 갱신 **2026-05-23**.
 
 전체 흐름 요약: **TS 선구현 → Unity 포팅 → 기능 확장 + 모바일 대응 → 출시 전 TS 폴리싱 단계** 진행 중.
 출시 목표: 1개월 내 Google Play. 현재는 TS-side 폴리싱 (해상도/HUD/Mascot/Pause/오디오/궤적 등) + 데이터 단일화 단계.
 
 ---
+
+## 0-rec2. 2026-05-23 추가 (인게임 시각·사운드 미세 조정)
+
+| 항목 | 내용 |
+|---|---|
+| **borderBottom 위치 fix** | playfieldBg(900px) 끝에 맞춤 (y=903). borderTop 과 시각 대칭. 옛 (PLAYFIELD_HEIGHT 720+3) 은 playfieldBg 안에 끼어있어 어색했음 |
+| **바 반사음 pitch** | `cue_ball_hit_bar` pitch 0.85 (둔탁) → **1.1**. 블록 (1.4~1.6) 보다는 낮음 |
+| **바 디자인 — 분리 형태** | applyGlossyStyle('pill') → 직접 그리기. 구조: `[반원좌 (semicircle)] [흰띠 4px] [사각 (base)] [흰띠] [반원우]`. activeEffect 별 색 매핑 (none=회색+하늘 / expand=구리+금 / magnet=진파랑+파랑 / laser=진빨강+빨강) |
 
 ## 0-rec. 2026-05-20~22 추가 작업 (UI/시각 폴리싱 + 데이터 토큰화)
 

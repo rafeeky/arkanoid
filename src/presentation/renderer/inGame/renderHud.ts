@@ -125,10 +125,12 @@ export function createHudObjects(
     .rectangle(360, -PLAYFIELD_BORDER_THICKNESS / 2,
                720 + PLAYFIELD_BORDER_THICKNESS * 2, PLAYFIELD_BORDER_THICKNESS, PLAYFIELD_BORDER_COLOR)
     .setOrigin(0.5, 0.5).setVisible(false);
-  // 하단 시각 회색 띠 — borderTop 미러. y = 플레이필드 아래쪽 외측 (720 + thickness/2).
-  // 충돌 X (시각만) — 바닥은 공이 빠져 죽는 자리. setRectangle 만, BorderBlock state 무관.
+  // 하단 시각 회색 띠 — *bg_pixel ↔ playfieldBg 시각 경계* 에 위치.
+  // playfieldBg = world (360, 450) 중심 + 720x900 → 아래쪽 끝 world y = 900.
+  // borderTop 이 playfieldBg 위쪽 끝 (world y=0) 외측 (y=-3) 인 패턴 미러 → y = 903.
+  // 충돌 X (시각만) — 바닥은 공이 빠져 죽는 자리.
   const borderBottom = scene.add
-    .rectangle(360, 720 + PLAYFIELD_BORDER_THICKNESS / 2,
+    .rectangle(360, 900 + PLAYFIELD_BORDER_THICKNESS / 2,
                720 + PLAYFIELD_BORDER_THICKNESS * 2, PLAYFIELD_BORDER_THICKNESS, PLAYFIELD_BORDER_COLOR)
     .setOrigin(0.5, 0.5).setVisible(false);
   const borderLeft = scene.add

@@ -91,13 +91,14 @@ export const AudioCueTable: AudioCueEntry[] = [
     playbackType: 'sfx',
     pitch:        1.0,
   },
-  // 바 반사음 — 1음절 "삡". User feedback: 110ms 도 여전히 2음절스러움 → 60ms 로 더 strict cut.
+  // 바 반사음 — 1음절 "삡". 60ms strict cut.
+  // 피치: 0.85 (둔탁) → 1.1 (살짝 올림). 블록 깰 때 (1.4~1.6) 보다는 낮음.
   {
     cueId:        'cue_ball_hit_bar',
     eventType:    'BallHitBar',
     resourceId:   'sfx_balls_released',
     playbackType: 'sfx',
-    pitch:        0.85,
+    pitch:        1.1,
     playDurationMs: 60,
   },
   {
