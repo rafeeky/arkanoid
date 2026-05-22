@@ -7,6 +7,26 @@
 
 ---
 
+## 0-rec3. 2026-05-23 — Unity 포팅 전 ABC 점검 + dead asset cleanup
+
+### 점검 결과
+| # | 항목 | 결과 |
+|---|---|---|
+| A1 | gameplay/ Phaser 의존 | ✅ 0건 |
+| A2 | 비결정 source (Math.random/Date.now/performance.now) | ✅ 0건 (주석만) |
+| A3 | state 직렬화 (순수 데이터) | ✅ 10/10 type alias |
+| B1 | 데이터 테이블 인벤토리 | ✅ 13개, Unity SO 1:1 매핑 가능 |
+| B2 | 흩어진 magic hex | ✅ 0건, 모두 const 그룹 또는 시각 디테일 |
+| C1 | scrollFactor 명시 | ✅ 13/13 의도 명확 |
+| C2 | 화면별 정석 일관 | ✅ 50 호출, 위반 0 |
+
+→ **도메인 코어 Unity-portable 한 이상적 상태.**
+
+### B3 cleanup
+- Dead PNG 4 제거: `slider_knob/track`, `spinner_cube/triangle` (코드 사용 0)
+- `public/assets/sheets/*` 11 파일 제거 (sheet_blocks/borders/mascot 등 — 모두 dead)
+- `process-assets.cjs` 의 sheet_backgrounds 추출 로직 제거 (사용자가 새 bg_gameover/clear 자산 직접 받음, 옛 추출 로직 재실행 시 새 자산 덮어쓸 위험)
+
 ## 0-rec2. 2026-05-23 추가 (인게임 시각·사운드 미세 조정)
 
 | 항목 | 내용 |

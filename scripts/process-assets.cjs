@@ -22,7 +22,6 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const RAW = path.join(ROOT, 'assets-raw');               // 원본 raw 자산 (프로젝트 내, 영문 파일명)
-const SHEETS = path.join(ROOT, 'public/assets/sheets');  // 옛 시트 (gameover/gameclear 추출용)
 const OUT = path.join(ROOT, 'public/assets');            // 최종 출력
 
 const WHITE_THRESHOLD = 235; // R,G,B > this → 투명 처리
@@ -177,19 +176,9 @@ async function main() {
     await fs.writeFile(out, final);
     console.log('  ✓', path.relative(ROOT, out));
   }
-  // gameover / gameclear — 기존 sheet 에서 추출 (자산 받으면 위 패턴으로 교체).
-  const sheetBgCells = [
-    { name: 'bg_gameover',  x: 512,  y: 512 },
-    { name: 'bg_gameclear', x: 1024, y: 512 },
-  ];
-  for (const cell of sheetBgCells) {
-    await extractAndSave(
-      path.join(SHEETS, 'sheet_backgrounds.png'),
-      { left: cell.x, top: cell.y, width: 512, height: 512 },
-      path.join(bgOutDir, `${cell.name}.png`),
-      { transparent: false, resize: { width: 1080, height: 1920 } },
-    );
-  }
+  // 2026-05-23: bg_gameover/bg_gameclear 는 사용자가 직접 받은 새 자산
+  // (public/assets/backgrounds/bg_gameover.png, bg_gameclear.png) 사용.
+  // 옛 sheet_backgrounds 추출 로직 폐기 — sheets/ 디렉토리도 제거됨.
 
   // ── 마스코트: 5종 × 4프레임. 입력 파일은 960×240 horizontal strip (각 240×240). ──
   // 소스 파일명(한국어/영어) → AssetLoader 키 매핑.
